@@ -39,6 +39,8 @@ def clean_response(text: str, is_rejection: bool = False) -> str:
       ANTES: "Entiendo... ¿Desea activar el plan?"
       DESPUÉS: "Entiendo..."
     """
+    text = _fix_app_mentions(text)
+
     if is_rejection:
         rejection_phrases = ("entiendo", "comprendo", "respetamos su decisión")
         normalized = text.strip().lower()
@@ -68,6 +70,31 @@ def clean_response(text: str, is_rejection: bool = False) -> str:
     return (before + "\n\n" + last_q).strip() if before else last_q
 
 _CAC_MARKERS = ["cac", "800 220 9518", "centro de atención a clientes"]
+
+APPS_CORRECTAS_LIBRE = [
+    "Facebook", "WhatsApp", "Messenger", "X", "Instagram", "Snapchat", "Uber"
+]
+APPS_INCORRECTAS = [
+    "TikTok", "YouTube", "Spotify", "Waze", "Netflix", "Google Maps", "Twitter"
+]
+_APPS_CORRECTAS_STR = (
+    "Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber"
+)
+
+
+def _fix_app_mentions(text: str) -> str:
+    """Corrige apps incorrectas y capacidad errónea de Claro Drive."""
+    lines = text.split('\n')
+    result = []
+    for line in lines:
+        line_lower = line.lower()
+        if any(app.lower() in line_lower for app in APPS_INCORRECTAS):
+            result.append(_APPS_CORRECTAS_STR)
+        else:
+            result.append(line)
+    text = '\n'.join(result)
+    text = re.sub(r'Claro Drive con \d+ GB', 'Claro Drive con 20 GB', text, flags=re.IGNORECASE)
+    return text
 
 _NOT_TITULAR_KEYWORDS = [
     "no soy", "no es mi nombre", "soy su esposa", "soy su hijo",

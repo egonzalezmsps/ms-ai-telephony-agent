@@ -56,7 +56,7 @@ def build_summary_template(session) -> str:
         f"{cashback_line}"
         f"📞 Llamadas y SMS ilimitados\n"
         f"{apps_line}"
-        f"🎬 Amazon Prime · Claro Video\n"
+        f"🎬 Claro Video\n"
         f"💾 Claro Drive (20 GB)\n\n"
         f"⚠️ Este cambio es definitivo y no podrá revertirse al plan anterior.\n\n"
         f"Para confirmar responda ACEPTO o CONFIRMO.\n"

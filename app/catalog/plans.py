@@ -54,7 +54,6 @@ FAMILY_BENEFITS = {
         "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat, Uber\n"
         "🎬 Claro Video (streaming)\n"
         "☁️ Claro Drive 20 GB en la nube\n"
-        "🛒 Amazon Prime incluido\n"
         "💰 Cashback mensual Telcel\n"
         "📞 Minutos y SMS ilimitados"
     ),
@@ -62,7 +61,6 @@ FAMILY_BENEFITS = {
         "📱 WhatsApp ilimitado\n"
         "🎬 Claro Video (streaming)\n"
         "☁️ Claro Drive 20 GB en la nube\n"
-        "🛒 Amazon Prime incluido\n"
         "📞 Minutos y SMS ilimitados"
     ),
 }
