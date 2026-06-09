@@ -25,15 +25,28 @@ from app.contract.post_sale import build_post_sale_message
 logging.getLogger("strands").setLevel(logging.ERROR)
 
 
-def clean_response(text: str) -> str:
+def clean_response(text: str, is_rejection: bool = False) -> str:
     """
     Safety net: si la respuesta tiene más de una pregunta, elimina todas
     excepto la última (que siempre debe ser la de activación).
 
+    En caso de rechazo explícito, elimina la última pregunta de activación
+    cuando el texto inicia con una frase de empatía ante el rechazo.
+
     Ejemplo:
-      ANTES: "¿Le gustaría comparar?\\n¿Le gustaría activar el Telcel Libre 3?"
-      DESPUÉS: "¿Le gustaría activar el Telcel Libre 3?"
+      ANTES: "Entiendo... ¿Desea activar el plan?"
+      DESPUÉS: "Entiendo..."
     """
+    if is_rejection:
+        rejection_phrases = ("entiendo", "comprendo", "respetamos su decisión")
+        normalized = text.strip().lower()
+        if normalized.startswith(rejection_phrases):
+            last_q = text.rfind("¿")
+            if last_q != -1:
+                question = text[last_q:]
+                if any(w in question.upper() for w in ["ACTIVAR", "ACTIVARLO", "PROCEDER"]):
+                    text = text[:last_q].rstrip()
+
     if text.count("?") <= 1:
         return text
 
@@ -51,7 +64,6 @@ def clean_response(text: str) -> str:
         before = "\n".join(l for l in lines if "?" not in l).rstrip()
 
     return (before + "\n\n" + last_q).strip() if before else last_q
-
 
 def create_agent(session: SessionState, messages: List[Dict] = None) -> Agent:
     """Crea el agente con system prompt, herramientas e historial inicial."""
@@ -179,7 +191,17 @@ def run_turn(
         else:
             response_text = "Por favor, ¿podría repetir su pregunta?"
 
-    response_text = clean_response(response_text)
+    REJECTION_WORDS = {
+        "no",
+        "no quiero",
+        "no me interesa",
+        "no gracias",
+        "no por ahora",
+        "paso",
+        "no aplica",
+    }
+    is_rejection = user_message.strip().lower() in REJECTION_WORDS
+    response_text = clean_response(response_text, is_rejection=is_rejection)
 
     updated_history = history + [
         {"role": "user", "content": user_message},
