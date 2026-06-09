@@ -127,7 +127,8 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
     if session.awaiting_contract_confirmation:
         msg = user_message.strip().upper().strip("!.¿? ")
 
-        if any(w in msg for w in ["ACEPTO", "CONFIRMO"]):
+        palabras = set(msg.strip().split())
+        if "ACEPTO" in palabras or "CONFIRMO" in palabras:
             plan = find_plan(session.plan_selected)
             if plan:
                 new_price = get_price(plan, session.subscription_type)
