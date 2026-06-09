@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telcel-ai-deployment
+  labels:
+    app: telcel-ai-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: telcel-ai-app
+  template:
+    metadata:
+      labels:
+        app: telcel-ai-app
+    spec:
+      imagePullSecrets:
+        - name: ocir-secret
+      volumes:
+        - name: oci-key
+          secret:
+            secretName: oci-api-key-secret
+      containers:
+        - name: telcel-ai-app
+          image: us-chicago-1.ocir.io/idkrobdezpcz/orion-telcel-ai-app:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: oci-key
+              mountPath: /app/.oci
+              readOnly: true
+          env:
+            # OCI
+            - name: OCI_GENAI_ENDPOINT
+              value: "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com"
+            - name: OCI_REGION
+              value: "us-chicago-1"
+            - name: OCI_MODEL_ID
+              value: "meta.llama-4-maverick-17b-128e-instruct-fp8"
+            - name: OCI_SERVICE_ENDPOINT
+              value: "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com"
+            - name: OCI_COMPARTMENT_ID
+              value: "ocid1.compartment.oc1..aaaaaaaai33jw7xmwiyb2mv46l3iqodceic5a745b35f2t4jvzucjzv4db6q"
+            - name: OCI_USER
+              value: "ocid1.user.oc1..aaaaaaaayx7oyqsdnvn7q5awv3g4p7hydliz6wkpgiktcude33vkf4vgyv4a"
+            - name: OCI_TENANCY
+              value: "ocid1.tenancy.oc1..aaaaaaaaactlpis3qfncvojaodoosit4mwklptaxqp6pjjeynllfojbfc4lq"
+            - name: OCI_FINGERPRINT
+              value: "15:73:5c:d0:47:6b:aa:a8:e4:61:60:2f:bc:13:f1:a0"
+            - name: OCI_KEY_FILE
+              value: "/app/.oci/oci_api_key.pem"
+            - name: OCI_ENABLE_STREAMING
+              value: "False"
+            # LLM
+            - name: LLM_TEMPERATURE
+              value: "0.3"
+            - name: LLM_MAX_TOKENS
+              value: "600"
+            # PostgreSQL
+            - name: DATABASE_URL
+              value: "postgresql://postgres:enoc@207.211.162.169:5432/reni_agent"
+            - name: SESSION_TTL_HOURS
+              value: "24"
+            # Redis
+            - name: REDIS_HOST
+              value: "aaauwo7dsya3u3vi5yvwqeuzv6uh646zwukqjru7nrnpr2hy4xqgznq-p.redis.us-chicago-1.oci.oraclecloud.com"
+            - name: REDIS_PORT
+              value: "6379"
+            # Oracle NoSQL
+            - name: NOSQL_TABLE
+              value: "orion_telcel_ai_conversations"
+            - name: NOSQL_REGION
+              value: "us-chicago-1"
+            # Object Storage
+            - name: OBJECT_BUCKET
+              value: "orion-telcel-ai-bucket"
+            - name: OBJECT_NAMESPACE
+              value: "idkrobdezpcz"
+            # OpenAI
+            - name: OPENAI_API_KEY
+              value: "sk-xxxx"
+            - name: OPENAI_MODEL
+              value: "gpt-4o-mini"
+            - name: TEMPERATURE
+              value: "0"
+            # CSV
+            - name: CSV_PATH
+              value: "docs/csv/Masivo_clientes.csv"
+            # WhatsApp
+            - name: WHATSAPP_ACCESS_TOKEN
+              value: "EAAMzCzdUfw4BQ08YVaZABaahKqZAZCBZAZAqFlbnVZC3pwt9mFUqwweTQYZBQChIPBAltF9ue05DS4InZAJLVZA89uzzEDnE5PWotBMq62dcSqBAK4oNaI4c2XUGY1uwdbj5HVVw41fKIfbsvpreQQt8sCM3nnK8iLdF5XVYvUbhq93tJEssM5AVulGvwY2IcgVbyNwZDZD"
+            - name: WHATSAPP_PHONE_NUMBER_ID
+              value: "1035233273006117"
+            - name: WHATSAPP_API_VERSION
+              value: "v22.0"
+            - name: VERIFY_TOKEN
+              value: "17enoc17"
+            - name: WHATSAPP_URL
+              value: "https://graph.facebook.com/v22.0"
+            # LangChain
+            - name: LANGCHAIN_TRACING_V2
+              value: "true"
+            - name: LANGSMITH_API_KEY
+              value: "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"
+            # Private
+            - name: PRIVATE_KEY
+              value: "LfBchliYEiCZhnkS_TbJjZXBRHs0pLSA6ZBtlheMQ8Y="
+            # Authentication
+            - name: ACCESS_SECRET_KEY
+              value: "Agal8iL6r5I26rweXXza0K4BQXhx6PLvwfdpy_w76H8"
+            - name: ACCESS_TOKEN_EXPIRE_MINUTES
+              value: "30"
+            - name: API_KEY
+              value: "zvDQevdVVrijrczOGUc4fRJ0ZC6h-yHfF7ZZgsK8hZY"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: telcel-ai-service
+  namespace: default
+  annotations:
+    oci.oraclecloud.com/load-balancer-type: "nlb"
+    oci-network-load-balancer.oraclecloud.com/internal: "true"
+    oci-network-load-balancer.oraclecloud.com/subnet: "ocid1.subnet.oc1.us-chicago-1.aaaaaaaa42x4zrjbrcvk6ycknucde3kiqfqpo66qn7prlhwi5o5rr2wdv6wq"
+    oci-network-load-balancer.oraclecloud.com/nsg-ids: "ocid1.networksecuritygroup.oc1.us-chicago-1.aaaaaaaacvwtakshz5m27j6bu5r2h3u255mlejnepnqesfrm2fuuxym4ev3a"
+spec:
+  type: LoadBalancer
+  selector:
+    app: telcel-ai-app
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080

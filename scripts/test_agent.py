@@ -25,11 +25,15 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from dotenv import load_dotenv
 load_dotenv()
 
+from app.config.logging_config import setup_logging
+setup_logging()
+
 from app.agent.reni_agent import run_turn
 from app.tools.prospect_loader import get_prospect_list_text, select_prospect
 from app.state.session import SessionState
 from app.state.persistence import delete_session
 from app.prompts.campaign_template import build_campaign_message
+from app.catalog.plans import eligible_plans, recommend_plan, get_price
 
 
 def print_help():
@@ -42,6 +46,20 @@ Comandos:
   /help        — esta ayuda
   /exit        — salir
     """)
+
+
+def print_eligible_plans(session: SessionState):
+    plans = eligible_plans(session.current_cost, session.subscription_type)
+    rec = recommend_plan(session.current_cost, session.subscription_type)
+    modality = session.subscription_type
+
+    print(f"─── Planes elegibles ({modality}, renta actual ${session.current_cost:.0f}/mes) ─")
+    for p in plans:
+        price = get_price(p, modality)
+        gb_str = "Ilimitado" if p.is_unlimited else f"{p.gb_promo:.0f} GB"
+        rec_tag = "  ← recomendado" if rec and p.plan_id == rec.plan_id else ""
+        print(f"  • {p.plan_id:<26} ${price:.0f}/mes   {gb_str}{rec_tag}")
+    print("─────────────────────────────────────────────")
 
 
 def print_session(session: SessionState):
@@ -115,6 +133,7 @@ def main():
 
             history = []
             print_session(session)
+            print_eligible_plans(session)
             print("─── Iniciando conversación ──────────────────")
 
             # Mensaje de campaña determinístico — sin LLM

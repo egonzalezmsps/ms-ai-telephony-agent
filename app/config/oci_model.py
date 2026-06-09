@@ -1,10 +1,14 @@
 """
 config/oci_model.py
 """
+import logging
 import os
+import time
 import litellm
 from dotenv import load_dotenv
 from strands.models.litellm import LiteLLMModel
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -28,22 +32,39 @@ def build_oci_model() -> LiteLLMModel:
     model_id = os.environ["OCI_MODEL_ID"]
     compartment_id = os.environ["OCI_COMPARTMENT_ID"]
     region = os.environ["OCI_REGION"]
-    key_file = os.environ.get("OCI_KEY_FILE", "./.oci/oci_api_key.pem")
 
-    return LiteLLMModel(
+    t0 = time.time()
+    logger.info("[OCI] Iniciando modelo model_id=%s region=%s", model_id, region)
+
+    params = {
+        "oci_region": region,
+        "oci_compartment_id": compartment_id,
+        "temperature": float(os.environ.get("LLM_TEMPERATURE", "0.3")),
+        "max_tokens": int(os.environ.get("LLM_MAX_TOKENS", "600")),
+        "top_p": 0.9,
+    }
+
+    # Si hay credenciales de API key, úsalas
+    oci_user = os.environ.get("OCI_USER")
+    if oci_user:
+        key_file = os.environ.get("OCI_KEY_FILE", "./.oci/oci_api_key.pem")
+        params["oci_user"] = oci_user
+        params["oci_fingerprint"] = os.environ["OCI_FINGERPRINT"]
+        params["oci_tenancy"] = os.environ["OCI_TENANCY"]
+        params["oci_key"] = _read_key_file(key_file)
+        logger.info("[OCI] Auth: API key user=%s", oci_user[:30])
+    # Si no, usa Instance Principal (autenticación automática en OKE)
+    else:
+        params["oci_auth"] = "instance_principal"
+        logger.info("[OCI] Auth: instance_principal")
+
+    model = LiteLLMModel(
         model_id=f"oci/{model_id}",
-        params={
-            "oci_region": region,
-            "oci_compartment_id": compartment_id,
-            "oci_user": os.environ["OCI_USER"],
-            "oci_fingerprint": os.environ["OCI_FINGERPRINT"],
-            "oci_tenancy": os.environ["OCI_TENANCY"],
-            "oci_key": _read_key_file(key_file),
-            "temperature": float(os.environ.get("LLM_TEMPERATURE", "0.3")),
-            "max_tokens": int(os.environ.get("LLM_MAX_TOKENS", "600")),
-            "top_p": 0.9,
-        },
+        params=params,
     )
+    logger.info("[OCI] Modelo listo en %.2fs temperature=%.1f max_tokens=%d",
+                time.time() - t0, params["temperature"], params["max_tokens"])
+    return model
 
 
 # Singleton

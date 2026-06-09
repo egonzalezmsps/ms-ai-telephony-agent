@@ -1,0 +1,34 @@
+# Credenciales y secrets (se montan como Secret en k8s)
+.env
+.oci/
+
+# Entorno virtual
+venv/
+.venv/
+env/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Control de versiones y herramientas locales
+.git/
+.gitignore
+.vscode/
+.claude/
+
+# k8s y documentación (no van en la imagen)
+k8s/
+README.md
+CLAUDE.md
+
+# Scripts de prueba locales
+scripts/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

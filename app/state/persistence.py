@@ -9,9 +9,13 @@ Guarda:
 """
 
 import json
+import logging
 import os
+import time
 from datetime import datetime, timedelta
 from typing import Optional, List
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import create_engine, Column, String, Text, DateTime, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
@@ -68,6 +72,8 @@ def load_session(phone_number: str) -> Optional[dict]:
     Carga la sesión de un cliente desde PostgreSQL.
     Retorna None si no existe o expiró.
     """
+    t0 = time.time()
+    logger.debug("[DB] load_session START phone=%s", phone_number)
     factory = _get_session_factory()
     with factory() as db:
         record = db.query(ConversationSession).filter_by(
@@ -75,14 +81,17 @@ def load_session(phone_number: str) -> Optional[dict]:
         ).first()
 
         if not record:
+            logger.debug("[DB] load_session NOT_FOUND phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
             return None
 
         # Verificar expiración
         if record.expires_at < datetime.utcnow():
             db.delete(record)
             db.commit()
+            logger.warning("[DB] load_session EXPIRADO phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
             return None
 
+        logger.debug("[DB] load_session END phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
         return {
             "session_data": record.session_data,
             "history": record.history or [],
@@ -93,6 +102,8 @@ def save_session(phone_number: str, session_data: dict, history: List[dict]):
     """
     Guarda o actualiza la sesión de un cliente en PostgreSQL.
     """
+    t0 = time.time()
+    logger.debug("[DB] save_session START phone=%s", phone_number)
     factory = _get_session_factory()
     with factory() as db:
         record = db.query(ConversationSession).filter_by(
@@ -114,10 +125,13 @@ def save_session(phone_number: str, session_data: dict, history: List[dict]):
             db.add(record)
 
         db.commit()
+    logger.debug("[DB] save_session END phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
 
 
 def delete_session(phone_number: str):
     """Elimina la sesión de un cliente."""
+    t0 = time.time()
+    logger.debug("[DB] delete_session START phone=%s", phone_number)
     factory = _get_session_factory()
     with factory() as db:
         record = db.query(ConversationSession).filter_by(
@@ -126,3 +140,4 @@ def delete_session(phone_number: str):
         if record:
             db.delete(record)
             db.commit()
+    logger.debug("[DB] delete_session END phone=%s elapsed=%.3fs", phone_number, time.time() - t0)

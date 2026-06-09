@@ -2,10 +2,13 @@
 main.py — Entry point FastAPI para ReniAgent con persistencia PostgreSQL.
 """
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query, BackgroundTasks
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from typing import Optional
 import os
+import logging
+import threading
 from dotenv import load_dotenv
 
 from app.agent.reni_agent import run_turn
@@ -13,8 +16,29 @@ from app.state.session import SessionState
 from app.state.persistence import init_db, load_session, save_session, delete_session
 from app.state.serializer import session_to_dict, dict_to_session
 from app.prompts.campaign_template import build_campaign_message
+from app.whatsapp.sender import send_whatsapp_message
+from app.whatsapp.command_handler import handle_command
+from app.config.logging_config import setup_logging
 
 load_dotenv()
+setup_logging()
+
+logger = logging.getLogger(__name__)
+
+# IDs de mensajes ya procesados — evita duplicados por reintentos de Meta
+_processed_msg_ids: set = set()
+_processed_lock = threading.Lock()
+
+# Un lock por número de teléfono — evita turnos simultáneos del mismo cliente
+_phone_locks: dict = {}
+_phone_locks_mutex = threading.Lock()
+
+
+def _get_phone_lock(phone_number: str) -> threading.Lock:
+    with _phone_locks_mutex:
+        if phone_number not in _phone_locks:
+            _phone_locks[phone_number] = threading.Lock()
+        return _phone_locks[phone_number]
 
 app = FastAPI(
     title="ReniAgent — Telcel Sales Agent",
@@ -27,6 +51,7 @@ app = FastAPI(
 def startup():
     """Crea las tablas en PostgreSQL al arrancar."""
     init_db()
+    logger.info("ReniAgent iniciado — tablas PostgreSQL listas")
 
 
 class ChatRequest(BaseModel):
@@ -127,6 +152,120 @@ def chat(
         plan_selected=session.plan_selected,
         turn=len(updated_history) // 2,
     )
+
+
+@app.get("/webhook")
+def verify_webhook(
+    hub_mode: str = Query(default=None, alias="hub.mode"),
+    hub_verify_token: str = Query(default=None, alias="hub.verify_token"),
+    hub_challenge: str = Query(default=None, alias="hub.challenge"),
+):
+    """Verificación del webhook por Meta."""
+    verify_token = os.getenv("VERIFY_TOKEN", "")
+    if hub_mode == "subscribe" and hub_verify_token == verify_token:
+        return PlainTextResponse(hub_challenge)
+    raise HTTPException(status_code=403, detail="Verification failed")
+
+
+def _process_whatsapp_message(phone_number: str, message_text: str, sender_name: str):
+    """Procesa el mensaje en segundo plano para no bloquear el webhook."""
+    lock = _get_phone_lock(phone_number)
+    if not lock.acquire(blocking=False):
+        logger.warning(f"WA SKIP | {phone_number} — turno en proceso, mensaje descartado")
+        return
+    try:
+        first_name = sender_name.split()[0] if sender_name else "Cliente"
+
+        # Detectar comandos antes del flujo normal
+        if message_text.startswith("/"):
+            cmd_response = handle_command(phone_number, message_text)
+            if cmd_response is not None:
+                send_whatsapp_message(phone_number, cmd_response)
+                return
+
+        existing = load_session(phone_number)
+
+        if existing:
+            session = dict_to_session(existing["session_data"])
+            history = existing["history"]
+            response_text, updated_history = run_turn(session, message_text, history)
+            save_session(
+                phone_number=phone_number,
+                session_data=session_to_dict(session),
+                history=updated_history,
+            )
+            send_whatsapp_message(phone_number, response_text)
+            logger.info(f"WA OUT | {phone_number} [stage={session.stage}]: {response_text[:80]}")
+        else:
+            session = SessionState(
+                first_name=first_name,
+                full_name=sender_name,
+                phone_number=phone_number,
+            )
+            campaign_msg = build_campaign_message(session)
+            initial_history = [{"role": "assistant", "content": campaign_msg}]
+            save_session(
+                phone_number=phone_number,
+                session_data=session_to_dict(session),
+                history=initial_history,
+            )
+            send_whatsapp_message(phone_number, campaign_msg)
+            logger.info(f"WA NEW | {phone_number} — sesión creada, campaña enviada")
+
+    except Exception as e:
+        logger.error(f"Error procesando mensaje de {phone_number}: {e}", exc_info=True)
+    finally:
+        lock.release()
+
+
+@app.post("/webhook")
+def whatsapp_webhook(payload: dict, background_tasks: BackgroundTasks):
+    """Recibe mensajes de WhatsApp — responde 200 inmediatamente y procesa en segundo plano."""
+    try:
+        entry = payload.get("entry", [])
+        if not entry:
+            return {"status": "ok"}
+
+        changes = entry[0].get("changes", [])
+        if not changes:
+            return {"status": "ok"}
+
+        value = changes[0].get("value", {})
+        messages = value.get("messages", [])
+
+        if not messages:
+            return {"status": "ok"}
+
+        msg = messages[0]
+        if msg.get("type") != "text":
+            return {"status": "ok"}
+
+        # Deduplicación: ignorar reintentos de Meta con el mismo ID de mensaje
+        msg_id = msg.get("id", "")
+        if msg_id:
+            with _processed_lock:
+                if msg_id in _processed_msg_ids:
+                    return {"status": "ok"}
+                _processed_msg_ids.add(msg_id)
+                # Limitar el tamaño del cache en memoria
+                if len(_processed_msg_ids) > 500:
+                    _processed_msg_ids.clear()
+
+        phone_number = msg["from"]
+        message_text = msg["text"]["body"]
+
+        contacts = value.get("contacts", [])
+        sender_name = contacts[0]["profile"]["name"] if contacts else "Cliente"
+
+        logger.info(f"WA IN  | {phone_number} ({sender_name}): {message_text}")
+
+        # Procesar en segundo plano — Meta recibe 200 de inmediato
+        background_tasks.add_task(_process_whatsapp_message, phone_number, message_text, sender_name)
+
+    except Exception as e:
+        logger.error(f"WhatsApp webhook error: {e}", exc_info=True)
+
+    return {"status": "ok"}
 
 
 @app.delete("/session")
