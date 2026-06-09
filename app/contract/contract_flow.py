@@ -75,6 +75,19 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                PERSUASION → volver al flujo normal
                CONTRACT   → invocar LLM (pregunta durante espera)
     """
+    # 0. Restricciones de titular y nombre
+    if not session.is_titular:
+        return (
+            "El cambio de plan solo puede ser gestionado por el titular. "
+            "Si usted es el titular, puede continuar con la activación."
+        )
+
+    if session.nombre_incorrecto:
+        return (
+            "Para proceder con la activación debe corregir primero sus datos "
+            "en un Centro de Atención a Clientes (CAC)."
+        )
+
     # 1. Bloqueado por intentos fallidos de OTP
     if session.authentication_locked:
         session.stage = "END"

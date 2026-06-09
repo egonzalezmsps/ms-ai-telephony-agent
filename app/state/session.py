@@ -43,6 +43,9 @@ class SessionState:
 
     # ── Titular ───────────────────────────────────────────────────
     is_titular: bool = True
+    nombre_incorrecto: bool = False
+    cac_nombre_incorrecto_shown: bool = False
+    post_not_titular: bool = False
 
     # ── Flujo de contratación ─────────────────────────────────────
     awaiting_contract_confirmation: bool = False

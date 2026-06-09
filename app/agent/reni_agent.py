@@ -7,11 +7,13 @@ El agente recuerda todos los turnos anteriores de la sesión.
 
 import logging
 import re
+import unicodedata
 import warnings
 from typing import List, Dict, Tuple
 
 from strands import Agent
 
+from app.catalog.plans import CATALOG, find_plan, get_price
 from app.config.oci_model import oci_model
 from app.prompts.system_prompt import build_system_prompt
 from app.tools.telcel_tools import make_tools
@@ -65,6 +67,133 @@ def clean_response(text: str, is_rejection: bool = False) -> str:
 
     return (before + "\n\n" + last_q).strip() if before else last_q
 
+_CAC_MARKERS = ["cac", "800 220 9518", "centro de atención a clientes"]
+
+_NOT_TITULAR_KEYWORDS = [
+    "no soy", "no es mi nombre", "soy su esposa", "soy su hijo",
+    "soy su madre", "no me llamo", "equivocado de persona",
+    "número equivocado", "este no es mi número",
+]
+
+_WRONG_NAME_PHRASES = [
+    "mi nombre es", "me llamo",
+    "el nombre está mal", "nombre equivocado", "el nombre está equivocado",
+]
+
+
+def _norm_name(s: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s.strip().lower())
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def _detect_titular_issues(session, user_message: str):
+    """
+    Safety net pre-LLM: detecta no-titular y discrepancia de nombre.
+    Retorna mensaje de respuesta o None si no aplica.
+    """
+    msg_lower = user_message.strip().lower()
+
+    # A) No titular
+    if session.is_titular and any(kw in msg_lower for kw in _NOT_TITULAR_KEYWORDS):
+        session.is_titular = False
+        return (
+            "Entendemos. El cambio de plan solo puede ser gestionado por el "
+            "titular de la línea. Si usted es familiar o conocido del titular, "
+            "le pedimos que le informe sobre esta oferta.\n"
+            "Con gusto respondemos cualquier consulta sobre los planes disponibles."
+        )
+
+    # B) Nombre incorrecto — solo si sigue considerado titular
+    if session.is_titular and not session.nombre_incorrecto:
+        if any(kw in msg_lower for kw in _WRONG_NAME_PHRASES):
+            name_is_different = False
+            name_match = re.search(
+                r'(?:mi nombre es|me llamo)\s+([a-záéíóúüñ]+)',
+                msg_lower,
+            )
+            if name_match:
+                claimed = _norm_name(name_match.group(1))
+                registered = _norm_name(session.first_name)
+                name_is_different = bool(claimed) and claimed != registered
+            elif any(
+                kw in msg_lower
+                for kw in ["el nombre está mal", "nombre equivocado", "el nombre está equivocado"]
+            ):
+                name_is_different = True
+
+            if name_is_different:
+                session.nombre_incorrecto = True
+                return (
+                    "Entendemos que usted es el titular de la línea. Sin embargo, "
+                    "existe una discrepancia en el nombre registrado en nuestros sistemas, "
+                    "lo que impide formalizar el cambio de plan desde este canal.\n\n"
+                    "Para proceder con la activación, le invitamos a corregir sus datos "
+                    "acudiendo a un Centro de Atención a Clientes (CAC):\n"
+                    "📍 https://www.telcel.com/personas/atencion-a-clientes/puntos-de-contacto/centro-atencion"
+                )
+
+    return None
+
+
+def _strip_incorrect_cac(
+    text: str,
+    user_message: str,
+    session: SessionState,
+) -> str:
+    """
+    Safety net: si el LLM derivó al CAC para un plan que es activable en este canal
+    (misma modalidad y precio >= renta actual), elimina esa derivación y cierra
+    con la pregunta de activación correcta.
+    """
+    if not any(m in text.lower() for m in _CAC_MARKERS):
+        return text
+
+    # Buscar plan mencionado en el mensaje del cliente
+    msg_lower = user_message.lower()
+    mentioned_plan = None
+    for plan in CATALOG:
+        if plan.plan_id.lower() in msg_lower:
+            mentioned_plan = plan
+            break
+    if mentioned_plan is None:
+        for m in re.findall(r'(?:libre|ultra)\s+\w+', msg_lower):
+            mentioned_plan = find_plan("telcel " + m)
+            if mentioned_plan:
+                break
+
+    if mentioned_plan is None:
+        return text
+
+    # Verificar activabilidad: precio >= renta actual en la modalidad del cliente
+    plan_price = get_price(mentioned_plan, session.subscription_type)
+    if plan_price < session.current_cost - 1.0:
+        return text  # plan genuinamente más barato → CAC es correcto
+
+    # Verificar si el cliente pide explícitamente modalidad diferente a la suya
+    msg_upper = user_message.upper()
+    if "ABIERTO" in msg_upper and session.subscription_type == "Controlado":
+        return text
+    if "CONTROLADO" in msg_upper and session.subscription_type == "Abierto":
+        return text
+
+    # Eliminar párrafos/líneas que contengan derivación al CAC o Soporte
+    paragraphs = re.split(r'\n+', text)
+    cleaned = [p for p in paragraphs if not any(m in p.lower() for m in _CAC_MARKERS)]
+    clean_text = "\n".join(cleaned).strip()
+
+    # Agregar pregunta de activación si no hay una
+    if "¿Le gustaría activar" not in clean_text:
+        activation_q = (
+            f"¿Le gustaría activar el "
+            f"{mentioned_plan.plan_id} {session.subscription_type}?"
+        )
+        clean_text = (clean_text + "\n\n" + activation_q).strip()
+
+    return clean_text
+
+
 def create_agent(session: SessionState, messages: List[Dict] = None) -> Agent:
     """Crea el agente con system prompt, herramientas e historial inicial."""
     return Agent(
@@ -93,6 +222,15 @@ def run_turn(
         Tupla (respuesta_texto, historial_actualizado)
     """
     history = history or []
+
+    # ── Detección pre-LLM: titular y nombre ───────────────────────────────────
+    titular_msg = _detect_titular_issues(session, user_message)
+    if titular_msg is not None:
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": titular_msg},
+        ]
+        return titular_msg, updated_history
 
     # ── Flujo de contratación determinístico (sin LLM) ────────────────────────
     if session.stage == "CONTRACT":
@@ -146,6 +284,8 @@ def run_turn(
             if isinstance(block, dict) and "text" in block:
                 response_text += block.get("text", "")
     response_text = response_text.strip()
+    # Eliminar corchetes vacíos que Llama a veces emite como artefacto
+    response_text = re.sub(r'\[\s*\]', '', response_text).strip()
 
     # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
     if not response_text or response_text.strip("() \n") == "":
@@ -202,6 +342,7 @@ def run_turn(
     }
     is_rejection = user_message.strip().lower() in REJECTION_WORDS
     response_text = clean_response(response_text, is_rejection=is_rejection)
+    response_text = _strip_incorrect_cac(response_text, user_message, session)
 
     updated_history = history + [
         {"role": "user", "content": user_message},

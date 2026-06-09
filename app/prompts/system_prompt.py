@@ -70,7 +70,13 @@ def build_catalog_block(session) -> str:
 
     lines = [header, ""]
 
-    lines.append(f"PLANES ACTIVABLES EN ESTE CANAL (precio >= ${current_cost:.0f}/mes):")
+    lines.append(
+        f"PLANES ACTIVABLES EN ESTE CANAL (precio >= ${current_cost:.0f}/mes):\n"
+        f"TODOS estos planes se activan directamente en esta conversación.\n"
+        f"NO requieren CAC ni Soporte — sin importar si son Libre o Ultra,\n"
+        f"sin importar si el precio es mayor a la renta actual.\n"
+        f"CAC solo aplica para cambio de modalidad o planes más baratos."
+    )
     lines.append(table_header)
     lines.extend(activable_rows)
 
@@ -136,7 +142,9 @@ Plan: {target.plan_id} {session.subscription_type}
 Precio: ${price:.0f}/mes
 GB: {gb_label}
 Cashback: ${cashback:.2f}/mes
-{"Promoción activa: +50% GB durante 24 meses, vigente hasta " + session.fecha_vigencia if has_promo and target.gb_promo > target.gb_base else ""}
+{"⚠️ PROMOCIÓN DE GB NO APLICA: el precio del plan es igual a la renta actual."
+ if abs(price - session.current_cost) <= 1.0
+ else f"Promoción activa: +50% GB durante 24 meses, vigente hasta {session.fecha_vigencia}"}
 
 Este es el plan base de tu recomendación.
 """
