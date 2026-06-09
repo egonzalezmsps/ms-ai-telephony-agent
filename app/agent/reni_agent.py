@@ -27,7 +27,7 @@ from app.contract.post_sale import build_post_sale_message
 logging.getLogger("strands").setLevel(logging.ERROR)
 
 
-def clean_response(text: str, is_rejection: bool = False) -> str:
+def clean_response(text: str, is_rejection: bool = False, session=None) -> str:
     """
     Safety net: si la respuesta tiene más de una pregunta, elimina todas
     excepto la última (que siempre debe ser la de activación).
@@ -40,6 +40,9 @@ def clean_response(text: str, is_rejection: bool = False) -> str:
       DESPUÉS: "Entiendo..."
     """
     text = _fix_app_mentions(text)
+    text = _fix_tuteo(text)
+    if session is not None:
+        text = _fix_incorrect_promo(text, session)
 
     if is_rejection:
         rejection_phrases = ("entiendo", "comprendo", "respetamos su decisión")
@@ -95,6 +98,49 @@ def _fix_app_mentions(text: str) -> str:
     text = '\n'.join(result)
     text = re.sub(r'Claro Drive con \d+ GB', 'Claro Drive con 20 GB', text, flags=re.IGNORECASE)
     return text
+
+_TUTEO_MAP = {
+    'tienes': 'tiene',
+    'podrías': 'podría',
+    'recibirías': 'recibiría',
+    'tendrías': 'tendría',
+}
+_TUTEO_PATTERN = re.compile(
+    r'\b(tienes|podr[ií]as|recibir[ií]as|tendr[ií]as)\b',
+    re.IGNORECASE | re.UNICODE,
+)
+
+_PROMO_PATTERNS = [
+    r'\+50%\s*(?:de\s*)?GB[^\s,\.]*',
+    r'\d+(?:[,\.]\d+)?\s*GB\s*(?:de\s*)?(?:promoción|promo)\b[^,\.\n]*',
+    r'\d+(?:[,\.]\d+)?\s*GB\s*extra\b[^,\.\n]*',
+    r'\d+(?:[,\.]\d+)?\s*GB\s*adicionales\b[^,\.\n]*',
+    r'\(.*?\d+\s*GB\s*base\s*\+\s*\d+(?:[,\.]\d+)?\s*GB[^\)]*\)',
+]
+
+
+def _fix_tuteo(text: str) -> str:
+    def _repl(m: re.Match) -> str:
+        original = m.group(0)
+        formal = _TUTEO_MAP.get(original.lower(), original)
+        return formal[0].upper() + formal[1:] if original[0].isupper() else formal
+    return _TUTEO_PATTERN.sub(_repl, text)
+
+
+def _fix_incorrect_promo(text: str, session) -> str:
+    """
+    Si el primer precio mencionado en la respuesta coincide con la renta actual
+    del cliente (±$1), elimina las menciones de promoción de GB — no aplica.
+    """
+    price_match = re.search(r'\$(\d+)/mes', text)
+    if not price_match:
+        return text
+    if abs(float(price_match.group(1)) - session.current_cost) > 1.0:
+        return text
+    for pattern in _PROMO_PATTERNS:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    return re.sub(r'\n{3,}', '\n\n', text).strip()
+
 
 _NOT_TITULAR_KEYWORDS = [
     "no soy", "no es mi nombre", "soy su esposa", "soy su hijo",
@@ -368,7 +414,7 @@ def run_turn(
         "no aplica",
     }
     is_rejection = user_message.strip().lower() in REJECTION_WORDS
-    response_text = clean_response(response_text, is_rejection=is_rejection)
+    response_text = clean_response(response_text, is_rejection=is_rejection, session=session)
     response_text = _strip_incorrect_cac(response_text, user_message, session)
 
     updated_history = history + [
