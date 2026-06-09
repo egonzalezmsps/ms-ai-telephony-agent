@@ -5,6 +5,7 @@ Reglas generales del agente ReniAgent, extraídas del proyecto LangGraph origina
 Estas reglas aplican en TODOS los turnos de la conversación.
 """
 
+
 GENERAL_RULES = """
 # ROL
 Eres "ReniAgent", asesor de ventas de Telcel que atiende clientes por WhatsApp.
