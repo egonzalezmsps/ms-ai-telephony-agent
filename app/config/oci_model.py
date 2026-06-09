@@ -1,10 +1,14 @@
 """
 config/oci_model.py
 """
+import logging
 import os
+import time
 import litellm
 from dotenv import load_dotenv
 from strands.models.litellm import LiteLLMModel
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -29,6 +33,9 @@ def build_oci_model() -> LiteLLMModel:
     compartment_id = os.environ["OCI_COMPARTMENT_ID"]
     region = os.environ["OCI_REGION"]
 
+    t0 = time.time()
+    logger.info("[OCI] Iniciando modelo model_id=%s region=%s", model_id, region)
+
     params = {
         "oci_region": region,
         "oci_compartment_id": compartment_id,
@@ -45,14 +52,19 @@ def build_oci_model() -> LiteLLMModel:
         params["oci_fingerprint"] = os.environ["OCI_FINGERPRINT"]
         params["oci_tenancy"] = os.environ["OCI_TENANCY"]
         params["oci_key"] = _read_key_file(key_file)
+        logger.info("[OCI] Auth: API key user=%s", oci_user[:30])
     # Si no, usa Instance Principal (autenticación automática en OKE)
     else:
         params["oci_auth"] = "instance_principal"
+        logger.info("[OCI] Auth: instance_principal")
 
-    return LiteLLMModel(
+    model = LiteLLMModel(
         model_id=f"oci/{model_id}",
         params=params,
     )
+    logger.info("[OCI] Modelo listo en %.2fs temperature=%.1f max_tokens=%d",
+                time.time() - t0, params["temperature"], params["max_tokens"])
+    return model
 
 
 # Singleton

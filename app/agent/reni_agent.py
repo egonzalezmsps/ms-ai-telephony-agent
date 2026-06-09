@@ -7,6 +7,7 @@ El agente recuerda todos los turnos anteriores de la sesión.
 
 import logging
 import re
+import time
 import warnings
 from typing import List, Dict, Tuple
 
@@ -18,11 +19,14 @@ from app.tools.telcel_tools import make_tools
 from app.state.session import SessionState
 from app.contract.contract_flow import handle_contract_turn
 from app.contract.post_sale import build_post_sale_message
+from app.catalog.plans import find_plan, get_price
 
 # Silencia los WARNING internos de Strands (ej. "overriding stop reason due to toolUse").
 # El mensaje viene de strands.event_loop.streaming como logger.warning() y no debe
 # llegar al cliente. Mantenemos ERROR y CRITICAL para fallos reales.
 logging.getLogger("strands").setLevel(logging.ERROR)
+
+logger = logging.getLogger(__name__)
 
 
 def clean_response(text: str) -> str:
@@ -124,9 +128,12 @@ def run_turn(
     # tiene efecto en la memoria de la conversación.
     agent = create_agent(session, messages=prior_messages)
 
+    t0 = time.time()
+    logger.info("[LLM] START  phone=%s stage=%s turns=%d", session.phone_number, session.stage, len(history) // 2)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning, module="strands")
         response = agent(user_message)
+    elapsed = time.time() - t0
 
     response_text = ""
     if hasattr(response, "message") and response.message:
@@ -137,6 +144,7 @@ def run_turn(
 
     # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
     if not response_text or response_text.strip("() \n") == "":
+        logger.warning("[LLM] VACÍO  phone=%s elapsed=%.2fs", session.phone_number, elapsed)
         if "iniciar_contratacion" in str(agent.messages):
             if session.plan_selected and session.stage == "CONTRACT":
                 contract_msg = handle_contract_turn(session, user_message)
@@ -154,6 +162,25 @@ def run_turn(
         for block in msg.get("content", [])
         if isinstance(block, dict) and "toolUse" in block
     ]
+    _tool_inputs = {
+        block["toolUse"]["name"]: block["toolUse"].get("input", {})
+        for msg in agent.messages
+        for block in msg.get("content", [])
+        if isinstance(block, dict) and "toolUse" in block
+    }
+    _tipo = "tool" if _tools_invoked else "text"
+    logger.info("[LLM] END    phone=%s elapsed=%.2fs tipo=%s herramienta=%s",
+                session.phone_number, elapsed, _tipo, _tools_invoked[0] if _tools_invoked else "-")
+    if "iniciar_contratacion" in _tools_invoked:
+        _plan_id = _tool_inputs.get("iniciar_contratacion", {}).get("plan_id", "?")
+        _plan = find_plan(_plan_id)
+        if _plan:
+            _price = get_price(_plan, session.subscription_type)
+            _gb = "Ilimitado" if _plan.is_unlimited else f"{_plan.gb_promo:.0f}GB"
+            logger.info("[PLAN] iniciar_contratacion → %s | $%.0f/mes | %s | %s",
+                        _plan.plan_id, _price, _gb, session.subscription_type)
+        else:
+            logger.info("[PLAN] iniciar_contratacion → plan_id=%s (no encontrado en catálogo)", _plan_id)
     if "iniciar_contratacion" in _tools_invoked and session.stage == "CONTRACT":
         contract_msg = handle_contract_turn(session, user_message)
         if contract_msg:
@@ -164,10 +191,16 @@ def run_turn(
     # Si se detecta ese patrón, se reintenta una vez con un agente fresco.
     _TOOL_PATTERN = re.compile(r'(\[[a-z_]+\]|[a-z_]+\([^)]*\))', re.IGNORECASE)
     if _TOOL_PATTERN.search(response_text):
+        _match = _TOOL_PATTERN.search(response_text)
+        logger.warning("[LLM] RETRY  phone=%s motivo='tool-as-text' patron='%s'",
+                       session.phone_number, _match.group(0) if _match else "?")
         agent_retry = create_agent(session, messages=prior_messages)
+        t1 = time.time()
+        logger.info("[LLM] START  phone=%s stage=%s turns=%d (retry)", session.phone_number, session.stage, len(history) // 2)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, module="strands")
             response2 = agent_retry(user_message)
+        logger.info("[LLM] END    phone=%s elapsed=%.2fs tipo=retry", session.phone_number, time.time() - t1)
         retry_text = ""
         if hasattr(response2, "message") and response2.message:
             for block in response2.message.get("content", []):
