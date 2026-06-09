@@ -14,6 +14,8 @@ OTP_FIXED = "T12345"          # OTP fijo para pruebas; reemplazar por integraci√
 MAX_OTP_ATTEMPTS = 3
 MAX_OTP_RESENDS = 3
 
+
+
 _APPS_LIBRES = "Facebook, Instagram, WhatsApp, X, Snapchat, Uber"
 
 _VAGUE_CONFIRMATIONS = {
