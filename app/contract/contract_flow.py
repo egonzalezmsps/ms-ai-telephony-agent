@@ -18,11 +18,6 @@ MAX_OTP_RESENDS = 3
 
 _APPS_LIBRES = "Facebook, Instagram, WhatsApp, X, Snapchat, Uber"
 
-_VAGUE_CONFIRMATIONS = {
-    "SI", "SÍ", "SIP", "OK", "DALE", "ORALE", "VA", "CLARO",
-    "BUENO", "PERFECTO", "SALE", "VALE", "ESO", "ANDALE",
-}
-
 
 def build_summary_template(session) -> str:
     """Template fijo del resumen del plan a contratar."""
@@ -129,7 +124,7 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
     if session.awaiting_contract_confirmation:
         msg = user_message.strip().upper().strip("!.¿? ")
 
-        palabras = set(msg.strip().split())
+        palabras = set(msg.strip().upper().split())
         if "ACEPTO" in palabras or "CONFIRMO" in palabras:
             plan = find_plan(session.plan_selected)
             if plan:
@@ -162,16 +157,11 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             session.plan_selected = None
             return None  # → volver a persuasión
 
-        if msg in _VAGUE_CONFIRMATIONS:
-            return (
-                f"Para confirmar la activación del {session.plan_selected}, "
-                f"necesito su confirmación explícita.\n\n"
-                f"Responda ACEPTO o CONFIRMO para activar, "
-                f"o NO para cancelar."
-            )
-
-        # Pregunta o mensaje no reconocido durante la espera → LLM responde
-        return None  # → invocar LLM con contexto del contrato
+        return (
+            f"Para confirmar la activación del {session.plan_selected}, "
+            f"responda *ACEPTO* o *CONFIRMO*.\n\n"
+            f"Para cancelar responda *NO*."
+        )
 
     # 4. Primer ingreso al flujo — mostrar resumen
     session.awaiting_contract_confirmation = True

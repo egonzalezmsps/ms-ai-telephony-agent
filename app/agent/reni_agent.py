@@ -27,7 +27,12 @@ from app.contract.post_sale import build_post_sale_message
 logging.getLogger("strands").setLevel(logging.ERROR)
 
 
-def clean_response(text: str, is_rejection: bool = False, session=None) -> str:
+def clean_response(
+    text: str,
+    is_rejection: bool = False,
+    session=None,
+    user_message: str = "",
+) -> str:
     """
     Safety net: si la respuesta tiene más de una pregunta, elimina todas
     excepto la última (que siempre debe ser la de activación).
@@ -41,8 +46,11 @@ def clean_response(text: str, is_rejection: bool = False, session=None) -> str:
     """
     text = _fix_app_mentions(text)
     text = _fix_tuteo(text)
+    text = _strip_technical_cac_reasons(text)
     if session is not None:
         text = _fix_incorrect_promo(text, session)
+        text = _filter_ineligible_plans(text, user_message, session)
+        text = _filter_wrong_modality(text, session)
 
     if is_rejection:
         rejection_phrases = ("entiendo", "comprendo", "respetamos su decisión")
@@ -74,6 +82,26 @@ def clean_response(text: str, is_rejection: bool = False, session=None) -> str:
 
 _CAC_MARKERS = ["cac", "800 220 9518", "centro de atención a clientes"]
 
+_TECHNICAL_CAC_PHRASES = [
+    re.compile(r"ya que su precio \(\$[\d,]+/mes\) es menor a su renta actual \(\$[\d,]+/mes\)", re.IGNORECASE),
+    re.compile(r"ya que su precio es menor a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"debido a que su precio es menor[^.]*\.", re.IGNORECASE),
+    re.compile(r"porque su precio \(\$[\d,]+\) es menor[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su renta actual es de \$[\d,]+[^.]*precio menor[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su precio \(\$[\d,]+/mes\) es mayor a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que el precio del plan[^.]*es mayor[^.]*\.", re.IGNORECASE),
+    re.compile(r"y requiere cambio de plan en un CAC[^.]*\.", re.IGNORECASE),
+    re.compile(r"requiere cambio de plan en un CAC[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su precio \(\$[\d,]+\) es mayor[^.]*\.", re.IGNORECASE),
+]
+
+
+def _strip_technical_cac_reasons(text: str) -> str:
+    """Elimina explicaciones técnicas de elegibilidad que nunca deben llegar al cliente."""
+    for pattern in _TECHNICAL_CAC_PHRASES:
+        text = pattern.sub("", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
 APPS_CORRECTAS_LIBRE = [
     "Facebook", "WhatsApp", "Messenger", "X", "Instagram", "Snapchat", "Uber"
 ]
@@ -87,15 +115,25 @@ _APPS_CORRECTAS_STR = (
 
 def _fix_app_mentions(text: str) -> str:
     """Corrige apps incorrectas y capacidad errónea de Claro Drive."""
-    lines = text.split('\n')
-    result = []
-    for line in lines:
-        line_lower = line.lower()
-        if any(app.lower() in line_lower for app in APPS_INCORRECTAS):
-            result.append(_APPS_CORRECTAS_STR)
-        else:
-            result.append(line)
-    text = '\n'.join(result)
+    text_lower = text.lower()
+    if any(app.lower() in text_lower for app in APPS_INCORRECTAS):
+        lines = text.split('\n')
+        result = []
+        inserted = False
+        for line in lines:
+            if any(app.lower() in line.lower() for app in APPS_INCORRECTAS):
+                # Línea con app incorrecta: insertar lista correcta solo la primera vez
+                if not inserted:
+                    result.append(_APPS_CORRECTAS_STR)
+                    inserted = True
+            elif line == _APPS_CORRECTAS_STR:
+                # Lista correcta ya presente: mantener solo si aún no se insertó
+                if not inserted:
+                    result.append(line)
+                    inserted = True
+            else:
+                result.append(line)
+        text = '\n'.join(result)
     text = re.sub(r'Claro Drive con \d+ GB', 'Claro Drive con 20 GB', text, flags=re.IGNORECASE)
     return text
 
@@ -140,6 +178,71 @@ def _fix_incorrect_promo(text: str, session) -> str:
     for pattern in _PROMO_PATTERNS:
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
     return re.sub(r'\n{3,}', '\n\n', text).strip()
+
+
+_CHEAPER_REQUEST_PATTERN = re.compile(
+    r'\b(m[aá]s\s+barato|econ[oó]mico|m[eé]nos\s+(?:caro|precio)|precio\s*m[aá]s\s*bajo|'
+    r'm[aá]s\s+econ[oó]mico|plan\s+barato|algo\s+(?:m[aá]s\s+)?barato)\b',
+    re.IGNORECASE | re.UNICODE,
+)
+_PRICE_IN_LINE_PATTERN = re.compile(r'\$(\d[\d,\.]*)/mes', re.IGNORECASE)
+# Líneas que parecen listado de planes: bullet/tabla con nombre Telcel
+_PLAN_LISTING_LINE = re.compile(
+    r'^\s*(?:[•\-\*\|]|\d+[\.\)]\s)\s*Telcel\s+(?:Libre|Ultra)'
+    r'|^Telcel\s+(?:Libre|Ultra)',
+    re.IGNORECASE,
+)
+
+# Patrón de activación en modalidad incorrecta (para cliente Controlado)
+_WRONG_MODAL_ACTIVATION = re.compile(
+    r'(?:activar|activarlo|activarla|contratar|migrar|se\s+activa|puede\s+activar)'
+    r'.*?\bmodalidad\s+abierto\b'
+    r'|\bmodalidad\s+abierto\b.*?(?:activar|activarlo|contratar|migrar|se\s+activa)',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _filter_ineligible_plans(text: str, user_message: str, session) -> str:
+    """
+    Elimina líneas de planes con precio < renta actual cuando no fueron pedidos.
+    Solo actúa sobre líneas que parecen listado de planes (bullet o tabla con 'Telcel').
+    """
+    if session is None:
+        return text
+    if _CHEAPER_REQUEST_PATTERN.search(user_message):
+        return text  # cliente pidió explícitamente ver opciones más baratas
+
+    current_cost = session.current_cost
+    lines = text.split('\n')
+    result = []
+    for line in lines:
+        if _PLAN_LISTING_LINE.match(line.strip()):
+            prices = _PRICE_IN_LINE_PATTERN.findall(line)
+            if prices:
+                # Usar solo el primer precio (precio del plan) — no cashback ni otros
+                # Quitar separadores de miles (coma o punto antes de 3 dígitos)
+                raw = re.sub(r'[,.](?=\d{3}(?:\D|$))', '', prices[0])
+                plan_price = float(raw.replace(',', ''))
+                if plan_price < current_cost - 1.0:
+                    continue  # omitir línea no elegible
+        result.append(line)
+
+    return re.sub(r'\n{3,}', '\n\n', '\n'.join(result))
+
+
+def _filter_wrong_modality(text: str, session) -> str:
+    """
+    Para clientes Controlado: elimina líneas que sugieren activar un plan en
+    modalidad Abierto — la activación en modalidad diferente siempre requiere CAC
+    y no debe aparecer como opción directa.
+    Preserva menciones informativas de precios en Abierto (sin verbos de activación).
+    """
+    if session is None or session.subscription_type != "Controlado":
+        return text
+
+    lines = text.split('\n')
+    result = [line for line in lines if not _WRONG_MODAL_ACTIVATION.search(line)]
+    return '\n'.join(result)
 
 
 _NOT_TITULAR_KEYWORDS = [
@@ -360,29 +463,31 @@ def run_turn(
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     response_text = re.sub(r'\[\s*\]', '', response_text).strip()
 
-    # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
-    if not response_text or response_text.strip("() \n") == "":
-        if "iniciar_contratacion" in str(agent.messages):
-            if session.plan_selected and session.stage == "CONTRACT":
-                contract_msg = handle_contract_turn(session, user_message)
-                if contract_msg:
-                    response_text = contract_msg
-        if not response_text or response_text.strip("() \n") == "":
-            response_text = "Disculpe, ¿podría repetir su mensaje?"
-
-    # ── Interceptar iniciar_contratacion — Opción A ───────────────────────────
-    # Si el LLM invocó iniciar_contratacion, ignorar su respuesta y devolver
-    # el template determinístico de contratación directamente.
+    # ── Interceptar iniciar_contratacion — ignorar response_text del LLM ────────
+    # Cuando el LLM invocó iniciar_contratacion, su response_text nunca llega
+    # al cliente: se reemplaza siempre con el template determinístico y se
+    # retorna de inmediato, sin pasar por clean_response ni tool-pattern check.
     _tools_invoked = [
         block["toolUse"]["name"]
         for msg in agent.messages
         for block in msg.get("content", [])
         if isinstance(block, dict) and "toolUse" in block
     ]
-    if "iniciar_contratacion" in _tools_invoked and session.stage == "CONTRACT":
+    if "iniciar_contratacion" in _tools_invoked:
         contract_msg = handle_contract_turn(session, user_message)
         if contract_msg:
-            response_text = contract_msg
+            response_text = contract_msg  # reemplaza COMPLETAMENTE el response_text del LLM
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        if len(updated_history) > 20:
+            updated_history = updated_history[-20:]
+        return response_text, updated_history
+
+    # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
+    if not response_text or response_text.strip("() \n") == "":
+        response_text = "Disculpe, ¿podría repetir su mensaje?"
 
     # Llama 4 Maverick a veces escribe herramientas como texto literal:
     # "[tool_name]" o "tool_name(param='valor')" en lugar de invocarlas.
@@ -414,7 +519,7 @@ def run_turn(
         "no aplica",
     }
     is_rejection = user_message.strip().lower() in REJECTION_WORDS
-    response_text = clean_response(response_text, is_rejection=is_rejection, session=session)
+    response_text = clean_response(response_text, is_rejection=is_rejection, session=session, user_message=user_message)
     response_text = _strip_incorrect_cac(response_text, user_message, session)
 
     updated_history = history + [
