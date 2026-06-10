@@ -169,6 +169,13 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 f"Para cancelar responda *NO*."
             )
 
+        if msg.startswith("ACEP") or msg.startswith("CONF"):
+            return (
+                f"Para confirmar la activación del {session.plan_selected}, "
+                f"responda *ACEPTO* o *CONFIRMO*.\n\n"
+                f"Para cancelar responda *NO*."
+            )
+
         # Mensaje no reconocido (pregunta durante espera) → LLM responde
         return None
 
