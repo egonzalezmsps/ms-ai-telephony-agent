@@ -8,7 +8,7 @@ Combina las reglas generales + contexto del cliente + catálogo de planes.
 from app.prompts.general_rules import GENERAL_RULES
 from app.catalog.plans import (
     CATALOG, recommend_plan,
-    get_price, get_cashback, PROMO_VIGENCIA, get_legacy_gb,
+    get_price, get_cashback, get_legacy_gb,
 )
 
 
@@ -89,7 +89,7 @@ def build_catalog_block(session) -> str:
         )
 
     if has_promo:
-        lines.append(f"\nNota: GB de promoción vigentes hasta {PROMO_VIGENCIA}.")
+        lines.append(f"\nNota: GB de promoción por 24 meses desde la activación.")
 
     # Modalidad alternativa (todos requieren CAC — sin columna Canal)
     alt_activable = [
@@ -141,9 +141,9 @@ Plan: {target.plan_id} {session.subscription_type}
 Precio: ${price:.0f}/mes
 GB: {gb_label}
 Cashback: ${cashback:.2f}/mes
-{"⚠️ PROMOCIÓN DE GB NO APLICA: el precio del plan es igual a la renta actual."
+{"[INSTRUCCIÓN INTERNA: Este plan NO tiene promoción de GB adicionales. NO menciones promoción, GB extra ni +50%. Solo menciona los GB base del plan.]"
  if abs(price - session.current_cost) <= 1.0
- else f"Promoción activa: +50% GB durante 24 meses, vigente hasta {session.fecha_vigencia}"}
+ else "Promoción activa: +50% GB durante 24 meses desde la activación."}
 
 Este es el plan base de tu recomendación.
 """

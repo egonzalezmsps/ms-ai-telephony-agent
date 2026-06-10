@@ -2,7 +2,10 @@
 scripts/test_prices.py
 
 Verifica que el agente responde los precios, GB y cashback del catálogo
-correctamente para el perfil 4 (María, $449/mes, Controlado).
+correctamente para el perfil 1 (Carlos, $229/mes, Controlado).
+
+Con la renta más baja del CSV todos los planes del catálogo son elegibles
+y el modelo los ve en la tabla de activables — ninguno queda como informativo.
 
 Uso:
     python scripts/test_prices.py
@@ -68,7 +71,7 @@ TEST_CASES = [
         "question": "cuántos GB tiene el Telcel Libre 5 Controlado?",
         "label":    "Telcel Libre 5 Controlado — GB (con promo)",
         "kind":     "gb",
-        "expected": 30.0,  # GB promo (María tiene promo activa y precio 699 > 450)
+        "expected": 30.0,  # GB promo (Carlos tiene promo activa y precio 699 > 230)
         "accepted": [20.0], # GB base también aceptable si el modelo no aplica promo
     },
 ]
@@ -123,9 +126,9 @@ def main():
     print("  test_prices.py — verificación de precios")
     print("══════════════════════════════════════════════\n")
 
-    session = select_prospect(4)
+    session = select_prospect(1)
     if not session:
-        print("ERROR: No se encontró el perfil 4. Verifica el CSV en docs/Masivo_clientes.csv")
+        print("ERROR: No se encontró el perfil 1. Verifica el CSV en docs/Masivo_clientes.csv")
         sys.exit(1)
 
     print(f"Perfil cargado: {session.first_name} — ${session.current_cost:.0f}/mes {session.subscription_type}\n")

@@ -13,7 +13,7 @@ from typing import List, Dict, Tuple
 
 from strands import Agent
 
-from app.catalog.plans import CATALOG, find_plan, get_price
+from app.catalog.plans import CATALOG, find_plan, get_price, recommend_plan
 from app.config.oci_model import oci_model
 from app.prompts.system_prompt import build_system_prompt
 from app.tools.telcel_tools import make_tools
@@ -93,6 +93,28 @@ _TECHNICAL_CAC_PHRASES = [
     re.compile(r"y requiere cambio de plan en un CAC[^.]*\.", re.IGNORECASE),
     re.compile(r"requiere cambio de plan en un CAC[^.]*\.", re.IGNORECASE),
     re.compile(r"ya que su precio \(\$[\d,]+\) es mayor[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su precio es menor a tu renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su precio es menor a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que el precio.*menor.*renta[^.]*\.", re.IGNORECASE),
+    re.compile(r"por ser más barato que su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"por ser más barato que tu renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su precio \(\$[\d,]+\) es menor[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su precio \(\$[\d,]+/mes\) es igual a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su precio es igual a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"porque su precio.*igual.*renta[^.]*\.", re.IGNORECASE),
+    re.compile(r"dado que su precio.*igual[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su nuevo plan \(\$[\d,]+/mes\) es más caro que su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"ya que su nuevo plan.*más caro[^.]*\.", re.IGNORECASE),
+    re.compile(r"desde la activación, ya que[^.]*\.", re.IGNORECASE),
+    re.compile(r"aplica durante \d+ meses desde la activación, ya que[^.]*\.", re.IGNORECASE),
+    re.compile(r"este plan es más barato que su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"no es elegible para activarse directamente en este canal[^.]*\.", re.IGNORECASE),
+    re.compile(r"por lo tanto, no es elegible[^.]*\.", re.IGNORECASE),
+    re.compile(r"tenga en cuenta que este plan es más barato[^.]*\.", re.IGNORECASE),
+    re.compile(r"La promoción de GB aplica cuando el precio del plan nuevo es mayor[^.]*\.", re.IGNORECASE),
+    re.compile(r"aplica cuando el precio.*mayor.*renta[^.]*\.", re.IGNORECASE),
+    re.compile(r"tiene promoción porque es mayor a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(r"tiene promoción porque.*mayor[^.]*\.", re.IGNORECASE),
 ]
 
 
@@ -407,6 +429,28 @@ def run_turn(
             {"role": "assistant", "content": titular_msg},
         ]
         return titular_msg, updated_history
+
+    # ── Detección pre-LLM: pregunta sobre criterio de promociones ────────────
+    _PROMO_QUESTIONS = [
+        "porque a veces", "por qué a veces", "cuando aplica la promo",
+        "cuándo hay promoción", "por qué hay promoción", "cuando hay promo",
+        "por qué unos tienen promoción", "cuando tienen promocion",
+    ]
+    msg_lower = user_message.lower()
+    if any(q in msg_lower for q in _PROMO_QUESTIONS):
+        target = recommend_plan(session.current_cost, session.subscription_type)
+        plan_name = f"{target.plan_id} {session.subscription_type}" if target else "el plan recomendado"
+        response_text = (
+            f"Las promociones son beneficios que Telcel activa en planes "
+            f"seleccionados para darles más valor. "
+            f"El {plan_name} sí incluye esta promoción.\n\n"
+            f"¿Le gustaría activar el {plan_name}?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return response_text, updated_history
 
     # ── Flujo de contratación determinístico (sin LLM) ────────────────────────
     if session.stage == "CONTRACT":
