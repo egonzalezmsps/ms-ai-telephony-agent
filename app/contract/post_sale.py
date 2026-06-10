@@ -9,9 +9,9 @@ from app.state.session import SessionState
 
 def build_post_sale_message(session: SessionState) -> str:
     return (
-        f"✅ *Tu cambio de plan ha sido confirmado.*\n\n"
+        f"✅ *Su cambio de plan ha sido confirmado.*\n\n"
         f"📋 *Folio de contratación:* {session.contract_folio}\n"
-        f"📱 *Número:* {session.phone_number}\n\n"
+        f"📱 *Su número:* {session.phone_number}\n\n"
         f"🔄 *Detalle del cambio:*\n"
         f"- Plan anterior: {session.current_plan_name}\n"
         f"- Plan nuevo: {session.plan_selected}\n\n"

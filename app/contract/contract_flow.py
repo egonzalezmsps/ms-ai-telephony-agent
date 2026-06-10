@@ -5,17 +5,16 @@ Flujo de contratación determinístico (sin LLM).
 Maneja: confirmación verbal → OTP → autenticación → post-venta.
 """
 
-import logging
 import uuid
 from typing import Optional
 
 from app.catalog.plans import find_plan, get_price, get_cashback
 
-logger = logging.getLogger(__name__)
-
 OTP_FIXED = "T12345"          # OTP fijo para pruebas; reemplazar por integración real
 MAX_OTP_ATTEMPTS = 3
 MAX_OTP_RESENDS = 3
+
+
 
 _APPS_LIBRES = "Facebook, Instagram, WhatsApp, X, Snapchat, Uber"
 
@@ -59,7 +58,7 @@ def build_summary_template(session) -> str:
         f"{cashback_line}"
         f"📞 Llamadas y SMS ilimitados\n"
         f"{apps_line}"
-        f"🎬 Amazon Prime · Claro Video\n"
+        f"🎬 Claro Video\n"
         f"💾 Claro Drive (20 GB)\n\n"
         f"⚠️ Este cambio es definitivo y no podrá revertirse al plan anterior.\n\n"
         f"Para confirmar responda ACEPTO o CONFIRMO.\n"
@@ -78,14 +77,22 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                PERSUASION → volver al flujo normal
                CONTRACT   → invocar LLM (pregunta durante espera)
     """
-    logger.info("[CONTRACT] phone=%s stage=%s awaiting_otp=%s awaiting_confirm=%s locked=%s",
-                session.phone_number, session.stage, session.awaiting_otp,
-                session.awaiting_contract_confirmation, session.authentication_locked)
+    # 0. Restricciones de titular y nombre
+    if not session.is_titular:
+        return (
+            "El cambio de plan solo puede ser gestionado por el titular. "
+            "Si usted es el titular, puede continuar con la activación."
+        )
+
+    if session.nombre_incorrecto:
+        return (
+            "Para proceder con la activación debe corregir primero sus datos "
+            "en un Centro de Atención a Clientes (CAC)."
+        )
 
     # 1. Bloqueado por intentos fallidos de OTP
     if session.authentication_locked:
         session.stage = "END"
-        logger.warning("[CONTRACT] BLOQUEADO phone=%s → stage=END", session.phone_number)
         return (
             "Por seguridad hemos bloqueado el proceso de verificación. "
             "Comuníquese con Soporte al 800 220 9518."
@@ -100,21 +107,17 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             session.awaiting_otp = False
             session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
             session.stage = "POST_SALE"
-            logger.info("[CONTRACT] OTP_OK phone=%s folio=%s → stage=POST_SALE", session.phone_number, session.contract_folio)
             return None  # → generar post-venta
 
         session.otp_attempt_count += 1
         if session.otp_attempt_count >= MAX_OTP_ATTEMPTS:
             session.authentication_locked = True
             session.awaiting_otp = False
-            logger.warning("[CONTRACT] OTP_FAIL_MAX phone=%s intentos=%d → bloqueado", session.phone_number, session.otp_attempt_count)
             return (
                 "Ha superado el número de intentos permitidos. "
                 "Comuníquese con Soporte al 800 220 9518."
             )
 
-        logger.warning("[CONTRACT] OTP_FAIL phone=%s intento=%d restantes=%d",
-                       session.phone_number, session.otp_attempt_count, MAX_OTP_ATTEMPTS - session.otp_attempt_count)
         remaining = MAX_OTP_ATTEMPTS - session.otp_attempt_count
         return (
             f"El código ingresado no es correcto. "
@@ -126,7 +129,8 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
     if session.awaiting_contract_confirmation:
         msg = user_message.strip().upper().strip("!.¿? ")
 
-        if any(w in msg for w in ["ACEPTO", "CONFIRMO"]):
+        palabras = set(msg.strip().upper().split())
+        if "ACEPTO" in palabras or "CONFIRMO" in palabras:
             plan = find_plan(session.plan_selected)
             if plan:
                 new_price = get_price(plan, session.subscription_type)
@@ -140,13 +144,10 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 session.is_authenticated = True
                 session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
                 session.stage = "POST_SALE"
-                logger.info("[CONTRACT] CONFIRMADO_SIN_OTP phone=%s plan=%s folio=%s → stage=POST_SALE",
-                            session.phone_number, session.plan_selected, session.contract_folio)
                 return None  # → generar post-venta directo sin OTP
             else:
                 session.awaiting_otp = True
                 session.otp_sent = True
-                logger.info("[CONTRACT] OTP_ENVIADO phone=%s plan=%s", session.phone_number, session.plan_selected)
                 phone_masked = session.phone_number[-4:] if session.phone_number else "****"
                 return (
                     f"Para verificar su identidad, le hemos enviado un código "
@@ -159,21 +160,18 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             session.stage = "PERSUASION"
             session.awaiting_contract_confirmation = False
             session.plan_selected = None
-            logger.info("[CONTRACT] CANCELADO phone=%s → stage=PERSUASION", session.phone_number)
             return None  # → volver a persuasión
 
         if msg in _VAGUE_CONFIRMATIONS:
             return (
                 f"Para confirmar la activación del {session.plan_selected}, "
-                f"necesito su confirmación explícita.\n\n"
-                f"Responda ACEPTO o CONFIRMO para activar, "
-                f"o NO para cancelar."
+                f"responda *ACEPTO* o *CONFIRMO*.\n\n"
+                f"Para cancelar responda *NO*."
             )
 
-        # Pregunta o mensaje no reconocido durante la espera → LLM responde
-        return None  # → invocar LLM con contexto del contrato
+        # Mensaje no reconocido (pregunta durante espera) → LLM responde
+        return None
 
     # 4. Primer ingreso al flujo — mostrar resumen
     session.awaiting_contract_confirmation = True
-    logger.info("[CONTRACT] RESUMEN phone=%s plan=%s", session.phone_number, session.plan_selected)
     return build_summary_template(session)

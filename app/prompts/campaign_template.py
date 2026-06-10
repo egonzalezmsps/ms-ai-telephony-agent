@@ -61,7 +61,7 @@ def build_campaign_message(session: SessionState) -> str:
         bullets.append(f"• 💰 Cashback de ${cashback:.0f} MXN/mes")
 
     bullets.append("• 💾 Claro Drive con 20 GB de almacenamiento")
-    bullets.append("• 🎬 Amazon Prime incluido")
+    bullets.append("• 🎬 Claro Video incluido")
 
     footer = "\n¿Le gustaría activarlo?\n\nResponda STOP para no recibir más mensajes."
 

@@ -8,7 +8,7 @@ Combina las reglas generales + contexto del cliente + catálogo de planes.
 from app.prompts.general_rules import GENERAL_RULES
 from app.catalog.plans import (
     CATALOG, recommend_plan,
-    get_price, get_cashback, PROMO_VIGENCIA, get_legacy_gb,
+    get_price, get_cashback, get_legacy_gb,
 )
 
 
@@ -22,15 +22,18 @@ def _gb_str(plan, has_promo: bool, price: float, current_cost: float) -> str:
     return f"{plan.gb_base:g} GB"
 
 
-def _table_row(plan_name: str, price: float, gb: str, cashback: float) -> str:
+def _table_row(plan_name: str, price: float, gb: str, cashback: float, canal: str = "") -> str:
     cashback_str = f"${cashback:.2f}/mes" if cashback > 0 else "—"
-    return f"{plan_name} | ${price:.0f}/mes | {gb} | {cashback_str}"
+    row = f"{plan_name} | ${price:.0f}/mes | {gb} | {cashback_str}"
+    if canal:
+        row += f" | {canal}"
+    return row
 
 
 def build_catalog_block(session) -> str:
     """
     Genera el catálogo completo de planes como bloque de texto para inyectar
-    en el system prompt. Incluye todos los planes separados por activables e informativos.
+    en el system prompt. Una sola tabla con columna CANAL por cada plan.
     """
     modality = session.subscription_type
     has_promo = bool(session.has_promotion)
@@ -48,45 +51,47 @@ def build_catalog_block(session) -> str:
         f"explícitamente lo contrario."
     )
 
-    table_header = "Plan | Precio | GB | Cashback\n-----|--------|----|---------"
+    table_header_canal = "Plan | Precio | GB | Cashback | Canal\n-----|--------|----|---------|---------"
+    table_header_plain = "Plan | Precio | GB | Cashback\n-----|--------|----|---------"
 
-    # Separar planes elegibles e informativos
     activable = [p for p in CATALOG if get_price(p, modality) >= current_cost - 1.0]
     informative = [p for p in CATALOG if get_price(p, modality) < current_cost - 1.0]
 
-    activable_rows = []
+    lines = [header, ""]
+
+    lines.append(
+        f"PLANES ACTIVABLES EN ESTE CANAL — MODALIDAD {modality} (precio >= ${current_cost:.0f}/mes):\n"
+        f"Todos se activan directamente en esta conversación. NO requieren CAC.\n"
+        f"CAC solo aplica para cambio de modalidad ({alt_modality}) o planes más baratos."
+    )
+    lines.append(table_header_canal)
+
     for plan in activable:
         price = get_price(plan, modality)
         cashback = get_cashback(plan, modality)
         gb = _gb_str(plan, has_promo, price, current_cost)
-        activable_rows.append(_table_row(f"{plan.plan_id} {modality}", price, gb, cashback))
+        lines.append(_table_row(f"{plan.plan_id} {modality}", price, gb, cashback, "✅ ESTE CANAL"))
 
-    informative_rows = []
-    for plan in informative:
-        price = get_price(plan, modality)
-        cashback = get_cashback(plan, modality)
-        gb = _gb_str(plan, has_promo, price, current_cost)
-        informative_rows.append(_table_row(f"{plan.plan_id} {modality}", price, gb, cashback))
-
-    lines = [header, ""]
-
-    lines.append(f"PLANES ACTIVABLES EN ESTE CANAL (precio >= ${current_cost:.0f}/mes):")
-    lines.append(table_header)
-    lines.extend(activable_rows)
-
-    if informative_rows:
-        lines.append("")
+    if informative:
+        cheapest = min(informative, key=lambda p: get_price(p, modality))
+        cheapest_price = get_price(cheapest, modality)
+        cheapest_gb = _gb_str(cheapest, has_promo, cheapest_price, current_cost)
+        cheapest_cashback = get_cashback(cheapest, modality)
         lines.append(
-            f"PLANES INFORMATIVOS — activación vía Soporte 800 220 9518 o CAC:\n"
-            f"Mostrar SOLO si el cliente pregunta explícitamente por algo más barato."
+            f"\nPLAN INFORMATIVO MÁS ECONÓMICO "
+            f"(solo mostrar si el cliente pide explícitamente algo más barato):\n"
+            f"{cheapest.plan_id} {modality} | ${cheapest_price:.0f}/mes | {cheapest_gb} "
+            f"| {f'${cheapest_cashback:.2f}/mes' if cheapest_cashback > 0 else '—'} | ⛔ Soporte/CAC\n"
+            f"\n"
+            f"TODOS los demás planes más baratos que ${current_cost:.0f}/mes existen pero "
+            f"NO los menciones — si el cliente los pide, indica que puede consultar en "
+            f"Soporte 800 220 9518."
         )
-        lines.append(table_header)
-        lines.extend(informative_rows)
 
     if has_promo:
-        lines.append(f"\nNota: GB de promoción vigentes hasta {PROMO_VIGENCIA}.")
+        lines.append(f"\nNota: GB de promoción por 24 meses desde la activación.")
 
-    # Modalidad alternativa
+    # Modalidad alternativa (todos requieren CAC — sin columna Canal)
     alt_activable = [
         (plan, get_price(plan, alt_modality))
         for plan in CATALOG
@@ -101,7 +106,7 @@ def build_catalog_block(session) -> str:
         f"del cliente (${current_cost:.0f}/mes). Para planes más baratos en esta "
         f"modalidad, el cliente debe solicitarlos explícitamente."
     )
-    lines.append(table_header)
+    lines.append(table_header_plain)
     for plan, alt_price in alt_activable:
         alt_cashback = get_cashback(plan, alt_modality)
         alt_gb = _gb_str(plan, has_promo, alt_price, current_cost)
@@ -136,7 +141,9 @@ Plan: {target.plan_id} {session.subscription_type}
 Precio: ${price:.0f}/mes
 GB: {gb_label}
 Cashback: ${cashback:.2f}/mes
-{"Promoción activa: +50% GB durante 24 meses, vigente hasta " + session.fecha_vigencia if has_promo and target.gb_promo > target.gb_base else ""}
+{"[INSTRUCCIÓN INTERNA: Este plan NO tiene promoción de GB adicionales. NO menciones promoción, GB extra ni +50%. Solo menciona los GB base del plan.]"
+ if abs(price - session.current_cost) <= 1.0
+ else "Promoción activa: +50% GB durante 24 meses desde la activación."}
 
 Este es el plan base de tu recomendación.
 """
