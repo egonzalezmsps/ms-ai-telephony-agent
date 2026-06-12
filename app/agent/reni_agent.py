@@ -44,7 +44,6 @@ def clean_response(
       ANTES: "Entiendo... ¿Desea activar el plan?"
       DESPUÉS: "Entiendo..."
     """
-    text = _fix_app_mentions(text)
     text = _fix_tuteo(text)
     text = _strip_technical_cac_reasons(text)
     if session is not None:
@@ -124,40 +123,6 @@ def _strip_technical_cac_reasons(text: str) -> str:
         text = pattern.sub("", text)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
-APPS_CORRECTAS_LIBRE = [
-    "Facebook", "WhatsApp", "Messenger", "X", "Instagram", "Snapchat", "Uber"
-]
-APPS_INCORRECTAS = [
-    "TikTok", "YouTube", "Spotify", "Waze", "Netflix", "Google Maps", "Twitter"
-]
-_APPS_CORRECTAS_STR = (
-    "Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber"
-)
-
-
-def _fix_app_mentions(text: str) -> str:
-    """Corrige apps incorrectas y capacidad errónea de Claro Drive."""
-    text_lower = text.lower()
-    if any(app.lower() in text_lower for app in APPS_INCORRECTAS):
-        lines = text.split('\n')
-        result = []
-        inserted = False
-        for line in lines:
-            if any(app.lower() in line.lower() for app in APPS_INCORRECTAS):
-                # Línea con app incorrecta: insertar lista correcta solo la primera vez
-                if not inserted:
-                    result.append(_APPS_CORRECTAS_STR)
-                    inserted = True
-            elif line == _APPS_CORRECTAS_STR:
-                # Lista correcta ya presente: mantener solo si aún no se insertó
-                if not inserted:
-                    result.append(line)
-                    inserted = True
-            else:
-                result.append(line)
-        text = '\n'.join(result)
-    text = re.sub(r'Claro Drive con \d+ GB', 'Claro Drive con 20 GB', text, flags=re.IGNORECASE)
-    return text
 
 _TUTEO_MAP = {
     'tienes': 'tiene',
@@ -517,6 +482,7 @@ def run_turn(
         for block in msg.get("content", [])
         if isinstance(block, dict) and "toolUse" in block
     ]
+    print(f"[TOOLS] {_tools_invoked if _tools_invoked else 'ninguna'}")
     if "iniciar_contratacion" in _tools_invoked:
         contract_msg = handle_contract_turn(session, user_message)
         if contract_msg:
