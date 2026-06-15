@@ -19,26 +19,25 @@ TEMPLATE_HEADER = "Evolucione su plan con Telcel ahora sin plazos forzosos"
 _BODY_LIBRE = (
     "Hola, {{1}} 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
     "por eso le ofrecemos el *{{2}}* a *${{3}} MXN/mes*.\n"
-    "*{{4}}*\n"
+    "*{{4}}*\n\n"
     "• 📞 Minutos y SMS ilimitados (México, EUA, Cánada)\n"
     "• 📈 *{{5}}*\n"
     "• 📱 Apps Ilimitadas (WhatsApp, Facebook, Messenger, X, Instagram, Snapchat, Uber)\n"
     "• 💰 *Cashback de ${{6}} MXN/mes*\n"
     "• 🎬 *Claro Video*\n"
-    "• 💾 *Claro Drive con 20 GB de almacenamiento*\n"
-    "\n"
+    "• 💾 *Claro Drive con 20 GB de almacenamiento*\n\n"
     "¿Le gustaría activarlo?"
 )
 
 _BODY_ULTRA = (
     "Hola, {{1}} 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
     "por eso le ofrecemos el *{{2}}* a *${{3}} MXN/mes*.\n"
-    "*{{4}}*\n"
+    "*{{4}}*\n\n"
     "• 📞 Minutos y SMS ilimitados (México, EUA, Cánada)\n"
     "• 📈 *{{5}}*\n"
     "• ✉ *WhatsApp Ilimitado*\n"
     "• 🎬 *Claro Video*\n"
-    "• 💾 *Claro Drive con 20 GB de almacenamiento*\n"
+    "• 💾 *Claro Drive con 20 GB de almacenamiento*\n\n"
     "¿Le gustaría activarlo?"
 )
 
