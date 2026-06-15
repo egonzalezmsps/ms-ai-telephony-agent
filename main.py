@@ -15,8 +15,8 @@ from app.agent.reni_agent import run_turn
 from app.state.session import SessionState
 from app.state.persistence import init_db, load_session, save_session, delete_session
 from app.state.serializer import session_to_dict, dict_to_session
-from app.prompts.campaign_template import build_campaign_message
-from app.whatsapp.sender import send_whatsapp_message
+from app.prompts.campaign_template import build_campaign_message, build_template_params
+from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template
 from app.whatsapp.command_handler import handle_command
 from app.config.logging_config import setup_logging
 
@@ -75,6 +75,22 @@ class ChatResponse(BaseModel):
     stage: str
     plan_selected: Optional[str] = None
     turn: int = 1
+
+
+class CampaignRequest(BaseModel):
+    phone_number: str
+    first_name: Optional[str] = "Cliente"
+    full_name: Optional[str] = ""
+    current_plan_name: Optional[str] = "Telcel Plus 150"
+    current_cost: Optional[float] = 150.0
+    current_plan_gb: Optional[float] = None
+    current_plan_cashback: Optional[float] = None
+    subscription_type: Optional[str] = "Abierto"
+    has_promotion: Optional[bool] = True
+    usage_summary: Optional[str] = None
+    is_titular: Optional[bool] = True
+    template_name: Optional[str] = None   # defaults to TEMPLATE_NAME env var
+    language_code: Optional[str] = "es_MX"
 
 
 class SessionDeleteRequest(BaseModel):
@@ -152,6 +168,82 @@ def chat(
         plan_selected=session.plan_selected,
         turn=len(updated_history) // 2,
     )
+
+
+@app.post("/campaign")
+def campaign(
+    request: CampaignRequest,
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """Inicia una campaña enviando el template de WhatsApp al cliente y creando la sesión."""
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    session = SessionState(
+        first_name=request.first_name,
+        full_name=request.full_name,
+        phone_number=request.phone_number,
+        current_plan_name=request.current_plan_name,
+        current_cost=request.current_cost,
+        current_plan_gb=request.current_plan_gb,
+        current_plan_cashback=request.current_plan_cashback,
+        subscription_type=request.subscription_type,
+        has_promotion=request.has_promotion,
+        usage_summary=request.usage_summary,
+        is_titular=request.is_titular,
+    )
+
+    template_result = build_template_params(session)
+    campaign_msg = build_campaign_message(session)
+
+    if template_result is None:
+        # Sin plan elegible — texto plano como fallback
+        try:
+            send_whatsapp_message(request.phone_number, campaign_msg)
+        except Exception as e:
+            logger.error(f"CAMPAIGN | texto plano falló: {e}")
+        logger.info(f"CAMPAIGN | {request.phone_number} — sin plan elegible, texto plano enviado")
+        sent_template = False
+        template_name = None
+    else:
+        template_name = request.template_name or template_result["template_name"]
+        params_list = template_result["params"]
+        wa_id = request.phone_number
+        try:
+            wa_resp = send_whatsapp_template(
+                to=request.phone_number,
+                template_name=template_name,
+                params=params_list,
+                language_code=request.language_code,
+            )
+            # wa_id es el número en formato canónico de Meta — es la clave que llega en webhooks
+            wa_id = wa_resp.get("contacts", [{}])[0].get("wa_id", request.phone_number)
+            logger.info(f"CAMPAIGN | {request.phone_number} → wa_id={wa_id} — template '{template_name}' enviado")
+            sent_template = True
+        except Exception as e:
+            logger.warning(f"CAMPAIGN | template falló, usando texto plano: {e}")
+            try:
+                send_whatsapp_message(request.phone_number, campaign_msg)
+            except Exception as e2:
+                logger.error(f"CAMPAIGN | fallback texto también falló: {e2}")
+            sent_template = False
+
+    # Guardar sesión bajo wa_id para que el webhook la encuentre al recibir la respuesta
+    save_session(
+        phone_number=wa_id,
+        session_data=session_to_dict(session),
+        history=[{"role": "assistant", "content": campaign_msg}],
+    )
+
+    return {
+        "status": "sent",
+        "phone_number": request.phone_number,
+        "wa_id": wa_id,
+        "sent_template": sent_template,
+        "template_name": template_name if sent_template else None,
+        "params": template_result["params"] if template_result else None,
+    }
 
 
 @app.get("/webhook")
@@ -237,7 +329,15 @@ def whatsapp_webhook(payload: dict, background_tasks: BackgroundTasks):
             return {"status": "ok"}
 
         msg = messages[0]
-        if msg.get("type") != "text":
+        msg_type = msg.get("type")
+
+        # Soportar texto y pulsaciones de botones de template (quick_reply)
+        if msg_type == "text":
+            message_text = msg["text"]["body"]
+        elif msg_type == "button":
+            # El usuario pulsó un botón de template — tratar el texto del botón como mensaje
+            message_text = msg["button"]["text"]
+        else:
             return {"status": "ok"}
 
         # Deduplicación: ignorar reintentos de Meta con el mismo ID de mensaje
@@ -252,7 +352,6 @@ def whatsapp_webhook(payload: dict, background_tasks: BackgroundTasks):
                     _processed_msg_ids.clear()
 
         phone_number = msg["from"]
-        message_text = msg["text"]["body"]
 
         contacts = value.get("contacts", [])
         sender_name = contacts[0]["profile"]["name"] if contacts else "Cliente"
