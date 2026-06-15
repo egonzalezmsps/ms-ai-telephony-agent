@@ -190,6 +190,11 @@ PK compuesta: (campana_id, linea)
 | fecha_seleccion | datetime | nullable |
 | num_turnos | int | default 0 — turnos de conversación |
 | folio_contrato | str | nullable |
+| historial_conversacion | JSON | nullable — copia del `history` de `conversation_sessions` al cerrar la sesión |
+| session_data_snapshot | JSON | nullable — copia del `session_data` final (SessionState completo) |
+
+**Relación con `conversation_sessions` (tabla existente):**
+La tabla `conversation_sessions` ya existe y maneja las sesiones activas con TTL de 24 horas. Es ephemeral — no es un registro histórico. Para trazabilidad permanente, cuando una conversación termina (`stage = END`) o la sesión expira, `reni_agent.py` copia `history` y `session_data` a `CampanaCliente`. La interfaz puede leer sesiones activas directamente de `conversation_sessions` y sesiones cerradas de `CampanaCliente`.
 
 ---
 
@@ -258,20 +263,52 @@ Uploader de imagen con mensaje "Próximamente: análisis automático vía IA". E
 
 ```
 Fase mock (esta fase):
-  PostgreSQL ← interfaz Streamlit
-  plans.py   → system_prompt.py → Reni   (sin cambio)
+  PostgreSQL ← Streamlit (catálogo, campañas, clientes)
+  Streamlit  → POST /campaign (FastAPI) → WhatsApp → cliente
+  FastAPI    → conversation_sessions (sesión activa)
+  reni_agent → CampanaCliente (trazabilidad al cerrar sesión)
+  plans.py   → system_prompt.py → Reni   (sin cambio en esta fase)
 
 Fase producción (siguiente):
   PostgreSQL → (reemplaza plans.py) → system_prompt.py → Reni
 ```
 
-**Seed script (`db/seed.py`):**
+### Integración con la API existente (FastAPI)
+
+La interfaz Streamlit convive con el servidor FastAPI existente en la misma base de datos PostgreSQL.
+
+| Acción | Cómo |
+|---|---|
+| Leer/escribir catálogo y campañas | Streamlit → SQLAlchemy → PostgreSQL directamente (tablas nuevas) |
+| Enviar mensaje de campaña a un cliente | Streamlit → `POST /campaign` (FastAPI) vía HTTP con `x-api-key` |
+| Ver estado de sesión activa | Streamlit → SQLAlchemy → `conversation_sessions` (tabla existente) |
+| Ver historial de sesiones cerradas | Streamlit → SQLAlchemy → `CampanaCliente.historial_conversacion` |
+
+**Endpoints FastAPI existentes que Streamlit reutiliza:**
+
+| Endpoint | Cuándo lo usa Streamlit |
+|---|---|
+| `POST /campaign` | Al enviar la campaña a cada cliente (individual o en lote) |
+| `DELETE /session` | Para resetear una sesión desde la interfaz de seguimiento |
+| `GET /actuator/health` | Dashboard — verificar que el agente está activo |
+
+**Nuevo endpoint sugerido (fuera del scope del mock, pero anticipado):**
+- `POST /campaign/batch` — recibe lista de clientes y llama a `/campaign` por cada uno con manejo de errores. Por ahora Streamlit llama a `/campaign` en loop.
+
+### Seed script (`db/seed.py`)
 - Lee `CATALOG` y `FAMILY_BENEFITS` de `app/catalog/plans.py`
 - Lee `docs/Masivo_clientes.csv`
 - Inserta familias, planes, beneficios, servicios y clientes en la DB
 - Idempotente — se puede correr varias veces sin duplicar
 
-**Actualización desde Reni:** al finalizar cada turno en `reni_agent.py`, una llamada al CRUD actualiza `CampanaCliente`: incrementa `num_turnos`, actualiza `estado_interaccion`, registra `plan_seleccionado` y `folio_contrato` cuando aplica. Este ajuste es el único cambio al agente en esta fase.
+### Actualización desde Reni
+Al finalizar cada turno en `reni_agent.py`, una llamada al CRUD actualiza `CampanaCliente`:
+- Incrementa `num_turnos`
+- Actualiza `estado_interaccion` según `session.stage` y resultado del turno
+- Registra `plan_seleccionado` y `folio_contrato` cuando aplica
+- Cuando `stage = END`: copia `history` y `session_data` a `historial_conversacion` y `session_data_snapshot`
+
+Este ajuste es el único cambio al agente en esta fase.
 
 **Visión final:** cambios de campaña (nuevos planes, promociones, segmentos) se hacen desde la interfaz. Solo las reglas de negocio (safety nets, detecciones pre-LLM) permanecen en código bajo responsabilidad del equipo de desarrollo.
 
