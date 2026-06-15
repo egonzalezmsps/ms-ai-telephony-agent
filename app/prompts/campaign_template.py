@@ -34,7 +34,7 @@ _BODY_ULTRA = (
     "Hola, {{1}} 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
     "por eso le ofrecemos el *{{2}}* a *${{3}} MXN/mes*.\n"
     "*{{4}}*\n"
-    "• Minutos y SMS ilimitados (México, EUA, Cánada)\n"
+    "• 📞 Minutos y SMS ilimitados (México, EUA, Cánada)\n"
     "• 📈 *{{5}}*\n"
     "• ✉ *WhatsApp Ilimitado*\n"
     "• 🎬 *Claro Video*\n"
