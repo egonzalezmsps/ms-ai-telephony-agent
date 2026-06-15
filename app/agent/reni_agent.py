@@ -51,6 +51,11 @@ def clean_response(
         text = _filter_ineligible_plans(text, user_message, session)
         text = _filter_wrong_modality(text, session)
 
+    # Elimina paréntesis incompletos y su contenido hasta fin de texto
+    if text.count('(') > text.count(')'):
+        text = re.sub(r'\([^)]*$', '', text).strip()
+        text = re.sub(r'[\s,+\.]+$', '', text).strip()
+
     if is_rejection:
         rejection_phrases = ("entiendo", "comprendo", "respetamos su decisión")
         normalized = text.strip().lower()
@@ -494,6 +499,32 @@ def run_turn(
         if len(updated_history) > 20:
             updated_history = updated_history[-20:]
         return response_text, updated_history
+
+    # Interceptar cualquier tool que retorne texto rígido ("RESPONDE EXACTAMENTE...")
+    _rigid_text = None
+    for msg in agent.messages:
+        if _rigid_text:
+            break
+        for block in msg.get("content", []):
+            if isinstance(block, dict) and "toolResult" in block:
+                tool_content = block["toolResult"].get("content", [])
+                if tool_content:
+                    tool_text = tool_content[0].get("text", "")
+                    if tool_text and "RESPONDE EXACTAMENTE CON ESTE TEXTO" in tool_text:
+                        _rigid_text = tool_text.replace(
+                            "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n",
+                            ""
+                        )
+                        break
+
+    if _rigid_text:
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": _rigid_text},
+        ]
+        if len(updated_history) > 20:
+            updated_history = updated_history[-20:]
+        return _rigid_text, updated_history
 
     # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
     if not response_text or response_text.strip("() \n") == "":
