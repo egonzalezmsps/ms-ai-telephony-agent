@@ -184,6 +184,26 @@ TELCEL ULTRA ILIMITADO:
 - Velocidad se reduce a 128 kbps sin costo adicional
 - NO genera cargos por excedente
 
+QUÉ PASA AL AGOTAR LOS GB — SEGÚN MODALIDAD Y PLAN:
+
+Telcel Libre/Ultra CONTROLADO:
+- Al agotar GB → servicio de datos SUSPENDIDO hasta siguiente ciclo
+- Sin cargos por excedente
+- Sin reducción de velocidad
+- NO aplica PUJ
+
+Telcel Libre/Ultra ABIERTO (excepto Ultra Ilimitado):
+- Al agotar GB → cargos por excedente $0.000244 MXN/KB (~$256/GB)
+- El servicio continúa con cargos adicionales
+
+Telcel Ultra Ilimitado (cualquier modalidad):
+- Al alcanzar consumo razonable → velocidad reducida a 128 kbps (PUJ)
+- Sin cargos por excedente
+- El servicio NO se suspende
+
+NUNCA apliques PUJ a planes que no sean Ultra Ilimitado.
+NUNCA digas que Controlado genera cargos por excedente.
+
 PROMOCIÓN DE GB:
 - Duración: 24 meses desde la activación
 - Solo aplica cuando el precio del plan nuevo es mayor a la renta actual

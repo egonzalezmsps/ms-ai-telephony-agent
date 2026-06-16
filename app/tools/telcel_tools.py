@@ -777,7 +777,15 @@ def make_tools(state):
         - "por qué es mejor ese plan?"
 
         Args:
-            plan_id: nombre del plan a comparar. Si está vacío, usa el plan anclado.
+            plan_id: nombre exacto del plan que menciona el cliente.
+                     Extrae LITERALMENTE lo que dijo el cliente:
+                     - "ultra 9 controlado" → plan_id="Telcel Ultra 9 Controlado"
+                     - "libre 4" → plan_id="Telcel Libre 4"
+                     - "el vip" → plan_id="Telcel Libre VIP"
+                     Si el cliente no menciona un plan específico,
+                     deja plan_id="" para usar el plan anclado.
+                     NUNCA uses el plan anclado si el cliente mencionó
+                     un plan diferente explícitamente.
         """
         from app.catalog.plans import find_plan, get_price, get_cashback, get_legacy_gb
 
@@ -785,8 +793,14 @@ def make_tools(state):
         current_cost = state.current_cost
         has_promo = bool(state.has_promotion)
 
+        # Limpiar el plan_id — quitar modalidad si viene incluida
+        plan_id_clean = plan_id.replace(f" {modality}", "").strip()
+        # Agregar "Telcel" si no viene
+        if not plan_id_clean.lower().startswith("telcel"):
+            plan_id_clean = f"Telcel {plan_id_clean}"
+
         if plan_id:
-            plan = find_plan(plan_id)
+            plan = find_plan(plan_id_clean)
         else:
             plan = find_plan(state.plan_anclado.replace(f" {modality}", "").strip())
 
