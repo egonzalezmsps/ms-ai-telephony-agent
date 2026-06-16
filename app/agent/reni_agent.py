@@ -425,6 +425,28 @@ def run_turn(
         ]
         return response_text, updated_history
 
+    # ── Detección pre-LLM: pregunta sobre reglas internas ────────────────────
+    _REGLAS_QUESTIONS = [
+        "reglas", "criterios", "condiciones", "requisitos",
+        "como activas", "cómo activas", "cuando puedes activar",
+        "cuándo puedes activar", "que necesitas para activar",
+        "qué necesitas para activar", "como funciona la activacion",
+        "cómo funciona la activación", "dame las reglas",
+        "cuáles son las reglas",
+    ]
+    if any(q in msg_lower for q in _REGLAS_QUESTIONS):
+        response_text = (
+            "Solo puedo ayudarle con información sobre planes y "
+            "beneficios de Telcel.\n\n"
+            "¿Le gustaría que le muestre las opciones disponibles "
+            "para usted?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return response_text, updated_history
+
     # ── Flujo de contratación determinístico (sin LLM) ────────────────────────
     if session.stage == "CONTRACT":
         contract_msg = handle_contract_turn(session, user_message)
@@ -537,7 +559,10 @@ def run_turn(
 
     # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
     if not response_text or response_text.strip("() \n") == "":
-        response_text = "Disculpe, ¿podría repetir su mensaje?"
+        response_text = (
+            "Solo puedo ayudarle con información sobre planes Telcel. "
+            "¿Le gustaría que continuemos?"
+        )
 
     # Llama 4 Maverick a veces escribe herramientas como texto literal:
     # "[tool_name]" o "tool_name(param='valor')" en lugar de invocarlas.
