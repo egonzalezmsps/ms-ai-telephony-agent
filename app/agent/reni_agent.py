@@ -24,6 +24,15 @@ from app.contract.post_sale import build_post_sale_message
 
 DEBUG_WHATSAPP = os.getenv("DEBUG_WHATSAPP", "false").lower() == "true"
 
+
+def _apply_debug(response_text: str, tools_invoked: list = None,
+                  user_message: str = "") -> str:
+    if not DEBUG_WHATSAPP:
+        return response_text
+    tools_str = f"[TOOLS] {tools_invoked if tools_invoked else 'ninguna'}"
+    return f"{tools_str}\n{response_text}"
+
+
 # Silencia los WARNING internos de Strands (ej. "overriding stop reason due to toolUse").
 # El mensaje viene de strands.event_loop.streaming como logger.warning() y no debe
 # llegar al cliente. Mantenemos ERROR y CRITICAL para fallos reales.
@@ -401,7 +410,7 @@ def run_turn(
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": titular_msg},
         ]
-        return titular_msg, updated_history
+        return _apply_debug(titular_msg, [], user_message), updated_history
 
     # ── Detección pre-LLM: pregunta sobre criterio de promociones ────────────
     _PROMO_QUESTIONS = [
@@ -423,7 +432,7 @@ def run_turn(
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
-        return response_text, updated_history
+        return _apply_debug(response_text, [], user_message), updated_history
 
     # ── Detección pre-LLM: pregunta sobre reglas internas ────────────────────
     _REGLAS_QUESTIONS = [
@@ -445,7 +454,24 @@ def run_turn(
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
-        return response_text, updated_history
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    # ── Detección pre-LLM: rechazo corto ─────────────────────────────
+    _RECHAZOS_CORTOS = {"no", "no.", "no!", "nope", "nel", "nop", "paso"}
+    if user_message.strip().lower() in _RECHAZOS_CORTOS and session.stage == "PERSUASION":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
+        if manejar_fn:
+            result = manejar_fn(motivo="")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
 
     # ── Flujo de contratación determinístico (sin LLM) ────────────────────────
     if session.stage == "CONTRACT":
@@ -457,7 +483,7 @@ def run_turn(
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": contract_msg},
             ]
-            return contract_msg, updated_history
+            return _apply_debug(contract_msg, [], user_message), updated_history
 
         if session.stage == "POST_SALE":
             # OTP validado — generar mensaje de confirmación
@@ -467,7 +493,7 @@ def run_turn(
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": post_sale_text},
             ]
-            return post_sale_text, updated_history
+            return _apply_debug(post_sale_text, [], user_message), updated_history
 
         if session.stage == "PERSUASION":
             # Cliente canceló — caer al flujo LLM normal abajo
@@ -529,7 +555,7 @@ def run_turn(
         ]
         if len(updated_history) > 20:
             updated_history = updated_history[-20:]
-        return response_text, updated_history
+        return _apply_debug(response_text, _tools_invoked, user_message), updated_history
 
     # Interceptar cualquier tool que retorne texto rígido ("RESPONDE EXACTAMENTE...")
     _rigid_text = None
@@ -555,7 +581,7 @@ def run_turn(
         ]
         if len(updated_history) > 20:
             updated_history = updated_history[-20:]
-        return _rigid_text, updated_history
+        return _apply_debug(_rigid_text, _tools_invoked, user_message), updated_history
 
     # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
     if not response_text or response_text.strip("() \n") == "":
@@ -597,9 +623,6 @@ def run_turn(
     response_text = clean_response(response_text, is_rejection=is_rejection, session=session, user_message=user_message)
     response_text = _strip_incorrect_cac(response_text, user_message, session)
 
-    if DEBUG_WHATSAPP:
-        response_text = f"[TOOLS] {_tools_invoked if _tools_invoked else 'ninguna'}\n" + response_text
-
     updated_history = history + [
         {"role": "user", "content": user_message},
         {"role": "assistant", "content": response_text},
@@ -609,4 +632,4 @@ def run_turn(
     if len(updated_history) > 20:
         updated_history = updated_history[-20:]
 
-    return response_text, updated_history
+    return _apply_debug(response_text, _tools_invoked, user_message), updated_history
