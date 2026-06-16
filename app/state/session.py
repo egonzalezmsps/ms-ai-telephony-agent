@@ -39,6 +39,8 @@ class SessionState:
 
     # ── Contratación ─────────────────────────────────────────────
     plan_selected: Optional[str] = None     # plan que el cliente aceptó activar
+    plan_anclado: str = ""                  # plan contextual activo para preguntas de cierre
+    rejection_count: int = 0               # contador de rechazos para manejo de objeciones
     stage: str = "PERSUASION"               # PERSUASION | CONTRACT | POST_SALE | END
 
     # ── Titular ───────────────────────────────────────────────────

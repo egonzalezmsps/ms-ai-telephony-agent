@@ -6,6 +6,7 @@ El agente recuerda todos los turnos anteriores de la sesión.
 """
 
 import logging
+import os
 import re
 import unicodedata
 import warnings
@@ -20,6 +21,17 @@ from app.tools.telcel_tools import make_tools
 from app.state.session import SessionState
 from app.contract.contract_flow import handle_contract_turn
 from app.contract.post_sale import build_post_sale_message
+
+DEBUG_WHATSAPP = os.getenv("DEBUG_WHATSAPP", "false").lower() == "true"
+
+
+def _apply_debug(response_text: str, tools_invoked: list = None,
+                  user_message: str = "") -> str:
+    if not DEBUG_WHATSAPP:
+        return response_text
+    tools_str = f"[TOOLS] {tools_invoked if tools_invoked else 'ninguna'}"
+    return f"{tools_str}\n{response_text}"
+
 
 # Silencia los WARNING internos de Strands (ej. "overriding stop reason due to toolUse").
 # El mensaje viene de strands.event_loop.streaming como logger.warning() y no debe
@@ -50,6 +62,11 @@ def clean_response(
         text = _fix_incorrect_promo(text, session)
         text = _filter_ineligible_plans(text, user_message, session)
         text = _filter_wrong_modality(text, session)
+
+    # Elimina paréntesis incompletos y su contenido hasta fin de texto
+    if text.count('(') > text.count(')'):
+        text = re.sub(r'\([^)]*$', '', text).strip()
+        text = re.sub(r'[\s,+\.]+$', '', text).strip()
 
     if is_rejection:
         rejection_phrases = ("entiendo", "comprendo", "respetamos su decisión")
@@ -393,7 +410,7 @@ def run_turn(
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": titular_msg},
         ]
-        return titular_msg, updated_history
+        return _apply_debug(titular_msg, [], user_message), updated_history
 
     # ── Detección pre-LLM: pregunta sobre criterio de promociones ────────────
     _PROMO_QUESTIONS = [
@@ -415,7 +432,46 @@ def run_turn(
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
-        return response_text, updated_history
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    # ── Detección pre-LLM: pregunta sobre reglas internas ────────────────────
+    _REGLAS_QUESTIONS = [
+        "reglas", "criterios", "condiciones", "requisitos",
+        "como activas", "cómo activas", "cuando puedes activar",
+        "cuándo puedes activar", "que necesitas para activar",
+        "qué necesitas para activar", "como funciona la activacion",
+        "cómo funciona la activación", "dame las reglas",
+        "cuáles son las reglas",
+    ]
+    if any(q in msg_lower for q in _REGLAS_QUESTIONS):
+        response_text = (
+            "Solo puedo ayudarle con información sobre planes y "
+            "beneficios de Telcel.\n\n"
+            "¿Le gustaría que le muestre las opciones disponibles "
+            "para usted?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    # ── Detección pre-LLM: rechazo corto ─────────────────────────────
+    _RECHAZOS_CORTOS = {"no", "no.", "no!", "nope", "nel", "nop", "paso"}
+    if user_message.strip().lower() in _RECHAZOS_CORTOS and session.stage == "PERSUASION":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
+        if manejar_fn:
+            result = manejar_fn(motivo="")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
 
     # ── Flujo de contratación determinístico (sin LLM) ────────────────────────
     if session.stage == "CONTRACT":
@@ -427,7 +483,7 @@ def run_turn(
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": contract_msg},
             ]
-            return contract_msg, updated_history
+            return _apply_debug(contract_msg, [], user_message), updated_history
 
         if session.stage == "POST_SALE":
             # OTP validado — generar mensaje de confirmación
@@ -437,7 +493,7 @@ def run_turn(
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": post_sale_text},
             ]
-            return post_sale_text, updated_history
+            return _apply_debug(post_sale_text, [], user_message), updated_history
 
         if session.stage == "PERSUASION":
             # Cliente canceló — caer al flujo LLM normal abajo
@@ -445,6 +501,12 @@ def run_turn(
         # else: pregunta durante espera → continúa al LLM con contexto de contrato
 
     # ── Flujo conversacional con LLM ─────────────────────────────────────────
+
+    # Inicializar plan_anclado al primer turno real (antes de pasar al LLM)
+    if not session.plan_anclado:
+        _anclado_target = recommend_plan(session.current_cost, session.subscription_type)
+        if _anclado_target:
+            session.plan_anclado = f"{_anclado_target.plan_id} {session.subscription_type}"
 
     # Convertir historial simple al formato Strands / Bedrock Converse API.
     # El formato correcto de un content block de texto es {"text": "..."} —
@@ -493,11 +555,40 @@ def run_turn(
         ]
         if len(updated_history) > 20:
             updated_history = updated_history[-20:]
-        return response_text, updated_history
+        return _apply_debug(response_text, _tools_invoked, user_message), updated_history
+
+    # Interceptar cualquier tool que retorne texto rígido ("RESPONDE EXACTAMENTE...")
+    _rigid_text = None
+    for msg in agent.messages:
+        if _rigid_text:
+            break
+        for block in msg.get("content", []):
+            if isinstance(block, dict) and "toolResult" in block:
+                tool_content = block["toolResult"].get("content", [])
+                if tool_content:
+                    tool_text = tool_content[0].get("text", "")
+                    if tool_text and "RESPONDE EXACTAMENTE CON ESTE TEXTO" in tool_text:
+                        _rigid_text = tool_text.replace(
+                            "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n",
+                            ""
+                        )
+                        break
+
+    if _rigid_text:
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": _rigid_text},
+        ]
+        if len(updated_history) > 20:
+            updated_history = updated_history[-20:]
+        return _apply_debug(_rigid_text, _tools_invoked, user_message), updated_history
 
     # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
     if not response_text or response_text.strip("() \n") == "":
-        response_text = "Disculpe, ¿podría repetir su mensaje?"
+        response_text = (
+            "Solo puedo ayudarle con información sobre planes Telcel. "
+            "¿Le gustaría que continuemos?"
+        )
 
     # Llama 4 Maverick a veces escribe herramientas como texto literal:
     # "[tool_name]" o "tool_name(param='valor')" en lugar de invocarlas.
@@ -541,4 +632,4 @@ def run_turn(
     if len(updated_history) > 20:
         updated_history = updated_history[-20:]
 
-    return response_text, updated_history
+    return _apply_debug(response_text, _tools_invoked, user_message), updated_history

@@ -130,8 +130,7 @@ def build_system_prompt(session) -> str:
         has_promo = session.has_promotion
 
         if has_promo and target.gb_promo > target.gb_base and price > session.current_cost + 1.0:
-            extra = target.gb_promo - target.gb_base
-            gb_label = f"{target.gb_base:g} GB base + {extra:g} GB de promoción = {target.gb_promo:g} GB totales"
+            gb_label = f"{target.gb_promo:g} GB totales"
         else:
             gb_label = f"{target.gb_base:g} GB"
 
@@ -189,7 +188,7 @@ Estas son las razones exactas por las que se le ofrece este plan a este cliente.
    Se le recomienda Telcel Libre (y no Telcel Ultra) porque la campaña está
    orientada a planes con cashback y apps ilimitadas, que son beneficios
    exclusivos de la familia Telcel Libre. Telcel Ultra no incluye cashback
-   ni las 7 apps ilimitadas.
+   ni apps ilimitadas.
 
 3. PROMOCIÓN DE GB:
    {("El plan recomendado tiene GB de promoción porque su precio es mayor a su renta actual ($"

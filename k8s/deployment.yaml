@@ -113,6 +113,11 @@ spec:
               value: "30"
             - name: API_KEY
               value: "zvDQevdVVrijrczOGUc4fRJ0ZC6h-yHfF7ZZgsK8hZY"
+            # Templates
+            - name: TEMPLATE_ULTRA
+              value: "telcel_migration_campaing_1_ultra"
+            - name: TEMPLATE_LIBRE
+              value: "telcel_migration_campaing_1_libre"
           livenessProbe:
             httpGet:
               path: /actuator/health
