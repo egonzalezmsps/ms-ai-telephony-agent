@@ -6,6 +6,7 @@ El agente recuerda todos los turnos anteriores de la sesión.
 """
 
 import logging
+import os
 import re
 import unicodedata
 import warnings
@@ -20,6 +21,8 @@ from app.tools.telcel_tools import make_tools
 from app.state.session import SessionState
 from app.contract.contract_flow import handle_contract_turn
 from app.contract.post_sale import build_post_sale_message
+
+DEBUG_WHATSAPP = os.getenv("DEBUG_WHATSAPP", "false").lower() == "true"
 
 # Silencia los WARNING internos de Strands (ej. "overriding stop reason due to toolUse").
 # El mensaje viene de strands.event_loop.streaming como logger.warning() y no debe
@@ -451,6 +454,12 @@ def run_turn(
 
     # ── Flujo conversacional con LLM ─────────────────────────────────────────
 
+    # Inicializar plan_anclado al primer turno real (antes de pasar al LLM)
+    if not session.plan_anclado:
+        _anclado_target = recommend_plan(session.current_cost, session.subscription_type)
+        if _anclado_target:
+            session.plan_anclado = f"{_anclado_target.plan_id} {session.subscription_type}"
+
     # Convertir historial simple al formato Strands / Bedrock Converse API.
     # El formato correcto de un content block de texto es {"text": "..."} —
     # NO {"type": "text", "text": "..."}.
@@ -562,6 +571,9 @@ def run_turn(
     is_rejection = user_message.strip().lower() in REJECTION_WORDS
     response_text = clean_response(response_text, is_rejection=is_rejection, session=session, user_message=user_message)
     response_text = _strip_incorrect_cac(response_text, user_message, session)
+
+    if DEBUG_WHATSAPP:
+        response_text = f"[TOOLS] {_tools_invoked if _tools_invoked else 'ninguna'}\n" + response_text
 
     updated_history = history + [
         {"role": "user", "content": user_message},

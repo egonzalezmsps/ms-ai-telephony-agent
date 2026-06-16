@@ -108,11 +108,7 @@ def make_tools(state):
         Args:
             tema: "plan" | "promocion" | "modalidad" | "criterio"
         """
-        target = recommend_plan(state.current_cost, state.subscription_type)
-        plan_name = (
-            f"{target.plan_id} {state.subscription_type}"
-            if target else "el plan recomendado"
-        )
+        plan_name = state.plan_anclado or "el plan recomendado"
 
         RESPUESTAS = {
             "plan": (
@@ -238,8 +234,7 @@ def make_tools(state):
             return json.dumps(data, ensure_ascii=False)
 
         def no_plans_found() -> str:
-            target = recommend_plan(current_cost, modality)
-            plan_name = f"{target.plan_id} {modality}" if target else "el plan recomendado"
+            plan_name = state.plan_anclado or "el plan recomendado"
             return (
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                 f"No encontré planes que cumplan ese criterio en modalidad {modality}.\n"
@@ -296,20 +291,26 @@ def make_tools(state):
             # más cercanos a la renta actual primero (descendente por precio)
             planes_mostrar = sorted(cheaper, key=lambda p: get_price(p, modality), reverse=True)[:3]
 
-            # Cierre contextual comparando el plan más barato mostrado con el recomendado
-            target = recommend_plan(current_cost, modality)
-            if target:
-                plan_rec = f"{target.plan_id} {modality}"
-                rec_price = get_price(target, modality)
+            # Cierre contextual usando el plan anclado
+            plan_rec = state.plan_anclado
+            if plan_rec:
+                anclado_id = plan_rec.removesuffix(f" {modality}").strip()
+                anclado_obj = find_plan(anclado_id)
+            else:
+                anclado_obj = recommend_plan(current_cost, modality)
+                plan_rec = f"{anclado_obj.plan_id} {modality}" if anclado_obj else ""
+
+            if anclado_obj:
+                rec_price = get_price(anclado_obj, modality)
                 rec_gb = (
-                    target.gb_promo
-                    if (has_promo and target.gb_promo > target.gb_base and rec_price > current_cost + 1.0)
-                    else target.gb_base
+                    anclado_obj.gb_promo
+                    if (has_promo and anclado_obj.gb_promo > anclado_obj.gb_base and rec_price > current_cost + 1.0)
+                    else anclado_obj.gb_base
                 )
                 diferencia_precio = rec_price - current_cost
                 current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
 
-                if current_gb:
+                if current_gb and not anclado_obj.is_unlimited:
                     diferencia_vs_actual = rec_gb - current_gb
                     if abs(rec_price - current_cost) <= 1.0:
                         cierre = (
@@ -328,7 +329,6 @@ def make_tools(state):
                 else:
                     cierre = f"¿Le gustaría activar el *{plan_rec}*?"
             else:
-                plan_rec = ""
                 cierre = "¿Le gustaría explorar alguna de estas opciones?"
 
             if len(planes_mostrar) == 1:
@@ -369,16 +369,14 @@ def make_tools(state):
                 price = get_price(plan, modality)
                 cashback = get_cashback(plan, modality)
                 cb_str = f" · ${cashback:.2f}/mes de cashback" if cashback > 0 else ""
-                target = recommend_plan(current_cost, modality)
-                plan_rec = f"{target.plan_id} {modality}" if target else f"{plan.plan_id} {modality}"
+                plan_rec = state.plan_anclado or f"{plan.plan_id} {modality}"
                 return (
                     f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                     f"El plan más premium disponible es el *{plan.plan_id} {modality}* "
                     f"a ${price:.0f}/mes con {gb_label(plan)}{cb_str}.\n\n"
                     f"¿Le gustaría activar el *{plan_rec}*?"
                 )
-            target = recommend_plan(current_cost, modality)
-            plan_rec = f"{target.plan_id} {modality}" if target else ""
+            plan_rec = state.plan_anclado
             lista = ""
             for p in planes[:5]:
                 price = get_price(p, modality)
@@ -397,6 +395,7 @@ def make_tools(state):
             if not planes:
                 return no_plans_found()
             if len(planes) == 1:
+                state.plan_anclado = f"{planes[0].plan_id} {modality}"
                 return format_one(planes[0])
             lista = ""
             for p in planes:
@@ -407,7 +406,6 @@ def make_tools(state):
                 key=lambda p: get_price(p, modality),
                 default=planes[0],
             )
-            ultra_rec = f"{ultra_cercano.plan_id} {modality}"
             ultra_price = get_price(ultra_cercano, modality)
             ultra_gb = ultra_cercano.gb_base
             return (
@@ -415,9 +413,9 @@ def make_tools(state):
                 f"Si busca más GB, los planes *Telcel Ultra {modality}* "
                 f"son una excelente opción:\n\n"
                 f"{lista}\n"
-                f"El más cercano a su renta actual es el *{ultra_rec}* "
+                f"El más cercano a su renta actual es el *{ultra_cercano.plan_id} {modality}* "
                 f"a ${ultra_price:.0f}/mes con {ultra_gb:g} GB.\n\n"
-                f"¿Le gustaría activar el *{ultra_rec}*?"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
             )
 
         elif tipo == "libre":
@@ -425,9 +423,9 @@ def make_tools(state):
             if not planes:
                 return no_plans_found()
             if len(planes) == 1:
+                state.plan_anclado = f"{planes[0].plan_id} {modality}"
                 return format_one(planes[0])
-            target = recommend_plan(current_cost, modality)
-            plan_rec = f"{target.plan_id} {modality}" if target else ""
+            plan_rec = state.plan_anclado
             lista = ""
             for p in planes:
                 price = get_price(p, modality)
@@ -442,33 +440,66 @@ def make_tools(state):
 
         elif tipo == "especifico":
             plan = find_plan(criterio)
-            if plan:
-                price = get_price(plan, modality)
-                result = format_one(plan)
-                if price < current_cost - 1.0:
-                    result += f"\n\n⚠️ Para activarlo: Soporte 800 220 9518 o CAC."
-                return result
-            price_match = re.search(r'\$?(\d{3,5})', criterio)
-            if price_match:
-                target_price = float(price_match.group(1))
-                candidates = sorted(eligible, key=lambda p: abs(get_price(p, modality) - target_price))
-                if candidates:
-                    return format_one(candidates[0])
-            return no_plans_found()
+            if not plan:
+                price_match = re.search(r'\$?(\d{3,5})', criterio)
+                if price_match:
+                    target_price = float(price_match.group(1))
+                    candidates = sorted(eligible, key=lambda p: abs(get_price(p, modality) - target_price))
+                    plan = candidates[0] if candidates else None
+            if not plan:
+                return no_plans_found()
+            price = get_price(plan, modality)
+            cashback = get_cashback(plan, modality)
+            cashback_str = f"💰 Cashback ${cashback:.2f}/mes\n" if cashback > 0 else ""
+            apps_str = (
+                "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber\n"
+                if plan.family == "Telcel Libre" else
+                "📱 WhatsApp ilimitado\n"
+            )
+            if price >= current_cost - 1.0:
+                state.plan_anclado = f"{plan.plan_id} {modality}"
+                return (
+                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"*{plan.plan_id} {modality}* a ${price:.0f}/mes incluye:\n\n"
+                    f"📶 {gb_label(plan)}\n"
+                    f"{cashback_str}"
+                    f"{apps_str}"
+                    f"🎬 Claro Video\n"
+                    f"💾 Claro Drive 20 GB\n\n"
+                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                )
+            else:
+                return (
+                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"*{plan.plan_id} {modality}* a ${price:.0f}/mes incluye:\n\n"
+                    f"📶 {gb_label(plan)}\n"
+                    f"{cashback_str}"
+                    f"{apps_str}"
+                    f"🎬 Claro Video\n"
+                    f"💾 Claro Drive 20 GB\n\n"
+                    f"Para activarlo, comuníquese con Soporte al 800 220 9518 "
+                    f"o acuda a un Centro de Atención a Clientes.\n\n"
+                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                )
 
         elif tipo == "mismo_precio":
             planes = [p for p in eligible if abs(get_price(p, modality) - current_cost) <= 1.0]
             if not planes:
-                target = recommend_plan(current_cost, modality)
-                if target:
-                    plan_rec = f"{target.plan_id} {modality}"
-                    rec_price = get_price(target, modality)
+                plan_rec = state.plan_anclado
+                if plan_rec:
+                    anclado_id = plan_rec.removesuffix(f" {modality}").strip()
+                    anclado_obj = find_plan(anclado_id)
+                else:
+                    anclado_obj = recommend_plan(current_cost, modality)
+                    plan_rec = f"{anclado_obj.plan_id} {modality}" if anclado_obj else None
+                if plan_rec and anclado_obj:
+                    rec_price = get_price(anclado_obj, modality)
                     rec_gb = (
-                        target.gb_promo
-                        if (has_promo and target.gb_promo > target.gb_base and rec_price > current_cost + 1.0)
-                        else target.gb_base
+                        anclado_obj.gb_promo
+                        if (has_promo and anclado_obj.gb_promo > anclado_obj.gb_base and rec_price > current_cost + 1.0)
+                        else anclado_obj.gb_base
                     )
-                    rec_cashback = get_cashback(target, modality)
+                    rec_cashback = get_cashback(anclado_obj, modality)
                     return (
                         f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                         f"En modalidad {modality} no contamos con un plan "
@@ -479,13 +510,13 @@ def make_tools(state):
                     )
                 return no_plans_found()
             if len(planes) == 1:
+                state.plan_anclado = f"{planes[0].plan_id} {modality}"
                 return format_one(planes[0])
             return format_many(planes)
 
         else:  # "general"
             if eligible:
-                target = recommend_plan(current_cost, modality)
-                plan_rec = f"{target.plan_id} {modality}" if target else ""
+                plan_rec = state.plan_anclado
                 lista_planes = ""
                 for p in eligible:
                     price = get_price(p, modality)
@@ -522,7 +553,14 @@ def make_tools(state):
         current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
         gb_actual_str = f"{current_gb:g} GB" if current_gb else "datos limitados"
 
-        target = recommend_plan(current_cost, modality)
+        if state.plan_anclado:
+            anclado_id = state.plan_anclado.removesuffix(f" {modality}").strip()
+            target = find_plan(anclado_id) or recommend_plan(current_cost, modality)
+            plan_rec = state.plan_anclado
+        else:
+            target = recommend_plan(current_cost, modality)
+            plan_rec = f"{target.plan_id} {modality}" if target else None
+
         if not target:
             return (
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
@@ -549,9 +587,99 @@ def make_tools(state):
             "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
             f"Su plan actual es *{state.current_plan_name} {modality}* "
             f"a ${current_cost:.0f}/mes con {gb_actual_str}.\n\n"
-            f"Le recomendamos el *{target.plan_id} {modality}* {precio_contexto} "
+            f"Le recomendamos el *{plan_rec}* {precio_contexto} "
             f"con {gb_nuevo_str}{cashback_line}.\n\n"
-            f"¿Le gustaría activar el *{target.plan_id} {modality}*?"
+            f"¿Le gustaría activar el *{plan_rec}*?"
         )
 
-    return [iniciar_contratacion, responder_por_que, presentar_planes, informar_plan_actual]
+    @tool
+    def manejar_objecion(motivo: str = "") -> str:
+        """
+        Úsala cuando el cliente rechaza el plan o expresa desinterés.
+        Úsala para:
+        - "no me interesa"
+        - "no lo necesito"
+        - "no quiero"
+        - "no gracias"
+        - "no por ahora"
+        - "estoy bien con mi plan"
+        - Cualquier rechazo explícito del plan ofrecido
+
+        NO la uses cuando el cliente dice "no" seguido de una
+        preferencia ("no, mejor el Libre") — eso es una redirección,
+        no un rechazo.
+
+        Args:
+            motivo: SOLO si el cliente menciona una razón específica
+                    de servicio o problema (mal servicio, cobertura,
+                    precio muy alto, tiene contrato con otra empresa).
+
+                    Dejar motivo="" cuando el cliente dice:
+                    - "no me interesa"
+                    - "no lo necesito"
+                    - "no quiero"
+                    - "no gracias"
+                    - Cualquier rechazo sin razón específica de servicio
+
+                    Pasar motivo con texto cuando el cliente dice:
+                    - "su servicio es malo" → motivo="mal servicio"
+                    - "no tengo cobertura" → motivo="cobertura"
+                    - "es muy caro" → motivo="precio"
+                    - "ya tengo contrato con AT&T" → motivo="otro operador"
+        """
+        current_count = state.rejection_count
+        state.rejection_count += 1
+
+        if current_count == 0:
+            if motivo:
+                _MOTIVOS_SERVICIO = {"servicio", "cobertura", "señal", "lento",
+                                     "malo", "mal", "falla", "problema"}
+                motivo_lower = motivo.lower()
+                es_servicio = any(w in motivo_lower for w in _MOTIVOS_SERVICIO)
+                soporte = (
+                    "\nPara reportar el problema puede comunicarse con "
+                    "Soporte al 800 220 9518.\n\n"
+                    if es_servicio else "\n\n"
+                )
+                return (
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"Entendemos, {state.first_name}. Lamentamos escuchar eso.{soporte}"
+                    "Cuando guste revisar sus opciones, aquí estaremos para ayudarle."
+                )
+            return (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"Entendemos, {state.first_name}. No hay ninguna obligación.\n\n"
+                "¿Hay algo en particular que le genera duda sobre el plan?"
+            )
+
+        elif current_count == 1:
+            if motivo:
+                _MOTIVOS_SERVICIO = {"servicio", "cobertura", "señal",
+                                     "lento", "malo", "mal", "falla", "problema"}
+                es_servicio = any(w in motivo.lower() for w in _MOTIVOS_SERVICIO)
+                soporte = (
+                    "\nPara reportar el problema puede comunicarse con "
+                    "Soporte al 800 220 9518.\n\n"
+                    if es_servicio else "\n\n"
+                )
+                return (
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"Entendemos, {state.first_name}. Lamentamos escuchar eso.{soporte}"
+                    "Cuando guste revisar sus opciones, aquí estaremos para ayudarle."
+                )
+            return (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"Con gusto, {state.first_name}. Cuando guste revisar "
+                f"sus opciones, aquí estaremos para ayudarle."
+            )
+
+        else:
+            return (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"Entendido, {state.first_name}. "
+                f"Si en algún momento desea explorar opciones, "
+                f"puede comunicarse con nosotros o acudir a un CAC."
+            )
+
+    return [iniciar_contratacion, responder_por_que, presentar_planes,
+            informar_plan_actual, manejar_objecion]
