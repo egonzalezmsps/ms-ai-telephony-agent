@@ -6,6 +6,7 @@ El agente recuerda todos los turnos anteriores de la sesión.
 """
 
 import logging
+import os
 import re
 import unicodedata
 import warnings
@@ -20,6 +21,8 @@ from app.tools.telcel_tools import make_tools
 from app.state.session import SessionState
 from app.contract.contract_flow import handle_contract_turn
 from app.contract.post_sale import build_post_sale_message
+
+DEBUG_WHATSAPP = os.getenv("DEBUG_WHATSAPP", "false").lower() == "true"
 
 # Silencia los WARNING internos de Strands (ej. "overriding stop reason due to toolUse").
 # El mensaje viene de strands.event_loop.streaming como logger.warning() y no debe
@@ -50,6 +53,11 @@ def clean_response(
         text = _fix_incorrect_promo(text, session)
         text = _filter_ineligible_plans(text, user_message, session)
         text = _filter_wrong_modality(text, session)
+
+    # Elimina paréntesis incompletos y su contenido hasta fin de texto
+    if text.count('(') > text.count(')'):
+        text = re.sub(r'\([^)]*$', '', text).strip()
+        text = re.sub(r'[\s,+\.]+$', '', text).strip()
 
     if is_rejection:
         rejection_phrases = ("entiendo", "comprendo", "respetamos su decisión")
@@ -446,6 +454,12 @@ def run_turn(
 
     # ── Flujo conversacional con LLM ─────────────────────────────────────────
 
+    # Inicializar plan_anclado al primer turno real (antes de pasar al LLM)
+    if not session.plan_anclado:
+        _anclado_target = recommend_plan(session.current_cost, session.subscription_type)
+        if _anclado_target:
+            session.plan_anclado = f"{_anclado_target.plan_id} {session.subscription_type}"
+
     # Convertir historial simple al formato Strands / Bedrock Converse API.
     # El formato correcto de un content block de texto es {"text": "..."} —
     # NO {"type": "text", "text": "..."}.
@@ -495,6 +509,32 @@ def run_turn(
             updated_history = updated_history[-20:]
         return response_text, updated_history
 
+    # Interceptar cualquier tool que retorne texto rígido ("RESPONDE EXACTAMENTE...")
+    _rigid_text = None
+    for msg in agent.messages:
+        if _rigid_text:
+            break
+        for block in msg.get("content", []):
+            if isinstance(block, dict) and "toolResult" in block:
+                tool_content = block["toolResult"].get("content", [])
+                if tool_content:
+                    tool_text = tool_content[0].get("text", "")
+                    if tool_text and "RESPONDE EXACTAMENTE CON ESTE TEXTO" in tool_text:
+                        _rigid_text = tool_text.replace(
+                            "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n",
+                            ""
+                        )
+                        break
+
+    if _rigid_text:
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": _rigid_text},
+        ]
+        if len(updated_history) > 20:
+            updated_history = updated_history[-20:]
+        return _rigid_text, updated_history
+
     # ── Fallback: respuesta vacía o solo caracteres especiales ("()") ─────────
     if not response_text or response_text.strip("() \n") == "":
         response_text = "Disculpe, ¿podría repetir su mensaje?"
@@ -531,6 +571,9 @@ def run_turn(
     is_rejection = user_message.strip().lower() in REJECTION_WORDS
     response_text = clean_response(response_text, is_rejection=is_rejection, session=session, user_message=user_message)
     response_text = _strip_incorrect_cac(response_text, user_message, session)
+
+    if DEBUG_WHATSAPP:
+        response_text = f"[TOOLS] {_tools_invoked if _tools_invoked else 'ninguna'}\n" + response_text
 
     updated_history = history + [
         {"role": "user", "content": user_message},
