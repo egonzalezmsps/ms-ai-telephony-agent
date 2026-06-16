@@ -112,24 +112,32 @@ def make_tools(state):
 
         RESPUESTAS = {
             "plan": (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                 f"Le recomendamos el {plan_name} porque ofrece más beneficios "
-                f"para su perfil: más GB, cashback mensual y apps ilimitadas incluidas."
+                f"para su perfil: más GB, cashback mensual y apps ilimitadas incluidas.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
             ),
             "promocion": (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                 f"Las promociones son beneficios que Telcel activa en planes "
                 f"seleccionados para darles más valor. "
-                f"El {plan_name} sí incluye esta promoción."
+                f"El {plan_name} sí incluye esta promoción.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
             ),
             "modalidad": (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                 f"Le ofrecemos planes en modalidad {state.subscription_type} "
                 f"porque es la misma que tiene en su plan actual. "
                 f"Para cambiar de modalidad puede acudir a un CAC "
-                f"o llamar al 800 220 9518."
+                f"o llamar al 800 220 9518.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
             ),
             "criterio": (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                 f"Las promociones son beneficios que Telcel activa en planes "
                 f"seleccionados para darles más valor. "
-                f"El {plan_name} sí incluye esta promoción."
+                f"El {plan_name} sí incluye esta promoción.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
             ),
         }
 
@@ -155,9 +163,38 @@ def make_tools(state):
             tipo: intención del cliente — elige UNO de:
                 "mas_barato"  — quiere un plan más económico que el actual
                 "mas_caro"    — quiere el plan más premium/caro disponible
-                "ultra"       — pregunta por planes de la familia Telcel Ultra
+                "ultra"       — pregunta por planes de la familia Telcel Ultra:
+                                "quiero uno ultra", "muéstrame los ultra",
+                                "tienes ultras?", "qué hay en ultra?",
+                                "planes ultra", "ultra disponibles"
+
+                                Úsalo también cuando el cliente mencione "ultra"
+                                sin más contexto:
+                                "quiero el ultra"
+                                "dame uno ultra"
+                                "el ultra"
+                                "quiero ultra"
+                                "un plan ultra"
+                                → tipo="ultra", criterio="general"
+
+                                NUNCA uses tipo="general" cuando el cliente
+                                menciona "ultra" — siempre usa tipo="ultra".
                 "libre"       — pregunta por planes de la familia Telcel Libre
-                "especifico"  — pregunta por un plan concreto (por nombre o precio)
+
+                                Úsalo también cuando el cliente mencione "libre"
+                                sin más contexto:
+                                "quiero el libre"
+                                "dame uno libre"
+                                "el libre"
+                                "quiero libre"
+                                "un plan libre"
+                                → tipo="libre", criterio="general"
+
+                                NUNCA uses tipo="general" cuando el cliente
+                                menciona "libre" — siempre usa tipo="libre".
+                "especifico"  — pregunta por un plan concreto (por nombre, precio o GB):
+                                - "¿tienes datos ilimitados?" → criterio="ilimitados", tipo="especifico"
+                                - "¿hay plan ilimitado?" → criterio="ilimitados", tipo="especifico"
                 "apps"        — pregunta qué apps están incluidas (criterio = nombre de la app
                                 o "general" si no menciona una app específica)
                 "mismo_precio" — cuando el cliente busca planes con precio similar o igual
@@ -199,6 +236,7 @@ def make_tools(state):
                 "apps_ilimitadas": apps,
                 "beneficios": ["Claro Drive 20 GB", "Claro Video"],
                 "instruccion": (
+                    "Comienza con 'Contamos con el [nombre del plan] que...' "
                     "USA ÚNICAMENTE estos datos para presentar el plan. "
                     "Presenta los beneficios de forma atractiva y comercial — "
                     "como un vendedor que destaca el valor de cada beneficio. "
@@ -395,8 +433,27 @@ def make_tools(state):
             if not planes:
                 return no_plans_found()
             if len(planes) == 1:
-                state.plan_anclado = f"{planes[0].plan_id} {modality}"
-                return format_one(planes[0])
+                plan = planes[0]
+                price = get_price(plan, modality)
+                cashback = get_cashback(plan, modality)
+                cashback_str = f"💰 Cashback ${cashback:.2f}/mes\n" if cashback > 0 else ""
+                apps_str = (
+                    "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber\n"
+                    if plan.family == "Telcel Libre" else
+                    "📱 WhatsApp ilimitado\n"
+                )
+                state.plan_anclado = f"{plan.plan_id} {modality}"
+                return (
+                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"En la familia Telcel Ultra contamos con el "
+                    f"*{plan.plan_id} {modality}* a ${price:.0f}/mes:\n\n"
+                    f"📶 {gb_label(plan)}\n"
+                    f"{cashback_str}"
+                    f"{apps_str}"
+                    f"🎬 Claro Video\n"
+                    f"💾 Claro Drive 20 GB\n\n"
+                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                )
             lista = ""
             for p in planes:
                 price = get_price(p, modality)
@@ -444,43 +501,55 @@ def make_tools(state):
                 price_match = re.search(r'\$?(\d{3,5})', criterio)
                 if price_match:
                     target_price = float(price_match.group(1))
-                    candidates = sorted(eligible, key=lambda p: abs(get_price(p, modality) - target_price))
+                    candidates = sorted(CATALOG, key=lambda p: abs(get_price(p, modality) - target_price))
+                    plan = candidates[0] if candidates else None
+            if not plan:
+                # Búsqueda por datos ilimitados
+                if any(w in criterio.lower() for w in ["ilimitado", "ilimitados", "sin limite", "sin límite"]):
+                    planes_ilimitados = [p for p in CATALOG if p.is_unlimited and
+                                         get_price(p, modality) >= current_cost - 1.0]
+                    if planes_ilimitados:
+                        plan = planes_ilimitados[0]
+                        price = get_price(plan, modality)
+                        state.plan_anclado = f"{plan.plan_id} {modality}"
+                        return (
+                            f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                            f"Contamos con el *{plan.plan_id} {modality}* a ${price:.0f}/mes "
+                            f"con datos ilimitados (sujeto a Política de Uso Justo).\n\n"
+                            f"📱 WhatsApp ilimitado\n"
+                            f"🎬 Claro Video\n"
+                            f"💾 Claro Drive 20 GB\n\n"
+                            f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                        )
+                    return no_plans_found()
+                # Búsqueda por GB
+                gb_match = re.search(r'(\d+)\s*gb', criterio.lower())
+                if gb_match:
+                    target_gb = float(gb_match.group(1))
+                    candidates = sorted(CATALOG, key=lambda p: abs(p.gb_base - target_gb))
                     plan = candidates[0] if candidates else None
             if not plan:
                 return no_plans_found()
+
             price = get_price(plan, modality)
-            cashback = get_cashback(plan, modality)
-            cashback_str = f"💰 Cashback ${cashback:.2f}/mes\n" if cashback > 0 else ""
-            apps_str = (
-                "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber\n"
-                if plan.family == "Telcel Libre" else
-                "📱 WhatsApp ilimitado\n"
-            )
-            if price >= current_cost - 1.0:
+            es_activable = price >= current_cost - 1.0
+
+            if es_activable:
                 state.plan_anclado = f"{plan.plan_id} {modality}"
-                return (
-                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                    f"*{plan.plan_id} {modality}* a ${price:.0f}/mes incluye:\n\n"
-                    f"📶 {gb_label(plan)}\n"
-                    f"{cashback_str}"
-                    f"{apps_str}"
-                    f"🎬 Claro Video\n"
-                    f"💾 Claro Drive 20 GB\n\n"
-                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
-                )
+                canal_str = ""
             else:
-                return (
-                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                    f"*{plan.plan_id} {modality}* a ${price:.0f}/mes incluye:\n\n"
-                    f"📶 {gb_label(plan)}\n"
-                    f"{cashback_str}"
-                    f"{apps_str}"
-                    f"🎬 Claro Video\n"
-                    f"💾 Claro Drive 20 GB\n\n"
-                    f"Para activarlo, comuníquese con Soporte al 800 220 9518 "
-                    f"o acuda a un Centro de Atención a Clientes.\n\n"
-                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                canal_str = (
+                    f"\nPara activarlo, comuníquese con Soporte al 800 220 9518 "
+                    f"o acuda a un Centro de Atención a Clientes."
                 )
+
+            return (
+                f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"El plan más cercano es el *{plan.plan_id} {modality}* "
+                f"a ${price:.0f}/mes con {gb_label(plan)}."
+                f"{canal_str}\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
+            )
 
         elif tipo == "mismo_precio":
             planes = [p for p in eligible if abs(get_price(p, modality) - current_cost) <= 1.0]
@@ -526,8 +595,11 @@ def make_tools(state):
                     lista_planes += f"• *{p.plan_id} {modality}*: ${price:.0f}/mes · {gb}{cb_str}\n"
                 return (
                     f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                    f"Planes disponibles en modalidad *{modality}*:\n\n"
+                    f"Le presentamos los planes y promociones disponibles para usted "
+                    f"en modalidad *{modality}*:\n\n"
                     f"{lista_planes}\n"
+                    f"De todas estas opciones, consideramos que el *{plan_rec}* "
+                    f"es la más adecuada para usted.\n\n"
                     f"¿Le gustaría activar el *{plan_rec}*?"
                 )
             return no_plans_found()
@@ -681,5 +753,102 @@ def make_tools(state):
                 f"puede comunicarse con nosotros o acudir a un CAC."
             )
 
+    @tool
+    def comparar_planes(plan_id: str = "") -> str:
+        """
+        Compara el plan actual del cliente con el plan anclado o con un plan específico.
+        Úsala cuando el cliente pida comparar planes o preguntar qué gana con el cambio:
+        - "compáralo con mi plan actual"
+        - "qué gano con el cambio?"
+        - "qué diferencia hay?"
+        - "vale la pena el cambio?"
+        - "en qué mejora?"
+        - "qué tiene de mejor?"
+        - "por qué es mejor ese plan?"
+
+        Args:
+            plan_id: nombre del plan a comparar. Si está vacío, usa el plan anclado.
+        """
+        from app.catalog.plans import find_plan, get_price, get_cashback, get_legacy_gb
+
+        modality = state.subscription_type
+        current_cost = state.current_cost
+        has_promo = bool(state.has_promotion)
+
+        if plan_id:
+            plan = find_plan(plan_id)
+        else:
+            plan = find_plan(state.plan_anclado.replace(f" {modality}", "").strip())
+
+        if not plan:
+            return (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
+            )
+
+        new_price = get_price(plan, modality)
+        es_activable = new_price >= current_cost - 1.0
+        new_cashback = get_cashback(plan, modality)
+        has_promo_plan = has_promo and plan.gb_promo > plan.gb_base and new_price > current_cost + 1.0
+        new_gb = plan.gb_promo if has_promo_plan else plan.gb_base
+
+        current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
+        current_cashback = state.current_plan_cashback or 0.0
+
+        lineas = []
+
+        if current_gb:
+            diferencia_gb = new_gb - current_gb
+            if diferencia_gb > 0:
+                lineas.append(
+                    f"📶 Datos: pasa de {current_gb:g} GB a {new_gb:g} GB "
+                    f"— {diferencia_gb:g} GB más para navegar."
+                )
+            else:
+                lineas.append(f"📶 Datos: {new_gb:g} GB incluidos.")
+        else:
+            lineas.append(f"📶 Datos: {new_gb:g} GB incluidos.")
+
+        diferencia_precio = new_price - current_cost
+        if abs(diferencia_precio) <= 1.0:
+            lineas.append(f"💰 Precio: mantiene su renta de ${current_cost:.0f}/mes.")
+        elif diferencia_precio > 0:
+            lineas.append(f"💰 Precio: ${new_price:.0f}/mes — ${diferencia_precio:.0f} más que su renta actual.")
+        else:
+            lineas.append(f"💰 Precio: ${new_price:.0f}/mes — ${abs(diferencia_precio):.0f} menos que su renta actual.")
+
+        if new_cashback > 0 and current_cashback == 0:
+            lineas.append(f"💳 Cashback: gana ${new_cashback:.2f}/mes para usar en servicios Telcel.")
+        elif new_cashback > current_cashback:
+            lineas.append(f"💳 Cashback: aumenta de ${current_cashback:.2f} a ${new_cashback:.2f}/mes.")
+        elif new_cashback > 0:
+            lineas.append(f"💳 Cashback: ${new_cashback:.2f}/mes incluido.")
+
+        if plan.family == "Telcel Libre":
+            lineas.append(
+                "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber "
+                "(no consumen GB)."
+            )
+
+        comparativa = "\n".join(lineas)
+
+        if es_activable:
+            state.plan_anclado = f"{plan.plan_id} {modality}"
+            cierre = f"¿Le gustaría activar el *{state.plan_anclado}*?"
+        else:
+            cierre = (
+                f"Para activar el *{plan.plan_id} {modality}*, "
+                f"comuníquese con Soporte al 800 220 9518 "
+                f"o acuda a un Centro de Atención a Clientes.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
+            )
+
+        return (
+            "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+            f"Lo que gana con el cambio al *{plan.plan_id} {modality}*:\n\n"
+            f"{comparativa}\n\n"
+            f"{cierre}"
+        )
+
     return [iniciar_contratacion, responder_por_que, presentar_planes,
-            informar_plan_actual, manejar_objecion]
+            informar_plan_actual, manejar_objecion, comparar_planes]
