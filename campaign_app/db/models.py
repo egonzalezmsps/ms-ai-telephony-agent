@@ -41,6 +41,7 @@ class Plan(Base):
     tiene_cashback = Column(Boolean, default=False, nullable=False)
     cashback_porcentaje = Column(Float, default=0.0, nullable=False)
     activo = Column(Boolean, default=True, nullable=False)
+    es_legacy = Column(Boolean, default=False, nullable=True)
     familia = relationship("Familia", back_populates="planes")
     campana_planes = relationship("CampanaPlan", back_populates="plan")
 
