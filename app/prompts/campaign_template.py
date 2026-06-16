@@ -10,8 +10,9 @@ from app.catalog.plans import recommend_plan, get_price, get_cashback
 from app.state.session import SessionState
 
 
-TEMPLATE_LIBRE = "telcel_migration_campaing_1_libre"
-TEMPLATE_ULTRA = "telcel_migration_campaing__1_ultra"
+import os as _os
+TEMPLATE_LIBRE = _os.environ.get("TEMPLATE_LIBRE", "telcel_migration_campaing_1_libre")
+TEMPLATE_ULTRA = _os.environ.get("TEMPLATE_ULTRA", "telcel_migration_campaing__1_ultra")
 
 TEMPLATE_HEADER = "Evolucione su plan con Telcel ahora sin plazos forzosos"
 
