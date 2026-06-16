@@ -300,6 +300,15 @@ def create_campana(nombre: str, descripcion: str = "",
         return obj
 
 
+def delete_campana(campana_id: int):
+    with get_db() as db:
+        db.query(CampanaCliente).filter_by(campana_id=campana_id).delete()
+        db.query(CampanaPlan).filter_by(campana_id=campana_id).delete()
+        obj = db.query(Campana).filter_by(id=campana_id).first()
+        if obj:
+            db.delete(obj)
+
+
 def update_campana(campana_id: int, **kwargs) -> Campana:
     with get_db() as db:
         obj = db.query(Campana).filter_by(id=campana_id).first()

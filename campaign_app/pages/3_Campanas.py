@@ -137,7 +137,7 @@ st.caption(campana.descripcion or "")
 
 # Estado transitions
 allowed_states = ["borrador", "activa", "pausada", "cerrada"]
-col_e1, col_e2 = st.columns([3, 1])
+col_e1, col_e2, col_e3 = st.columns([3, 1, 1])
 new_estado = col_e1.selectbox("Cambiar estado",
                                allowed_states,
                                index=allowed_states.index(campana.estado))
@@ -145,6 +145,22 @@ if col_e2.button("Aplicar"):
     crud.update_campana(campana_id, estado=new_estado)
     st.success(f"Estado actualizado a '{new_estado}'.")
     st.rerun()
+
+_del_key = f"del_confirm_{campana_id}"
+if col_e3.button("🗑️ Eliminar", type="secondary"):
+    st.session_state[_del_key] = True
+
+if st.session_state.get(_del_key):
+    st.warning(f"¿Eliminar la campaña **{campana.nombre}** y todos sus datos? Esta acción no se puede deshacer.")
+    col_yes, col_no, _ = st.columns([1, 1, 6])
+    if col_yes.button("Sí, eliminar", type="primary"):
+        crud.delete_campana(campana_id)
+        del st.session_state[_del_key]
+        st.success("Campaña eliminada.")
+        st.rerun()
+    if col_no.button("Cancelar"):
+        del st.session_state[_del_key]
+        st.rerun()
 
 st.divider()
 

@@ -43,17 +43,19 @@ def send_whatsapp_message(to: str, message: str) -> dict:
     return resp.json()
 
 
+_TEMPLATE_LANGUAGE = os.environ.get("TEMPLATE_LANGUAGE", "es_MX")
+
+
 def send_whatsapp_template(
     to: str,
     template_name: str,
     params: list,
-    language_code: str = "es_MX",
+    language_code: str = _TEMPLATE_LANGUAGE,
 ) -> dict:
     """
     Sends a WhatsApp Business template message.
 
     params: list of values mapping to {{1}}, {{2}}, ... in the template body.
-    Static header, footer, and quick-reply buttons need no parameters.
     """
     body_parameters = [{"type": "text", "text": str(p)} for p in params]
 

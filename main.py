@@ -57,6 +57,16 @@ def _get_phone_lock(phone_number: str) -> threading.Lock:
         return _phone_locks[phone_number]
 
 
+def _to_linea(phone_number: str) -> str:
+    """Strip country/mobile prefix to get 10-digit Mexican linea as stored in DB."""
+    n = phone_number.lstrip("+")
+    if n.startswith("521") and len(n) == 13:   # 521XXXXXXXXXX → XXXXXXXXXX
+        return n[3:]
+    if n.startswith("52") and len(n) == 12:    # 52XXXXXXXXXX  → XXXXXXXXXX
+        return n[2:]
+    return n
+
+
 def _stage_to_interaccion(session) -> str:
     if session.stage == "END":
         return "contratado" if session.contract_folio else "rechazado"
@@ -70,12 +80,13 @@ def _maybe_update_campana_cliente(session, history: list):
     if not _CAMPAIGN_DB_AVAILABLE:
         return
     try:
-        cc = campaign_crud.find_active_campana_cliente(session.phone_number)
+        linea = _to_linea(session.phone_number)
+        cc = campaign_crud.find_active_campana_cliente(linea)
         if not cc:
             return
         campaign_crud.update_interaction(
             campana_id=cc.campana_id,
-            linea=session.phone_number,
+            linea=linea,
             num_turnos=len(history) // 2,
             estado_interaccion=_stage_to_interaccion(session),
             plan_seleccionado=session.plan_selected,
@@ -84,7 +95,7 @@ def _maybe_update_campana_cliente(session, history: list):
         if session.stage == "END":
             campaign_crud.close_session_snapshot(
                 campana_id=cc.campana_id,
-                linea=session.phone_number,
+                linea=linea,
                 history=history,
                 session_data=session_to_dict(session),
             )
@@ -268,7 +279,6 @@ def campaign(
                 to=request.phone_number,
                 template_name=template_name,
                 params=params_list,
-                language_code=request.language_code,
             )
             # wa_id es el número en formato canónico de Meta — es la clave que llega en webhooks
             wa_id = wa_resp.get("contacts", [{}])[0].get("wa_id", request.phone_number)
@@ -347,14 +357,29 @@ def campaign_dispatch(
             template_result = build_template_params(session)
             campaign_msg = build_campaign_message(session)
 
+            logger.info(
+                f"DISPATCH | {linea} | plan={session.current_plan_name} "
+                f"costo=${session.current_cost:.0f} tipo={session.subscription_type}"
+            )
+
             try:
                 if template_result:
-                    send_whatsapp_template(
+                    from app.whatsapp.sender import _normalize_phone
+                    numero_normalizado = _normalize_phone(linea)
+                    logger.info(
+                        f"DISPATCH | {linea} | enviando template='{template_result['template_name']}' "
+                        f"idioma={os.environ.get('TEMPLATE_LANGUAGE', 'es_MX')} "
+                        f"numero_normalizado={numero_normalizado} "
+                        f"params={template_result['params']}"
+                    )
+                    wa_resp = send_whatsapp_template(
                         to=linea,
                         template_name=template_result["template_name"],
                         params=template_result["params"],
                     )
+                    logger.info(f"DISPATCH | {linea} | respuesta Meta: {wa_resp}")
                 else:
+                    logger.info(f"DISPATCH | {linea} | sin plan elegible, enviando texto plano")
                     send_whatsapp_message(linea, campaign_msg)
                 campaign_crud.mark_enviado(request.campana_id, linea)
                 results["sent"].append(linea)
