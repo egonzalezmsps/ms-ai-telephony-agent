@@ -116,7 +116,15 @@ def make_tools(state):
         - "¿qué planes tienen promoción?"
 
         Args:
-            tema: "plan" | "promocion" | "modalidad" | "criterio"
+            tema: "plan" | "promocion" | "modalidad" | "criterio" | "canal"
+
+            Usa tema="canal" cuando el cliente pregunte:
+            - "¿por qué tengo que ir al CAC?"
+            - "¿por qué tengo que llamar a Soporte?"
+            - "¿no puedes cambiarlo tú?"
+            - "¿por qué no puedes activarlo aquí?"
+            - "¿por qué me mandas con soporte?"
+            - "¿no puedes hacer tú el cambio?"
         """
         plan_name = state.plan_anclado or "el plan recomendado"
 
@@ -147,6 +155,14 @@ def make_tools(state):
                 f"Las promociones son beneficios que Telcel activa en planes "
                 f"seleccionados para darles más valor. "
                 f"El {plan_name} sí incluye esta promoción.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
+            ),
+            "canal": (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"Algunos cambios requieren gestión a través de nuestros canales "
+                f"especializados para garantizar la mejor atención. "
+                f"Soporte al 800 220 9518 y los CAC cuentan con las herramientas "
+                f"necesarias para ese trámite.\n\n"
                 f"¿Le gustaría activar el *{state.plan_anclado}*?"
             ),
         }
@@ -473,6 +489,8 @@ def make_tools(state):
                 key=lambda p: get_price(p, modality),
                 default=planes[0],
             )
+            # Actualizar plan anclado al Ultra más cercano elegible
+            state.plan_anclado = f"{ultra_cercano.plan_id} {modality}"
             ultra_price = get_price(ultra_cercano, modality)
             ultra_gb = ultra_cercano.gb_base
             return (
@@ -546,12 +564,28 @@ def make_tools(state):
 
             if es_activable:
                 state.plan_anclado = f"{plan.plan_id} {modality}"
-                canal_str = ""
-            else:
-                canal_str = (
-                    f"\nPara activarlo, comuníquese con Soporte al 800 220 9518 "
-                    f"o acuda a un Centro de Atención a Clientes."
+                cashback = get_cashback(plan, modality)
+                cashback_str = f"💰 Cashback ${cashback:.2f}/mes\n" if cashback > 0 else ""
+                apps_str = (
+                    "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber\n"
+                    if plan.family == "Telcel Libre" else
+                    "📱 WhatsApp ilimitado\n"
                 )
+                return (
+                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"*{plan.plan_id} {modality}* a ${price:.0f}/mes incluye:\n\n"
+                    f"📶 {gb_label(plan)}\n"
+                    f"{cashback_str}"
+                    f"{apps_str}"
+                    f"🎬 Claro Video\n"
+                    f"💾 Claro Drive 20 GB\n\n"
+                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                )
+
+            canal_str = (
+                f"\nPara activarlo, comuníquese con Soporte al 800 220 9518 "
+                f"o acuda a un Centro de Atención a Clientes."
+            )
 
             return (
                 f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
