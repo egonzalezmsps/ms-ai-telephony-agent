@@ -257,7 +257,9 @@ _NOT_TITULAR_KEYWORDS = [
 
 _WRONG_NAME_PHRASES = [
     "mi nombre es", "me llamo",
-    "el nombre está mal", "nombre equivocado", "el nombre está equivocado",
+    "el nombre está mal", "nombre equivocado",
+    "el nombre está equivocado",
+    "yo soy", "soy ", "mi nombre",
 ]
 
 
@@ -290,7 +292,7 @@ def _detect_titular_issues(session, user_message: str):
         if any(kw in msg_lower for kw in _WRONG_NAME_PHRASES):
             name_is_different = False
             name_match = re.search(
-                r'(?:mi nombre es|me llamo)\s+([a-záéíóúüñ]+)',
+                r'(?:mi nombre es|me llamo|yo soy|soy)\s+([a-záéíóúüñ]+)',
                 msg_lower,
             )
             if name_match:
@@ -491,6 +493,51 @@ def run_turn(
             {"role": "assistant", "content": response_text},
         ]
         return _apply_debug(response_text, [], user_message), updated_history
+
+    # ── Detección pre-LLM: preguntas de facturación ──────────────────
+    _FACTURACION_QUESTIONS = [
+        "cobro", "factura", "facturación", "facturacion",
+        "cuando me cobran", "cuándo me cobran",
+        "siguiente cobro", "próximo cobro", "proximo cobro",
+        "cuando pago", "cuándo pago", "fecha de pago",
+        "cuando comienza", "cuándo comienza",
+        "cuando empiezan", "cuándo empiezan",
+        "cuando inicia", "cuándo inicia",
+    ]
+    if any(q in msg_lower_clean for q in _FACTURACION_QUESTIONS):
+        response_text = (
+            "Para detalles sobre su facturación y fechas de cobro, "
+            "le recomiendo consultar con Soporte al 800 220 9518 "
+            "o revisar su información en la app Mi Telcel.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    # ── Detección pre-LLM: pregunta por GB del plan actual ───────────
+    _GB_PLAN_QUESTIONS = [
+        "cuantos gigas", "cuántos gigas", "cuantos gb", "cuántos gb",
+        "gigas tiene mi plan", "gb tiene mi plan", "gigas tengo",
+        "cuantos datos", "cuántos datos", "datos tengo",
+        "cuanto tiene mi plan", "cuánto tiene mi plan",
+    ]
+    if any(q in msg_lower_clean for q in _GB_PLAN_QUESTIONS):
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        informar_fn = next((t for t in tools if t.tool_name == "informar_plan_actual"), None)
+        if informar_fn:
+            result = informar_fn()
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["informar_plan_actual"], user_message), updated_history
 
     # ── Detección pre-LLM: rechazo corto ─────────────────────────────
     _RECHAZOS_CORTOS = {"no", "no.", "no!", "nope", "nel", "nop", "paso"}
