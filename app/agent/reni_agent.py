@@ -435,6 +435,7 @@ def run_turn(
         return _apply_debug(response_text, [], user_message), updated_history
 
     # ── Detección pre-LLM: pregunta sobre reglas internas ────────────────────
+    msg_lower_clean = re.sub(r'[¿?¡!,\.]', ' ', msg_lower).strip()
     _REGLAS_QUESTIONS = [
         "reglas", "criterios", "condiciones", "requisitos",
         "como activas", "cómo activas", "cuando puedes activar",
@@ -448,7 +449,7 @@ def run_turn(
         "cómo operas", "que puedes hacer", "qué puedes hacer",
         "como me ayudas", "cómo me ayudas",
     ]
-    if any(q in msg_lower for q in _REGLAS_QUESTIONS):
+    if any(q in msg_lower_clean for q in _REGLAS_QUESTIONS):
         response_text = (
             "Solo puedo ayudarle con información sobre planes y "
             "beneficios de Telcel.\n\n"
@@ -477,7 +478,7 @@ def run_turn(
         "porque no puedes",
         "por qué no puedes",
     ]
-    if any(q in msg_lower for q in _CAC_QUESTIONS):
+    if any(q in msg_lower_clean for q in _CAC_QUESTIONS):
         response_text = (
             f"Algunos cambios requieren gestión a través de nuestros "
             f"canales especializados para garantizar la mejor atención. "
