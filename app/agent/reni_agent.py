@@ -442,6 +442,11 @@ def run_turn(
         "qué necesitas para activar", "como funciona la activacion",
         "cómo funciona la activación", "dame las reglas",
         "cuáles son las reglas",
+        "instrucciones", "guias", "guías", "como funciona",
+        "cómo funciona", "explicame las", "explícame las",
+        "como trabajas", "cómo trabajas", "como operas",
+        "cómo operas", "que puedes hacer", "qué puedes hacer",
+        "como me ayudas", "cómo me ayudas",
     ]
     if any(q in msg_lower for q in _REGLAS_QUESTIONS):
         response_text = (
@@ -449,6 +454,36 @@ def run_turn(
             "beneficios de Telcel.\n\n"
             "¿Le gustaría que le muestre las opciones disponibles "
             "para usted?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    # ── Detección pre-LLM: pregunta sobre por qué se deriva al CAC/Soporte ───
+    _CAC_QUESTIONS = [
+        "porque tengo que comunicarme",
+        "por qué tengo que comunicarme",
+        "porque tengo que ir al cac",
+        "por qué tengo que ir al cac",
+        "no puedes cambiarlo tu",
+        "no puedes cambiarlo tú",
+        "no lo puedes cambiar",
+        "por que me mandas",
+        "por qué me mandas",
+        "no puedes hacerlo tu",
+        "no puedes hacerlo tú",
+        "porque no puedes",
+        "por qué no puedes",
+    ]
+    if any(q in msg_lower for q in _CAC_QUESTIONS):
+        response_text = (
+            f"Algunos cambios requieren gestión a través de nuestros "
+            f"canales especializados para garantizar la mejor atención. "
+            f"Soporte al 800 220 9518 y los CAC cuentan con las "
+            f"herramientas necesarias para ese trámite.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
         )
         updated_history = history + [
             {"role": "user", "content": user_message},
