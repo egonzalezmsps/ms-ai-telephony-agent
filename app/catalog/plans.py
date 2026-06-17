@@ -25,6 +25,7 @@ class Plan:
     cashback_controlado: float
     has_social_apps: bool          # True = Libre (7 apps), False = Ultra (solo WhatsApp)
     is_unlimited: bool             # True solo para Ultra Ilimitado
+    calls_sms: str = "Llamadas y SMS ilimitados a México, EUA y Canadá"
 
 
 CATALOG: List[Plan] = [
@@ -55,13 +56,13 @@ FAMILY_BENEFITS = {
         "🎬 Claro Video (streaming)\n"
         "☁️ Claro Drive 20 GB en la nube\n"
         "💰 Cashback mensual Telcel\n"
-        "📞 Minutos y SMS ilimitados"
+        "📞 Llamadas y SMS ilimitados a México, EUA y Canadá"
     ),
     "Telcel Ultra": (
         "📱 WhatsApp ilimitado\n"
         "🎬 Claro Video (streaming)\n"
         "☁️ Claro Drive 20 GB en la nube\n"
-        "📞 Minutos y SMS ilimitados"
+        "📞 Llamadas y SMS ilimitados a México, EUA y Canadá"
     ),
 }
 
