@@ -56,7 +56,7 @@ def build_summary_template(session) -> str:
         f"Nuevo plan: {session.plan_selected} {modality} — ${price:.0f}/mes\n\n"
         f"📶 {gb_str}\n"
         f"{cashback_line}"
-        f"📞 Llamadas y SMS ilimitados\n"
+        f"📞 {plan.calls_sms if plan else 'Llamadas y SMS ilimitados a México, EUA y Canadá'}\n"
         f"{apps_line}"
         f"🎬 Claro Video\n"
         f"💾 Claro Drive (20 GB)\n\n"

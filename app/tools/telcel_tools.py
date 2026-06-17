@@ -259,6 +259,7 @@ def make_tools(state):
                 "precio": price,
                 "gb": gb_label(plan),
                 "cashback": cashback if cashback > 0 else None,
+                "llamadas_sms": plan.calls_sms,
                 "apps_ilimitadas": apps,
                 "beneficios": ["Claro Drive 20 GB", "Claro Video"],
                 "instruccion": (
@@ -266,6 +267,7 @@ def make_tools(state):
                     "USA ÚNICAMENTE estos datos para presentar el plan. "
                     "Presenta los beneficios de forma atractiva y comercial — "
                     "como un vendedor que destaca el valor de cada beneficio. "
+                    "Menciona llamadas_sms como beneficio incluido. "
                     "Orden de presentación: primero GB y cashback, luego apps ilimitadas, "
                     "luego Claro Drive, luego Claro Video. "
                     "Claro Drive: menciona como 20 GB de almacenamiento en la nube incluido. "
@@ -474,6 +476,7 @@ def make_tools(state):
                     f"En la familia Telcel Ultra contamos con el "
                     f"*{plan.plan_id} {modality}* a ${price:.0f}/mes:\n\n"
                     f"📶 {gb_label(plan)}\n"
+                    f"📞 {plan.calls_sms}\n"
                     f"{cashback_str}"
                     f"{apps_str}"
                     f"🎬 Claro Video\n"
@@ -575,6 +578,7 @@ def make_tools(state):
                     f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                     f"*{plan.plan_id} {modality}* a ${price:.0f}/mes incluye:\n\n"
                     f"📶 {gb_label(plan)}\n"
+                    f"📞 {plan.calls_sms}\n"
                     f"{cashback_str}"
                     f"{apps_str}"
                     f"🎬 Claro Video\n"
@@ -661,6 +665,15 @@ def make_tools(state):
 
         NO la uses cuando el cliente busca planes similares a su precio actual.
         Para eso usar presentar_planes con tipo="mismo_precio".
+
+        NO la uses para preguntas sobre facturación o cobros:
+        - "¿cuándo sería el nuevo cobro?"
+        - "¿cuándo me cobran?"
+        - "¿en qué fecha se hace el cobro?"
+        - "¿cuándo entra en vigor?"
+        Para esas preguntas, responde directamente indicando que
+        para detalles de facturación puede consultar con Soporte
+        al 800 220 9518 o en la app Mi Telcel.
         """
         modality = state.subscription_type
         current_cost = state.current_cost
@@ -810,6 +823,14 @@ def make_tools(state):
         - "qué tiene de mejor?"
         - "por qué es mejor ese plan?"
 
+        NO la uses cuando el cliente pregunte específicamente por llamadas:
+        - "¿y las llamadas?"
+        - "¿incluye llamadas?"
+        - "¿tiene llamadas ilimitadas?"
+        Para esas preguntas usa presentar_planes con tipo="apps"
+        y criterio="llamadas", o responde directamente con el dato
+        de plan.calls_sms.
+
         Args:
             plan_id: nombre exacto del plan que menciona el cliente.
                      Extrae LITERALMENTE lo que dijo el cliente:
@@ -887,6 +908,10 @@ def make_tools(state):
                 "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber "
                 "(no consumen GB)."
             )
+
+        lineas.append(
+            f"📞 {plan.calls_sms}"
+        )
 
         comparativa = "\n".join(lineas)
 
