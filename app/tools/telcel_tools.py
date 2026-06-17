@@ -211,6 +211,16 @@ def make_tools(state):
                 "especifico"  — pregunta por un plan concreto (por nombre, precio o GB):
                                 - "¿tienes datos ilimitados?" → criterio="ilimitados", tipo="especifico"
                                 - "¿hay plan ilimitado?" → criterio="ilimitados", tipo="especifico"
+
+                                Úsala también cuando el cliente insista en un plan específico
+                                que ya se mostró antes:
+                                - "quiero el libre 1"
+                                - "me quedo con el libre 1"
+                                - "prefiero el libre 1"
+                                → tipo="especifico", criterio=nombre del plan
+
+                                NUNCA respondas con el fallback cuando el cliente pide
+                                un plan por nombre — siempre usa presentar_planes.
                 "apps"        — pregunta qué apps están incluidas (criterio = nombre de la app
                                 o "general" si no menciona una app específica)
                 "mismo_precio" — cuando el cliente busca planes con precio similar o igual
@@ -576,16 +586,11 @@ def make_tools(state):
                     f"¿Le gustaría activar el *{state.plan_anclado}*?"
                 )
 
-            canal_str = (
-                f"\nPara activarlo, comuníquese con Soporte al 800 220 9518 "
-                f"o acuda a un Centro de Atención a Clientes."
-            )
-
             return (
                 f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                f"El plan más cercano es el *{plan.plan_id} {modality}* "
-                f"a ${price:.0f}/mes con {gb_label(plan)}."
-                f"{canal_str}\n\n"
+                f"El *{plan.plan_id} {modality}* a ${price:.0f}/mes con {gb_label(plan)}.\n\n"
+                f"Para activarlo, comuníquese con Soporte al 800 220 9518 "
+                f"o acuda a un Centro de Atención a Clientes.\n\n"
                 f"¿Le gustaría activar el *{state.plan_anclado}*?"
             )
 
@@ -647,6 +652,11 @@ def make_tools(state):
         """
         Informa al cliente sobre su plan actual y lo compara con el recomendado.
         Úsala cuando el cliente pregunte QUÉ plan tiene o CUÁNTO paga:
+        - "¿cuántos gigas tiene mi plan?"
+        - "¿cuántos GB tengo?"
+        - "¿cuántos datos tengo?"
+        - "¿cuánto tiene mi plan?"
+        - "¿qué gigas tengo?"
         - "¿cuál es mi plan?"
         - "¿cuánto pago?"
         - "¿qué tengo contratado?"
@@ -655,6 +665,15 @@ def make_tools(state):
 
         NO la uses cuando el cliente busca planes similares a su precio actual.
         Para eso usar presentar_planes con tipo="mismo_precio".
+
+        NO la uses cuando el cliente pide un plan específico por nombre:
+        - "quiero el libre 1"
+        - "dame el libre 4"
+        - "me interesa el ultra 5"
+        Para esos casos usa presentar_planes con tipo="especifico".
+
+        Solo úsala cuando el cliente pregunta por SU plan actual contratado,
+        no cuando pide ver o activar un plan nuevo.
 
         NO la uses para preguntas sobre facturación o cobros:
         - "¿cuándo sería el nuevo cobro?"
@@ -727,6 +746,13 @@ def make_tools(state):
         NO la uses cuando el cliente dice "no" seguido de una
         preferencia ("no, mejor el Libre") — eso es una redirección,
         no un rechazo.
+
+        Úsala también para indecisión o duda:
+        - "no lo sé"
+        - "no sé"
+        - "no estoy seguro/a"
+        - "tengo dudas"
+        - "déjame pensarlo"
 
         Args:
             motivo: SOLO si el cliente menciona una razón específica
