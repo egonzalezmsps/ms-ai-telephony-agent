@@ -13,6 +13,8 @@ from app.state.session import SessionState
 import os as _os
 TEMPLATE_LIBRE = _os.environ.get("TEMPLATE_LIBRE", "telcel_migration_campaing_1_libre")
 TEMPLATE_ULTRA = _os.environ.get("TEMPLATE_ULTRA", "telcel_migration_campaing__1_ultra")
+import datetime as _dt
+DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 TEMPLATE_HEADER = "Evolucione su plan con Telcel ahora sin plazos forzosos"
 
@@ -116,12 +118,18 @@ def build_campaign_message(session: SessionState) -> str:
     result = build_template_params(session)
 
     if not result:
-        return (
+        msg = (
             f"Hola, *{session.first_name}*. En *Telcel* buscamos mejorar la experiencia "
             f"de nuestros planes.\n\n"
             f"Por el momento no tenemos una oferta disponible para su línea. "
             f"Para más información contáctenos al *800 220 9518*."
         )
+        if DEPLOY_TIMESTAMP:
+            msg += f"\n\n_(deploy: {DEPLOY_TIMESTAMP})_"
+        return msg
 
     body = _BODY_LIBRE if result["template_name"] == TEMPLATE_LIBRE else _BODY_ULTRA
-    return _render_template(body, result["params"])
+    msg = _render_template(body, result["params"])
+    if DEPLOY_TIMESTAMP:
+        msg += f"\n\n_(deploy: {DEPLOY_TIMESTAMP})_"
+    return msg
