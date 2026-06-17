@@ -14,7 +14,8 @@ import os as _os
 TEMPLATE_LIBRE = _os.environ.get("TEMPLATE_LIBRE", "telcel_migration_campaing_1_libre")
 TEMPLATE_ULTRA = _os.environ.get("TEMPLATE_ULTRA", "telcel_migration_campaing__1_ultra")
 import datetime as _dt
-DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+from zoneinfo import ZoneInfo as _ZoneInfo
+DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now(_ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
 
 TEMPLATE_HEADER = "Evolucione su plan con Telcel ahora sin plazos forzosos"
 
