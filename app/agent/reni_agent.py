@@ -422,6 +422,13 @@ def run_turn(
     """
     history = history or []
 
+    # Inicializar plan_anclado al primer turno real (antes de cualquier
+    # bloque pre-LLM, ya que varios de ellos lo referencian directamente)
+    if not session.plan_anclado:
+        _anclado_target = recommend_plan(session.current_cost, session.subscription_type)
+        if _anclado_target:
+            session.plan_anclado = f"{_anclado_target.plan_id} {session.subscription_type}"
+
     # ── Detección pre-LLM: titular y nombre ───────────────────────────────────
     titular_msg = _detect_titular_issues(session, user_message)
     if titular_msg is not None:
@@ -500,6 +507,19 @@ def run_turn(
         "qué pasa cuando activo",
         "como funciona la activacion",
         "cómo funciona la activación",
+        "entender los pasos",
+        "pasos de activacion",
+        "pasos de activación",
+        "que instrucciones",
+        "qué instrucciones",
+        "instrucciones para activar",
+        "instrucciones sigues",
+        "como activan",
+        "cómo activan",
+        "que hago para activar",
+        "qué hago para activar",
+        "como activo",
+        "cómo activo",
     ]
     if any(q in msg_lower_clean for q in _PROCESO_QUESTIONS):
         response_text = (
@@ -639,10 +659,6 @@ def run_turn(
         tools = make_tools(session)
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
-            if not session.plan_anclado:
-                target = recommend_plan(session.current_cost, session.subscription_type)
-                if target:
-                    session.plan_anclado = f"{target.plan_id} {session.subscription_type}"
             result = presentar_fn(criterio=alt_modality, tipo="general")
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
@@ -751,12 +767,6 @@ def run_turn(
 
     # ── Flujo conversacional con LLM ─────────────────────────────────────────
 
-    # Inicializar plan_anclado al primer turno real (antes de pasar al LLM)
-    if not session.plan_anclado:
-        _anclado_target = recommend_plan(session.current_cost, session.subscription_type)
-        if _anclado_target:
-            session.plan_anclado = f"{_anclado_target.plan_id} {session.subscription_type}"
-
     # Convertir historial simple al formato Strands / Bedrock Converse API.
     # El formato correcto de un content block de texto es {"text": "..."} —
     # NO {"type": "text", "text": "..."}.
@@ -782,6 +792,21 @@ def run_turn(
     response_text = response_text.strip()
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     response_text = re.sub(r'\[\s*\]', '', response_text).strip()
+
+    # Safety net — si el LLM revela lógica interna del proceso de verificación
+    # reemplazar la respuesta completa con el mensaje programado de proceso
+    _INTERNAL_LEAK_TERMS = [
+        "Verificación de seguridad",
+        "OTP",
+        "(OTP)",
+    ]
+    if any(t in response_text for t in _INTERNAL_LEAK_TERMS):
+        plan = session.plan_anclado if session.plan_anclado else "el plan"
+        response_text = (
+            f"Es muy sencillo — solo confirme que desea el cambio "
+            f"y nosotros nos encargamos del resto.\n\n"
+            f"¿Le gustaría activar el *{plan}*?"
+        )
 
     # Safety net — si el response_text contiene el recuadro interno
     # de iniciar_contratacion, reemplazarlo con el template correcto
