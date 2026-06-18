@@ -457,8 +457,7 @@ def run_turn(
         "reglas", "criterios", "condiciones", "requisitos",
         "como activas", "cómo activas", "cuando puedes activar",
         "cuándo puedes activar", "que necesitas para activar",
-        "qué necesitas para activar", "como funciona la activacion",
-        "cómo funciona la activación", "dame las reglas",
+        "qué necesitas para activar", "dame las reglas",
         "cuáles son las reglas",
         "instrucciones", "guias", "guías", "como funciona",
         "cómo funciona", "explicame las", "explícame las",
@@ -490,6 +489,15 @@ def run_turn(
         "cómo funciona el cambio",
         "que tengo que hacer",
         "qué tengo que hacer",
+        "proceso de activacion",
+        "proceso de activación",
+        "como se activa",
+        "cómo se activa",
+        "pasos para activar",
+        "que pasa cuando activo",
+        "qué pasa cuando activo",
+        "como funciona la activacion",
+        "cómo funciona la activación",
     ]
     if any(q in msg_lower_clean for q in _PROCESO_QUESTIONS):
         response_text = (
