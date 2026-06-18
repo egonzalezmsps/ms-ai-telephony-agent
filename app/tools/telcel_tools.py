@@ -228,12 +228,41 @@ def make_tools(state):
                                 "¿hay planes similares a lo que pago?",
                                 "¿algo parecido a mi renta actual?"
                 "general"     — cualquier otra consulta de planes o catálogo
+
+            Cuando el cliente pide planes de una modalidad diferente a la suya:
+            - "¿tienes planes controlados?" (cliente es Abierto)
+            - "¿y en controlado?"
+            - "¿algún plan controlado?"
+            → incluye la modalidad en el criterio:
+              criterio="controlado", tipo="general"
+
+            NUNCA uses criterio="general" cuando el cliente menciona
+            explícitamente una modalidad diferente a la suya.
         """
         print(f"[TOOLS-TIPO] tipo={tipo!r} criterio={criterio!r}")
         modality = state.subscription_type
         current_cost = state.current_cost
         has_promo = bool(state.has_promotion)
         eligible = eligible_plans(current_cost, modality)
+
+        # Detectar si el cliente pide planes de modalidad diferente
+        criterio_lower = criterio.lower()
+        alt_modality = "Abierto" if modality == "Controlado" else "Controlado"
+
+        pide_modalidad_diferente = (
+            alt_modality.lower() in criterio_lower or
+            (modality == "Abierto" and "controlado" in criterio_lower) or
+            (modality == "Controlado" and "abierto" in criterio_lower)
+        )
+
+        if pide_modalidad_diferente:
+            return (
+                f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"Para planes en modalidad {alt_modality}, debe gestionar "
+                f"el cambio en un Centro de Atención a Clientes (CAC) "
+                f"o comunicarse con Soporte al 800 220 9518.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
+            )
 
         def gb_label(plan) -> str:
             price = get_price(plan, modality)
