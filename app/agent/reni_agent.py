@@ -520,6 +520,10 @@ def run_turn(
         "qué hago para activar",
         "como activo",
         "cómo activo",
+        "conocer el proceso",
+        "proceso de activacion del plan",
+        "y como funciona",
+        "y cómo funciona",
     ]
     if any(q in msg_lower_clean for q in _PROCESO_QUESTIONS):
         response_text = (
