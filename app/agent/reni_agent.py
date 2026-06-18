@@ -507,6 +507,19 @@ def run_turn(
         "qué pasa cuando activo",
         "como funciona la activacion",
         "cómo funciona la activación",
+        "entender los pasos",
+        "pasos de activacion",
+        "pasos de activación",
+        "que instrucciones",
+        "qué instrucciones",
+        "instrucciones para activar",
+        "instrucciones sigues",
+        "como activan",
+        "cómo activan",
+        "que hago para activar",
+        "qué hago para activar",
+        "como activo",
+        "cómo activo",
     ]
     if any(q in msg_lower_clean for q in _PROCESO_QUESTIONS):
         response_text = (
@@ -779,6 +792,21 @@ def run_turn(
     response_text = response_text.strip()
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     response_text = re.sub(r'\[\s*\]', '', response_text).strip()
+
+    # Safety net — si el LLM revela lógica interna del proceso de verificación
+    # reemplazar la respuesta completa con el mensaje programado de proceso
+    _INTERNAL_LEAK_TERMS = [
+        "Verificación de seguridad",
+        "OTP",
+        "(OTP)",
+    ]
+    if any(t in response_text for t in _INTERNAL_LEAK_TERMS):
+        plan = session.plan_anclado if session.plan_anclado else "el plan"
+        response_text = (
+            f"Es muy sencillo — solo confirme que desea el cambio "
+            f"y nosotros nos encargamos del resto.\n\n"
+            f"¿Le gustaría activar el *{plan}*?"
+        )
 
     # Safety net — si el response_text contiene el recuadro interno
     # de iniciar_contratacion, reemplazarlo con el template correcto
