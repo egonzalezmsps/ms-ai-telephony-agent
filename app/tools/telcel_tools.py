@@ -712,11 +712,14 @@ def make_tools(state):
         NO la uses cuando el cliente busca planes similares a su precio actual.
         Para eso usar presentar_planes con tipo="mismo_precio".
 
-        NO la uses cuando el cliente pide un plan específico por nombre:
+        NO la uses cuando el cliente pide un plan específico por nombre o expresa preferencia por uno:
         - "quiero el libre 1"
         - "dame el libre 4"
         - "me interesa el ultra 5"
-        Para esos casos usa presentar_planes con tipo="especifico".
+        - "me gusta el libre 1"
+        - "prefiero el libre 3"
+        - "ese plan me gusta"
+        Para esos casos usa comparar_planes con el plan_id mencionado.
 
         Solo úsala cuando el cliente pregunta por SU plan actual contratado,
         no cuando pide ver o activar un plan nuevo.
@@ -729,6 +732,13 @@ def make_tools(state):
         Para esas preguntas, responde directamente indicando que
         para detalles de facturación puede consultar con Soporte
         al 800 220 9518 o en la app Mi Telcel.
+
+        NO la uses cuando el cliente expresa preferencia o interés por un plan específico:
+        - "me gusta el libre 1"
+        - "me interesa el libre 3"
+        - "prefiero ese plan"
+        - "ese me llama la atención"
+        Para esos casos usa comparar_planes con el plan_id mencionado.
         """
         modality = state.subscription_type
         current_cost = state.current_cost
@@ -884,6 +894,12 @@ def make_tools(state):
         - "en qué mejora?"
         - "qué tiene de mejor?"
         - "por qué es mejor ese plan?"
+        - "me gusta el libre 1"
+        - "me interesa el libre 1"
+        - "me llama la atención el ultra 5"
+        - "prefiero el libre 3"
+        - "ese plan me gusta"
+        - "quiero saber más del libre 1"
 
         NO la uses cuando el cliente pregunte específicamente por llamadas:
         - "¿y las llamadas?"
@@ -980,20 +996,19 @@ def make_tools(state):
         if es_activable:
             state.plan_anclado = f"{plan.plan_id} {modality}"
             cierre = f"¿Le gustaría activar el *{state.plan_anclado}*?"
+            return (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"Lo que gana con el cambio al *{plan.plan_id} {modality}*:\n\n"
+                f"{comparativa}\n\n"
+                f"{cierre}"
+            )
         else:
-            cierre = (
-                f"Para activar el *{plan.plan_id} {modality}*, "
-                f"comuníquese con Soporte al 800 220 9518 "
-                f"o acuda a un Centro de Atención a Clientes.\n\n"
+            return (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"El *{plan.plan_id} {modality}* solo puede activarse en un "
+                f"Centro de Atención a Clientes o llamando a Soporte al 800 220 9518.\n\n"
                 f"¿Le gustaría activar el *{state.plan_anclado}*?"
             )
-
-        return (
-            "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-            f"Lo que gana con el cambio al *{plan.plan_id} {modality}*:\n\n"
-            f"{comparativa}\n\n"
-            f"{cierre}"
-        )
 
     return [iniciar_contratacion, responder_por_que, presentar_planes,
             informar_plan_actual, manejar_objecion, comparar_planes]
