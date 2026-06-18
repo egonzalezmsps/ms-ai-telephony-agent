@@ -422,6 +422,13 @@ def run_turn(
     """
     history = history or []
 
+    # Inicializar plan_anclado al primer turno real (antes de cualquier
+    # bloque pre-LLM, ya que varios de ellos lo referencian directamente)
+    if not session.plan_anclado:
+        _anclado_target = recommend_plan(session.current_cost, session.subscription_type)
+        if _anclado_target:
+            session.plan_anclado = f"{_anclado_target.plan_id} {session.subscription_type}"
+
     # ── Detección pre-LLM: titular y nombre ───────────────────────────────────
     titular_msg = _detect_titular_issues(session, user_message)
     if titular_msg is not None:
@@ -639,10 +646,6 @@ def run_turn(
         tools = make_tools(session)
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
-            if not session.plan_anclado:
-                target = recommend_plan(session.current_cost, session.subscription_type)
-                if target:
-                    session.plan_anclado = f"{target.plan_id} {session.subscription_type}"
             result = presentar_fn(criterio=alt_modality, tipo="general")
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
@@ -750,12 +753,6 @@ def run_turn(
         # else: pregunta durante espera → continúa al LLM con contexto de contrato
 
     # ── Flujo conversacional con LLM ─────────────────────────────────────────
-
-    # Inicializar plan_anclado al primer turno real (antes de pasar al LLM)
-    if not session.plan_anclado:
-        _anclado_target = recommend_plan(session.current_cost, session.subscription_type)
-        if _anclado_target:
-            session.plan_anclado = f"{_anclado_target.plan_id} {session.subscription_type}"
 
     # Convertir historial simple al formato Strands / Bedrock Converse API.
     # El formato correcto de un content block de texto es {"text": "..."} —
