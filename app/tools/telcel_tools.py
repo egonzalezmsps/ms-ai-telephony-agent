@@ -272,9 +272,12 @@ def make_tools(state):
         if pide_modalidad_diferente:
             return (
                 f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                f"Para planes en modalidad {alt_modality}, debe gestionar "
+                f"Para planes en modalidad {alt_modality}, puede gestionar "
                 f"el cambio en un Centro de Atención a Clientes (CAC) "
                 f"o comunicarse con Soporte al 800 220 9518.\n\n"
+                f"Dicho esto, en su modalidad actual contamos con el "
+                f"*{state.plan_anclado}* que le ofrece más GB y beneficios "
+                f"sin necesidad de cambiar de modalidad.\n\n"
                 f"¿Le gustaría activar el *{state.plan_anclado}*?"
             )
 
