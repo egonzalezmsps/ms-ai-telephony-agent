@@ -21,7 +21,7 @@ TEMPLATE_HEADER = "Evolucione su plan con Telcel ahora sin plazos forzosos"
 
 # Cuerpos de plantilla con marcadores {{N}} — espejo exacto de las plantillas WhatsApp
 _BODY_LIBRE = (
-    "Hola, {{1}} 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
+    "Hola, *{{1}}* 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
     "por eso le ofrecemos el *{{2}}* a *${{3}} MXN/mes*.\n"
     "*{{4}}*\n\n"
     "• 📞 *Minutos y SMS ilimitados* (México, EUA, Cánada)\n"
@@ -34,7 +34,7 @@ _BODY_LIBRE = (
 )
 
 _BODY_ULTRA = (
-    "Hola, {{1}} 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
+    "Hola, *{{1}}* 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
     "por eso le ofrecemos el *{{2}}* a *${{3}} MXN/mes*.\n"
     "*{{4}}*\n\n"
     "• 📞 *Minutos y SMS ilimitados* (México, EUA, Cánada)\n"
