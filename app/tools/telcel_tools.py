@@ -73,6 +73,9 @@ def make_tools(state):
             gb_label = f"{plan.gb_base:g} GB base + {extra:g} GB promo = {gb:g} GB totales"
 
         state.plan_selected = plan.plan_id
+        state.awaiting_contract_confirmation = False
+        state.awaiting_otp = False
+        state.otp_attempt_count = 0
         state.stage = "CONTRACT"
 
         return (
@@ -177,7 +180,18 @@ def make_tools(state):
         Args:
             criterio: descripción o nombre específico de lo que busca el cliente
             tipo: intención del cliente — elige UNO de:
-                "mas_barato"  — quiere un plan más económico que el actual
+                "mas_barato"  — cuando el cliente quiere planes más económicos:
+                                - "¿tienes planes más baratos?"
+                                - "¿existen planes más baratos?"
+                                - "¿hay algo más económico?"
+                                - "¿tienes planes mas baratos?" (sin tilde)
+                                - "planes mas baratos" (sin tilde)
+                                - "algo más barato"
+                                - "más económico"
+                                - "menos costoso"
+
+                                NUNCA uses tipo="general" cuando el cliente
+                                pide algo más barato.
                 "mas_caro"    — quiere el plan más premium/caro disponible
                 "ultra"       — pregunta por planes de la familia Telcel Ultra:
                                 "quiero uno ultra", "muéstrame los ultra",
