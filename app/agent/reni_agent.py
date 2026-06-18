@@ -69,6 +69,8 @@ def clean_response(
         text,
         flags=re.IGNORECASE
     )
+    # Eliminar corchetes vacíos que Llama a veces emite como artefacto
+    text = re.sub(r'\[\s*\]', '', text).strip()
     text = re.sub(r'\n{3,}', '\n\n', text).strip()
 
     text = _fix_tuteo(text)
@@ -630,6 +632,27 @@ def run_turn(
             ]
             return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
+    # ── Detección pre-LLM: cliente pide modalidad diferente ─────────
+    alt_modality = "Abierto" if session.subscription_type == "Controlado" else "Controlado"
+    if alt_modality.lower() in msg_lower_clean:
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            if not session.plan_anclado:
+                target = recommend_plan(session.current_cost, session.subscription_type)
+                if target:
+                    session.plan_anclado = f"{target.plan_id} {session.subscription_type}"
+            result = presentar_fn(criterio=alt_modality, tipo="general")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
     # ── Detección pre-LLM: solicitud de otra recomendación ──────────
     _OTRA_RECOMENDACION = [
         "otra recomendacion", "otra recomendación",
@@ -777,7 +800,6 @@ def run_turn(
         for block in msg.get("content", [])
         if isinstance(block, dict) and "toolUse" in block
     ]
-    print(f"[TOOLS] {_tools_invoked if _tools_invoked else 'ninguna'}")
     if "iniciar_contratacion" in _tools_invoked and session.stage == "CONTRACT":
         # Solo llamar si aún no se ha mostrado el resumen
         if not session.awaiting_contract_confirmation:
