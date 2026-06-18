@@ -19,7 +19,7 @@ from app.config.oci_model import oci_model
 from app.prompts.system_prompt import build_system_prompt
 from app.tools.telcel_tools import make_tools
 from app.state.session import SessionState
-from app.contract.contract_flow import handle_contract_turn
+from app.contract.contract_flow import handle_contract_turn, build_summary_template
 from app.contract.post_sale import build_post_sale_message
 
 DEBUG_WHATSAPP = os.getenv("DEBUG_WHATSAPP", "false").lower() == "true"
@@ -56,6 +56,21 @@ def clean_response(
       ANTES: "Entiendo... ¿Desea activar el plan?"
       DESPUÉS: "Entiendo..."
     """
+    # Eliminar nombres de tools escritos como texto literal
+    text = re.sub(
+        r'\([a-z_]+(?:_[a-z]+)*,\s*(?:tipo|criterio|tema|motivo|plan_id)=[^)]*\)',
+        '',
+        text,
+        flags=re.IGNORECASE
+    )
+    text = re.sub(
+        r'\[[a-z_]+(?:_[a-z]+)*\]',
+        '',
+        text,
+        flags=re.IGNORECASE
+    )
+    text = re.sub(r'\n{3,}', '\n\n', text).strip()
+
     text = _fix_tuteo(text)
     text = _strip_technical_cac_reasons(text)
     if session is not None:
@@ -464,6 +479,30 @@ def run_turn(
         ]
         return _apply_debug(response_text, [], user_message), updated_history
 
+    # ── Detección pre-LLM: pregunta sobre el proceso de activación ───────────
+    _PROCESO_QUESTIONS = [
+        "cual es el proceso",
+        "cuál es el proceso",
+        "como es el proceso",
+        "cómo es el proceso",
+        "que pasos", "qué pasos",
+        "como funciona el cambio",
+        "cómo funciona el cambio",
+        "que tengo que hacer",
+        "qué tengo que hacer",
+    ]
+    if any(q in msg_lower_clean for q in _PROCESO_QUESTIONS):
+        response_text = (
+            f"Es muy sencillo — solo confirme que desea el cambio "
+            f"y nosotros nos encargamos del resto.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
     # ── Detección pre-LLM: pregunta sobre por qué se deriva al CAC/Soporte ───
     _CAC_QUESTIONS = [
         "porque tengo que comunicarme",
@@ -538,6 +577,102 @@ def run_turn(
                 {"role": "assistant", "content": response_text},
             ]
             return _apply_debug(response_text, ["informar_plan_actual"], user_message), updated_history
+
+    # ── Detección pre-LLM: planes más baratos ────────────────────────
+    _MAS_BARATO_QUESTIONS = [
+        "mas barato", "más barato", "mas baratos", "más baratos",
+        "mas economico", "más económico", "mas economicos",
+        "más económicos", "menos costoso", "menos caro",
+        "algo barato", "algo economico", "algo económico",
+        "planes baratos", "opcion barata", "opción barata",
+    ]
+    if any(q in msg_lower_clean for q in _MAS_BARATO_QUESTIONS):
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="mas barato", tipo="mas_barato")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    # ── Detección pre-LLM: planes Ultra ─────────────────────────────
+    _ULTRA_QUESTIONS = [
+        "solo ultra", "solo me interesa ultra", "quiero ultra",
+        "planes ultra", "ver ultra", "mostrar ultra",
+        "ultra disponibles", "que ultras", "qué ultras",
+    ]
+    if any(q in msg_lower_clean for q in _ULTRA_QUESTIONS):
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="general", tipo="ultra")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    # ── Detección pre-LLM: solicitud de otra recomendación ──────────
+    _OTRA_RECOMENDACION = [
+        "otra recomendacion", "otra recomendación",
+        "dame otra", "otra opcion", "otra opción",
+        "recomiendame otro", "recomiéndame otro",
+        "que mas recomiendas", "qué más recomiendas",
+        "cual me recomiendas", "cuál me recomiendas",
+    ]
+    if any(q in msg_lower_clean for q in _OTRA_RECOMENDACION):
+        session.esperando_criterio_recomendacion = True
+        response_text = (
+            f"Con gusto, {session.first_name}. ¿Qué beneficio es más "
+            f"importante para usted?\n\n"
+            f"• 📶 Más GB de datos\n"
+            f"• 💳 Mayor cashback\n"
+            f"• 📱 Apps ilimitadas incluidas\n\n"
+            f"¿Cuál prefiere?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    # ── Detección pre-LLM: respuesta al criterio de recomendación ────
+    if session.esperando_criterio_recomendacion:
+        session.esperando_criterio_recomendacion = False
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            if any(w in msg_lower_clean for w in ["giga", "gb", "datos", "navegacion"]):
+                result = presentar_fn(criterio="mas gb", tipo="mas_caro")
+            elif any(w in msg_lower_clean for w in ["cashback", "dinero", "descuento", "precio"]):
+                result = presentar_fn(criterio="cashback", tipo="libre")
+            elif any(w in msg_lower_clean for w in ["apps", "aplicaciones", "redes", "sociales"]):
+                result = presentar_fn(criterio="apps libres", tipo="libre")
+            else:
+                result = presentar_fn(criterio="general", tipo="mas_caro")
+            # Si el resultado no es texto rígido (ej. tipo="libre" con un solo
+            # plan elegible devuelve JSON para que el LLM lo redacte), dejar
+            # pasar el turno al flujo normal del LLM en vez de interceptar.
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: rechazo corto ─────────────────────────────
     _RECHAZOS_CORTOS = {"no", "no.", "no!", "nope", "nel", "nop", "paso"}
@@ -617,6 +752,13 @@ def run_turn(
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     response_text = re.sub(r'\[\s*\]', '', response_text).strip()
 
+    # Safety net — si el response_text contiene el recuadro interno
+    # de iniciar_contratacion, reemplazarlo con el template correcto
+    if "┌─────" in response_text or "Resumen de activación" in response_text:
+        contract_msg = handle_contract_turn(session, user_message)
+        if contract_msg:
+            response_text = contract_msg
+
     # ── Interceptar iniciar_contratacion — ignorar response_text del LLM ────────
     # Cuando el LLM invocó iniciar_contratacion, su response_text nunca llega
     # al cliente: se reemplaza siempre con el template determinístico y se
@@ -628,8 +770,12 @@ def run_turn(
         if isinstance(block, dict) and "toolUse" in block
     ]
     print(f"[TOOLS] {_tools_invoked if _tools_invoked else 'ninguna'}")
-    if "iniciar_contratacion" in _tools_invoked:
-        contract_msg = handle_contract_turn(session, user_message)
+    if "iniciar_contratacion" in _tools_invoked and session.stage == "CONTRACT":
+        # Solo llamar si aún no se ha mostrado el resumen
+        if not session.awaiting_contract_confirmation:
+            contract_msg = handle_contract_turn(session, user_message)
+        else:
+            contract_msg = build_summary_template(session)
         if contract_msg:
             response_text = contract_msg  # reemplaza COMPLETAMENTE el response_text del LLM
         updated_history = history + [
@@ -676,7 +822,10 @@ def run_turn(
     # Llama 4 Maverick a veces escribe herramientas como texto literal:
     # "[tool_name]" o "tool_name(param='valor')" en lugar de invocarlas.
     # Si se detecta ese patrón, se reintenta una vez con un agente fresco.
-    _TOOL_PATTERN = re.compile(r'(\[[a-z_]+\]|[a-z_]+\([^)]*\))', re.IGNORECASE)
+    _TOOL_PATTERN = re.compile(
+        r'(\[[a-z_]+\]|[a-z_]+\([^)]*\)|\([a-z_]+,\s*\w+=)',
+        re.IGNORECASE
+    )
     if _TOOL_PATTERN.search(response_text):
         agent_retry = create_agent(session, messages=prior_messages)
         with warnings.catch_warnings():

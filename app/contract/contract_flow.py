@@ -21,6 +21,9 @@ _APPS_LIBRES = "Facebook, Instagram, WhatsApp, X, Snapchat, Uber"
 _VAGUE_CONFIRMATIONS = {
     "SI", "SÍ", "SIP", "OK", "DALE", "ORALE", "VA", "CLARO",
     "BUENO", "PERFECTO", "SALE", "VALE", "ESO", "ANDALE",
+    "SI QUIERO", "SÍ QUIERO", "QUIERO", "LO QUIERO",
+    "SI POR FAVOR", "SÍ POR FAVOR", "POR FAVOR",
+    "ADELANTE", "PROCEDE", "PROCEDER",
 }
 
 
