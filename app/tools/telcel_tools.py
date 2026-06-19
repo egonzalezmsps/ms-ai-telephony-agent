@@ -969,10 +969,6 @@ def make_tools(state):
         diferencia_precio = new_price - current_cost
         if abs(diferencia_precio) <= 1.0:
             lineas.append(f"💰 Precio: mantiene su renta de ${current_cost:.0f}/mes.")
-        elif diferencia_precio > 0:
-            lineas.append(f"💰 Precio: ${new_price:.0f}/mes — ${diferencia_precio:.0f} más que su renta actual.")
-        else:
-            lineas.append(f"💰 Precio: ${new_price:.0f}/mes — ${abs(diferencia_precio):.0f} menos que su renta actual.")
 
         if new_cashback > 0 and current_cashback == 0:
             lineas.append(f"💳 Cashback: gana ${new_cashback:.2f}/mes para usar en servicios Telcel.")
