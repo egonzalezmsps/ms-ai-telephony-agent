@@ -113,6 +113,11 @@ spec:
               value: "30"
             - name: API_KEY
               value: "zvDQevdVVrijrczOGUc4fRJ0ZC6h-yHfF7ZZgsK8hZY"
+            # Templates
+            - name: TEMPLATE_ULTRA
+              value: "template_libre"
+            - name: TEMPLATE_LIBRE
+              value: "template_ultra"
           livenessProbe:
             httpGet:
               path: /actuator/health

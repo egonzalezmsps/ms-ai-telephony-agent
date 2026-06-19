@@ -8,6 +8,8 @@ system prompt. El agente solo necesita una herramienta para registrar
 el momento en que el cliente confirma que quiere activar un plan.
 """
 
+
+import logging
 import json
 import re
 import unicodedata
@@ -23,6 +25,8 @@ def quitar_tildes(texto: str) -> str:
         c for c in unicodedata.normalize("NFD", texto)
         if unicodedata.category(c) != "Mn"
     )
+
+logger = logging.getLogger(__name__)
 
 
 def make_tools(state):
@@ -45,8 +49,10 @@ def make_tools(state):
         Args:
             plan_id: ID exacto del plan a contratar. Ej: "Telcel Libre 5"
         """
+        logger.info("[TOOL] iniciar_contratacion plan_id='%s' phone=%s", plan_id, state.phone_number)
         plan = find_plan(plan_id)
         if not plan:
+            logger.warning("[TOOL] plan no encontrado plan_id='%s' phone=%s", plan_id, state.phone_number)
             return (
                 f"No encontré el plan '{plan_id}' en el catálogo. "
                 f"Verifica el nombre con el cliente antes de iniciar la contratación."
@@ -58,6 +64,8 @@ def make_tools(state):
         has_promo = bool(state.has_promotion)
 
         if price < state.current_cost - 1.0:
+            logger.warning("[TOOL] precio_bajo plan_id='%s' precio=%.0f renta_actual=%.0f phone=%s",
+                           plan_id, price, state.current_cost, state.phone_number)
             return (
                 f"⚠️ El plan {plan.plan_id} (${price:.0f}/mes) está por debajo de la renta "
                 f"actual del cliente (${state.current_cost:.0f}/mes). "
@@ -77,6 +85,8 @@ def make_tools(state):
         state.awaiting_otp = False
         state.otp_attempt_count = 0
         state.stage = "CONTRACT"
+        logger.info("[TOOL] CONTRATACIÓN_INICIADA plan='%s' precio=%.0f phone=%s → stage=CONTRACT",
+                    plan.plan_id, price, state.phone_number)
 
         return (
             f"CONTRATACIÓN INICIADA — presenta este resumen al cliente y solicita confirmación explícita:\n\n"

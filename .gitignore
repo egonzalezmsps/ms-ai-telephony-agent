@@ -34,3 +34,9 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+pem/
+
+# Claude docs
+superpowers/
+CLAUDE.md

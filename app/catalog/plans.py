@@ -81,13 +81,13 @@ def eligible_plans(current_cost: float, modality: str) -> List[Plan]:
 
 
 def recommend_plan(current_cost: float, modality: str) -> Optional[Plan]:
-    """Plan similar: el elegible más barato (precio más cercano desde arriba)."""
-    eligible = [p for p in CATALOG
-                if get_price(p, modality) >= current_cost - PRICE_TOLERANCE_MXN
-                and p.family == "Telcel Libre"]
+    """Plan con precio más cercano por encima de la renta actual.
+    En empate de precio, Telcel Libre tiene prioridad sobre Telcel Ultra.
+    """
+    eligible = [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_TOLERANCE_MXN]
     if not eligible:
         return None
-    return min(eligible, key=lambda p: get_price(p, modality))
+    return min(eligible, key=lambda p: (get_price(p, modality), 0 if p.family == "Telcel Libre" else 1))
 
 
 LEGACY_PLANS_GB: dict = {
