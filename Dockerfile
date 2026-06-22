@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY app/ ./app/
 COPY docs/ ./docs/
+COPY campaign_app/ ./campaign_app/
 
 EXPOSE 8080
 

@@ -3,13 +3,16 @@ main.py — Entry point FastAPI para ReniAgent con persistencia PostgreSQL.
 """
 
 import os
+import hmac
+import hashlib
+import json
 import logging
 import threading
 from dotenv import load_dotenv
 
 load_dotenv()  # Debe ejecutarse antes de importar módulos que lean os.environ al cargarse
 
-from fastapi import FastAPI, Header, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, Header, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -362,6 +365,7 @@ def campaign_dispatch(
                 f"costo=${session.current_cost:.0f} tipo={session.subscription_type}"
             )
 
+            wa_id = linea  # fallback si Meta no devuelve wa_id
             try:
                 if template_result:
                     from app.whatsapp.sender import _normalize_phone
@@ -377,7 +381,8 @@ def campaign_dispatch(
                         template_name=template_result["template_name"],
                         params=template_result["params"],
                     )
-                    logger.info(f"DISPATCH | {linea} | respuesta Meta: {wa_resp}")
+                    wa_id = wa_resp.get("contacts", [{}])[0].get("wa_id", linea)
+                    logger.info(f"DISPATCH | {linea} → wa_id={wa_id} | respuesta Meta: {wa_resp}")
                 else:
                     logger.info(f"DISPATCH | {linea} | sin plan elegible, enviando texto plano")
                     send_whatsapp_message(linea, campaign_msg)
@@ -388,8 +393,9 @@ def campaign_dispatch(
                 campaign_crud.mark_fallido(request.campana_id, linea)
                 results["failed"].append({"linea": linea, "reason": str(e)})
 
+            # Guardar sesión bajo el wa_id canónico de Meta para que el webhook la encuentre
             save_session(
-                phone_number=linea,
+                phone_number=wa_id,
                 session_data=session_to_dict(session),
                 history=[{"role": "assistant", "content": campaign_msg}],
             )
@@ -467,8 +473,22 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
 
 
 @app.post("/webhook")
-def whatsapp_webhook(payload: dict, background_tasks: BackgroundTasks):
+async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     """Recibe mensajes de WhatsApp — responde 200 inmediatamente y procesa en segundo plano."""
+    body_bytes = await request.body()
+
+    app_secret = os.getenv("WHATSAPP_APP_SECRET", "")
+    if app_secret:
+        sig_header = request.headers.get("X-Hub-Signature-256", "")
+        expected = "sha256=" + hmac.new(app_secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig_header, expected):
+            raise HTTPException(status_code=403, detail="Invalid signature")
+
+    try:
+        payload = json.loads(body_bytes)
+    except Exception:
+        return {"status": "ok"}
+
     try:
         entry = payload.get("entry", [])
         if not entry:
