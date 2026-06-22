@@ -438,6 +438,32 @@ def run_turn(
         ]
         return _apply_debug(titular_msg, [], user_message), updated_history
 
+    # ── Flujo de contratación — tiene prioridad sobre detecciones pre-LLM ────
+    # Se mueve aquí para que ninguna detección pre-LLM intercepte mensajes como
+    # "ACEPTO cuando comienza el cobro" mientras se espera confirmación.
+    if session.stage == "CONTRACT":
+        contract_msg = handle_contract_turn(session, user_message)
+
+        if contract_msg is not None:
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": contract_msg},
+            ]
+            return _apply_debug(contract_msg, [], user_message), updated_history
+
+        if session.stage == "POST_SALE":
+            post_sale_text = build_post_sale_message(session)
+            session.stage = "END"
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": post_sale_text},
+            ]
+            return _apply_debug(post_sale_text, [], user_message), updated_history
+
+        if session.stage == "PERSUASION":
+            pass  # Cliente canceló — cae al flujo LLM normal abajo
+        # else: pregunta durante espera → continúa al LLM con contexto de contrato
+
     # ── Detección pre-LLM: pregunta sobre criterio de promociones ────────────
     _PROMO_QUESTIONS = [
         "porque a veces", "por qué a veces", "cuando aplica la promo",
@@ -463,7 +489,7 @@ def run_turn(
     # ── Detección pre-LLM: pregunta sobre reglas internas ────────────────────
     msg_lower_clean = re.sub(r'[¿?¡!,\.]', ' ', msg_lower).strip()
     _REGLAS_QUESTIONS = [
-        "reglas", "criterios", "condiciones", "requisitos",
+        "reglas", "criterios", "requisitos",
         "como activas", "cómo activas", "cuando puedes activar",
         "cuándo puedes activar", "que necesitas para activar",
         "qué necesitas para activar", "dame las reglas",
@@ -596,6 +622,12 @@ def run_turn(
         "gigas tiene mi plan", "gb tiene mi plan", "gigas tengo",
         "cuantos datos", "cuántos datos", "datos tengo",
         "cuanto tiene mi plan", "cuánto tiene mi plan",
+        "cual es mi plan", "cuál es mi plan",
+        "que plan tengo", "qué plan tengo",
+        "cuanto pago", "cuánto pago",
+        "que tengo contratado",
+        "qué tengo contratado", "cuanto es mi renta",
+        "cuánto es mi renta",
     ]
     if any(q in msg_lower_clean for q in _GB_PLAN_QUESTIONS):
         from app.tools.telcel_tools import make_tools
@@ -612,6 +644,30 @@ def run_turn(
             ]
             return _apply_debug(response_text, ["informar_plan_actual"], user_message), updated_history
 
+    # ── Detección pre-LLM: cliente pregunta qué gana comparado con su plan actual ──
+    _COMPARAR_BENEFICIOS_QUESTIONS = [
+        "que beneficios gano", "qué beneficios gano",
+        "beneficios nuevos", "que gano comparado",
+        "qué gano comparado", "en que mejora",
+        "en qué mejora", "que cambia respecto",
+        "qué cambia respecto", "que diferencia hay con mi plan",
+        "qué diferencia hay con mi plan",
+    ]
+    if any(q in msg_lower_clean for q in _COMPARAR_BENEFICIOS_QUESTIONS):
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        comparar_fn = next((t for t in tools if t.tool_name == "comparar_planes"), None)
+        if comparar_fn:
+            result = comparar_fn(plan_id="")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
+
     # ── Detección pre-LLM: planes más baratos ────────────────────────
     _MAS_BARATO_QUESTIONS = [
         "mas barato", "más barato", "mas baratos", "más baratos",
@@ -620,7 +676,12 @@ def run_turn(
         "algo barato", "algo economico", "algo económico",
         "planes baratos", "opcion barata", "opción barata",
     ]
-    if any(q in msg_lower_clean for q in _MAS_BARATO_QUESTIONS):
+    _QUEJA_KEYWORDS = [
+        "quejar", "queja", "descuento", "resuelvelo", "resolvelo",
+        "mal servicio", "no me ayudas", "no sirve", "exijo",
+    ]
+    if any(q in msg_lower_clean for q in _MAS_BARATO_QUESTIONS) and \
+       not any(k in msg_lower_clean for k in _QUEJA_KEYWORDS):
         from app.tools.telcel_tools import make_tools
         tools = make_tools(session)
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
@@ -803,6 +864,14 @@ def run_turn(
         "Verificación de seguridad",
         "OTP",
         "(OTP)",
+        "invocaré iniciar_contratacion",
+        "invocar iniciar_contratacion",
+        "flujo completo de contratación",
+        "flujo de contratación",
+        "siga el flujo",
+        "necesito seguir el proceso",
+        "el proceso establecido",
+        "recibirá las instrucciones para completar",
     ]
     if any(t in response_text for t in _INTERNAL_LEAK_TERMS):
         plan = session.plan_anclado if session.plan_anclado else "el plan"
@@ -875,6 +944,8 @@ def run_turn(
     if not response_text or response_text.strip("() \n") == "":
         response_text = (
             "Solo puedo ayudarle con información sobre planes Telcel. "
+            "Para consultas adicionales puede comunicarse con Soporte al 800 220 9518 "
+            "o acudir a un Centro de Atención a Clientes.\n\n"
             "¿Le gustaría que continuemos?"
         )
 

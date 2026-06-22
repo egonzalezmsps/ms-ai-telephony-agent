@@ -64,8 +64,8 @@ def build_summary_template(session) -> str:
         f"🎬 Claro Video\n"
         f"💾 Claro Drive (20 GB)\n\n"
         f"⚠️ Este cambio es definitivo y no podrá revertirse al plan anterior.\n\n"
-        f"Para confirmar responda ACEPTO o CONFIRMO.\n"
-        f"Para cancelar responda NO."
+        f"Escriba únicamente la palabra *ACEPTO* o *CONFIRMO* para confirmar.\n"
+        f"Para cancelar escriba *NO*."
     )
 
 

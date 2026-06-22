@@ -131,11 +131,18 @@ def make_tools(state):
         """
         plan_name = state.plan_anclado or "el plan recomendado"
 
+        plan_obj = next(
+            (p for p in CATALOG if f"{p.plan_id} {state.subscription_type}" == state.plan_anclado),
+            None,
+        )
+        es_ultra = plan_obj and plan_obj.family == "Telcel Ultra"
+        beneficios_extra = "más GB" if es_ultra else "más GB, cashback mensual y apps ilimitadas"
+
         RESPUESTAS = {
             "plan": (
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                 f"Le recomendamos el {plan_name} porque ofrece más beneficios "
-                f"para su perfil: más GB, cashback mensual y apps ilimitadas incluidas.\n\n"
+                f"para su perfil: {beneficios_extra} incluidas.\n\n"
                 f"¿Le gustaría activar el *{state.plan_anclado}*?"
             ),
             "promocion": (
@@ -722,6 +729,15 @@ def make_tools(state):
         NO la uses cuando el cliente busca planes similares a su precio actual.
         Para eso usar presentar_planes con tipo="mismo_precio".
 
+        NO la uses cuando el cliente pregunta qué gana o qué beneficios obtiene
+        comparado con su plan actual. Para esos casos usa comparar_planes:
+        - "¿qué beneficios nuevos gano?"
+        - "¿qué beneficios gano comparado con mi plan actual?"
+        - "¿qué gano comparado con lo que tengo?"
+        - "¿en qué mejora respecto a mi plan?"
+        - "¿qué cambia respecto a mi plan actual?"
+        - "¿qué diferencia hay con mi plan actual?"
+
         NO la uses cuando el cliente pide un plan específico por nombre o expresa preferencia por uno:
         - "quiero el libre 1"
         - "dame el libre 4"
@@ -904,6 +920,12 @@ def make_tools(state):
         - "en qué mejora?"
         - "qué tiene de mejor?"
         - "por qué es mejor ese plan?"
+        - "qué beneficios nuevos gano?"
+        - "qué beneficios gano comparado con mi plan actual?"
+        - "qué gano comparado con lo que tengo?"
+        - "en qué mejora respecto a mi plan?"
+        - "qué cambia respecto a mi plan actual?"
+        - "qué diferencia hay con mi plan actual?"
         - "me gusta el libre 1"
         - "me interesa el libre 1"
         - "me llama la atención el ultra 5"

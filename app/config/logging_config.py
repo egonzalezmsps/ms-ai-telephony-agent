@@ -33,3 +33,5 @@ def setup_logging():
     root_logger.setLevel(logging.INFO)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
+
+    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
