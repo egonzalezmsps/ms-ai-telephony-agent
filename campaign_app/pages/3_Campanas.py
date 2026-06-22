@@ -55,7 +55,7 @@ st.set_page_config(page_title="Campañas", page_icon="📢", layout="wide")
 st.title("📢 Campañas")
 
 API_BASE = os.environ.get("CAMPAIGN_API_BASE", "http://localhost:8000")
-API_KEY = os.environ.get("API_KEY", "")
+API_KEY = os.environ.get("CAMPAIGN_API_KEY") or os.environ.get("API_KEY", "")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
