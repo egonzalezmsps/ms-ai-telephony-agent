@@ -416,7 +416,13 @@ def make_tools(state):
         elif tipo == "mas_barato":
             cheaper = [p for p in CATALOG if get_price(p, modality) < current_cost - 1.0]
             if not cheaper:
-                return no_plans_found()
+                return (
+                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"Para activar un plan con precio menor a su renta actual, "
+                    f"puede comunicarse con Soporte al 800 220 9518 "
+                    f"o acudir a un Centro de Atención a Clientes.\n\n"
+                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                )
             # más cercanos a la renta actual primero (descendente por precio)
             planes_mostrar = sorted(cheaper, key=lambda p: get_price(p, modality), reverse=True)[:3]
 
