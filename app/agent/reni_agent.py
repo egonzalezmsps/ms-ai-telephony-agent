@@ -701,6 +701,11 @@ def run_turn(
         "solo ultra", "solo me interesa ultra", "quiero ultra",
         "planes ultra", "ver ultra", "mostrar ultra",
         "ultra disponibles", "que ultras", "qué ultras",
+        "opciones en telcel ultra", "opciones para mi en telcel ultra",
+        "opciones ultra", "que opciones ultra", "qué opciones ultra",
+        "cuales son los ultra", "cuáles son los ultra",
+        "que ultra hay", "qué ultra hay",
+        "ver opciones ultra", "mostrame los ultra", "muéstrame los ultra",
     ]
     if any(q in msg_lower_clean for q in _ULTRA_QUESTIONS):
         from app.tools.telcel_tools import make_tools
