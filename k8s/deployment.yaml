@@ -118,9 +118,6 @@ spec:
               value: "template_libre"
             - name: TEMPLATE_LIBRE
               value: "template_ultra"
-            # WhatsApp webhook security
-            - name: WHATSAPP_APP_SECRET
-              value: "f6511b800742ca9e4389d749b54a1293"
           livenessProbe:
             httpGet:
               path: /actuator/health
