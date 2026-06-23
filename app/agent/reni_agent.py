@@ -668,6 +668,28 @@ def run_turn(
             ]
             return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
 
+    # ── Detección pre-LLM: cliente pregunta por GB específicos ───────────────
+    _GB_ESPECIFICO_MATCH = re.search(r'(\d+)\s*gb', msg_lower_clean)
+    if _GB_ESPECIFICO_MATCH and any(w in msg_lower_clean for w in [
+        "plan con", "planes con", "tienes con", "hay con",
+        "existe con", "existen con", "tengo con", "quiero con",
+        "busco con", "de", "gb?", "gigas?",
+    ]):
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            criterio_gb = _GB_ESPECIFICO_MATCH.group(0)
+            result = presentar_fn(criterio=criterio_gb, tipo="especifico")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
     # ── Detección pre-LLM: planes más baratos ────────────────────────
     _MAS_BARATO_QUESTIONS = [
         "mas barato", "más barato", "mas baratos", "más baratos",
@@ -687,6 +709,30 @@ def run_turn(
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
             result = presentar_fn(criterio="mas barato", tipo="mas_barato")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    # ── Detección pre-LLM: planes más caros ──────────────────────────
+    _MAS_CARO_QUESTIONS = [
+        "mas caro", "más caro", "mas caros", "más caros",
+        "mas premium", "más premium", "plan superior",
+        "algo mas caro", "algo más caro",
+        "plan mas caro", "plan más caro",
+        "opciones mas caras", "opciones más caras",
+        "algo mayor", "plan mayor",
+    ]
+    if any(q in msg_lower_clean for q in _MAS_CARO_QUESTIONS):
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="mas caro", tipo="mas_caro")
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
             )

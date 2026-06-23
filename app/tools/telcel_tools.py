@@ -242,11 +242,33 @@ def make_tools(state):
                                 "un plan libre"
                                 → tipo="libre", criterio="general"
 
+                                NUNCA uses tipo="libre" cuando el cliente menciona
+                                un precio específico junto con "libre":
+                                "plan libre de 700 pesos" → tipo="especifico", criterio="700"
+                                "libre de $500" → tipo="especifico", criterio="500"
+                                Para esos casos usa tipo="especifico".
+
                                 NUNCA uses tipo="general" cuando el cliente
                                 menciona "libre" — siempre usa tipo="libre".
                 "especifico"  — pregunta por un plan concreto (por nombre, precio o GB):
                                 - "¿tienes datos ilimitados?" → criterio="ilimitados", tipo="especifico"
                                 - "¿hay plan ilimitado?" → criterio="ilimitados", tipo="especifico"
+                                - "plan de 700 pesos" → criterio="700", tipo="especifico"
+                                - "algo de $700" → criterio="700", tipo="especifico"
+                                - "plan aproximadamente de $700" → criterio="700", tipo="especifico"
+                                - "plan libre de 700 pesos" → criterio="700", tipo="especifico"
+                                - "algo libre de $700" → criterio="700", tipo="especifico"
+                                - "un libre de 700" → criterio="700", tipo="especifico"
+                                - "plan ultra de 500 pesos" → criterio="500", tipo="especifico"
+
+                                REGLA CRÍTICA: cuando el cliente menciona una familia
+                                (libre, ultra) junto con un precio, SIEMPRE usa
+                                tipo="especifico" con el precio como criterio.
+                                NUNCA uses tipo="libre" o tipo="ultra" cuando hay
+                                un precio específico en el mensaje.
+
+                                NUNCA uses tipo="rango_precios" — no existe.
+                                Para búsquedas por precio aproximado usa tipo="especifico".
 
                                 Úsala también cuando el cliente insista en un plan específico
                                 que ya se mostró antes:
@@ -489,7 +511,8 @@ def make_tools(state):
                 price = get_price(p, modality)
                 cashback = get_cashback(p, modality)
                 cb_str = f" · Cashback ${cashback:.2f}/mes" if cashback > 0 else ""
-                lista_planes += f"• *{p.plan_id} {modality}*: ${price:.0f}/mes · {p.gb_base:g} GB{cb_str}\n"
+                gb_str = "Ilimitados" if p.is_unlimited else f"{p.gb_base:g} GB"
+                lista_planes += f"• *{p.plan_id} {modality}*: ${price:.0f}/mes · {gb_str}{cb_str}\n"
             return (
                 f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                 f"Opciones más económicas en modalidad {modality}:\n\n"
@@ -580,6 +603,10 @@ def make_tools(state):
             )
 
         elif tipo == "libre":
+            # Si el criterio es un precio numérico, redirigir a especifico
+            _precio_en_criterio = re.search(r'^\d{3,4}$', criterio.strip())
+            if _precio_en_criterio:
+                return presentar_planes(criterio=criterio, tipo="especifico")
             planes = [p for p in eligible if p.family == "Telcel Libre"]
             if not planes:
                 return no_plans_found()
@@ -698,6 +725,11 @@ def make_tools(state):
                 state.plan_anclado = f"{planes[0].plan_id} {modality}"
                 return format_one(planes[0])
             return format_many(planes)
+
+        elif criterio not in ("", "general") and re.search(r'^\d+$', criterio.strip()):
+            # El LLM pasó un precio numérico como criterio con cualquier tipo —
+            # redirigir siempre a especifico para buscar el plan más cercano
+            return presentar_planes(criterio=criterio, tipo="especifico")
 
         else:  # "general"
             if eligible:
