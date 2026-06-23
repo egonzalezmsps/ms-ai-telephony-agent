@@ -37,6 +37,7 @@ def _apply_debug(response_text: str, tools_invoked: list = None,
 # El mensaje viene de strands.event_loop.streaming como logger.warning() y no debe
 # llegar al cliente. Mantenemos ERROR y CRITICAL para fallos reales.
 logging.getLogger("strands").setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
 def clean_response(
@@ -71,6 +72,8 @@ def clean_response(
     )
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     text = re.sub(r'\[\s*\]', '', text).strip()
+    # Eliminar valores monetarios mal formateados (ej. ".85/mes" sin número antes del punto)
+    text = re.sub(r'(?<!\d)\.\d+/mes', '', text)
     text = re.sub(r'\n{3,}', '\n\n', text).strip()
 
     text = _fix_tuteo(text)
@@ -652,6 +655,13 @@ def run_turn(
         "en qué mejora", "que cambia respecto",
         "qué cambia respecto", "que diferencia hay con mi plan",
         "qué diferencia hay con mi plan",
+        "cuanto mas pagaria", "cuánto más pagaría",
+        "cuanto pagaria", "cuánto pagaría",
+        "cuanto cuesta la diferencia", "cuánto cuesta la diferencia",
+        "cuanto mas es", "cuánto más es",
+        "cuanto sube", "cuánto sube",
+        "cuanto aumenta", "cuánto aumenta",
+        "diferencia de precio", "diferencia en precio",
     ]
     if any(q in msg_lower_clean for q in _COMPARAR_BENEFICIOS_QUESTIONS):
         from app.tools.telcel_tools import make_tools
@@ -669,11 +679,14 @@ def run_turn(
             return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: cliente pregunta por GB específicos ───────────────
-    _GB_ESPECIFICO_MATCH = re.search(r'(\d+)\s*gb', msg_lower_clean)
+    _GB_ESPECIFICO_MATCH = re.search(r'(\d+)\s*(?:gb|gigas?)', msg_lower_clean)
     if _GB_ESPECIFICO_MATCH and any(w in msg_lower_clean for w in [
         "plan con", "planes con", "tienes con", "hay con",
         "existe con", "existen con", "tengo con", "quiero con",
         "busco con", "de", "gb?", "gigas?",
+        "que sea", "que tenga", "con ese",
+        "libre de", "ultra de", "de 40", "de 20", "de 30",
+        "me interesa", "quiero uno", "busco uno",
     ]):
         from app.tools.telcel_tools import make_tools
         tools = make_tools(session)
@@ -755,6 +768,9 @@ def run_turn(
         "sin redes sociales", "sin apps", "sin aplicaciones sociales",
         "no quiero redes sociales", "plan sin redes",
         "sin facebook", "sin instagram", "sin aplicaciones",
+        "y ultras", "y los ultras", "tienen ultras",
+        "tendrás ultras", "tendras ultras", "y ultra",
+        "también ultra", "tambien ultra",
     ]
     if any(q in msg_lower_clean for q in _ULTRA_QUESTIONS):
         from app.tools.telcel_tools import make_tools
@@ -936,6 +952,15 @@ def run_turn(
     response_text = response_text.strip()
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     response_text = re.sub(r'\[\s*\]', '', response_text).strip()
+
+    # Detectar y loggear terminaciones anómalas del modelo
+    stop_reason = getattr(response, "stop_reason", None)
+    if stop_reason == "max_tokens":
+        logger.warning("[TRUNCATED] respuesta cortada por max_tokens phone=%s msg='%s'",
+                       session.phone_number, user_message[:60])
+    elif stop_reason not in ("end_turn", "tool_use", None):
+        logger.warning("[STOP_REASON] terminación inesperada reason=%s phone=%s msg='%s'",
+                       stop_reason, session.phone_number, user_message[:60])
 
     # Safety net — si el LLM revela lógica interna del proceso de verificación
     # reemplazar la respuesta completa con el mensaje programado de proceso

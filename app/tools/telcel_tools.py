@@ -654,7 +654,7 @@ def make_tools(state):
                         )
                     return no_plans_found()
                 # Búsqueda por GB
-                gb_match = re.search(r'(\d+)\s*gb', criterio.lower())
+                gb_match = re.search(r'(\d+)\s*(?:gb|gigas?)', criterio.lower())
                 if gb_match:
                     target_gb = float(gb_match.group(1))
                     candidates = sorted(CATALOG, key=lambda p: abs(p.gb_base - target_gb))
