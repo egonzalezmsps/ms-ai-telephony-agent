@@ -37,7 +37,12 @@ def make_tools(state):
         """
         Inicia el proceso de contratación cuando el cliente confirma que quiere
         activar un plan. Úsala SOLO cuando el cliente haya dado una confirmación
-        clara de querer activar (acepto, sí quiero, actívalo, confirmo).
+        clara de querer activar (acepto, sí quiero, actívalo, confirmo,
+        acepto el cambio, acepto el plan, acepto la migración, de acuerdo,
+        estoy de acuerdo, quiero proceder, proceder con el cambio,
+        adelante, dale, hazlo, que siga, continúa).
+        NUNCA respondas con texto informativo cuando el cliente confirma —
+        invoca esta herramienta directamente.
 
         Úsala también cuando el cliente redirija a otro plan:
         - "no, mejor el libre que me recomendaste"
@@ -366,8 +371,9 @@ def make_tools(state):
             plan_name = state.plan_anclado or "el plan recomendado"
             return (
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                f"No encontré planes que cumplan ese criterio en modalidad {modality}.\n"
-                f"Le recomiendo el *{plan_name}* que ya le presentamos."
+                f"En este momento no contamos con planes que se ajusten a ese criterio "
+                f"en modalidad {modality}.\n\n"
+                f"¿Le gustaría activar el *{plan_name}*?"
             )
 
         if tipo == "apps":
@@ -418,9 +424,7 @@ def make_tools(state):
             if not cheaper:
                 return (
                     f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                    f"Para activar un plan con precio menor a su renta actual, "
-                    f"puede comunicarse con Soporte al 800 220 9518 "
-                    f"o acudir a un Centro de Atención a Clientes.\n\n"
+                    f"No contamos con planes de menor precio en modalidad {modality}.\n\n"
                     f"¿Le gustaría activar el *{state.plan_anclado}*?"
                 )
             # más cercanos a la renta actual primero (descendente por precio)
