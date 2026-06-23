@@ -116,6 +116,14 @@ app = FastAPI(
 def startup():
     """Crea las tablas en PostgreSQL al arrancar."""
     init_db()
+    if _CAMPAIGN_DB_AVAILABLE:
+        try:
+            from campaign_app.db.models import Base as CampaignBase
+            from campaign_app.db.database import get_engine
+            CampaignBase.metadata.create_all(get_engine())
+            logger.info("Tablas de campaña listas")
+        except Exception as e:
+            logger.warning(f"No se pudieron crear tablas de campaña: {e}")
     logger.info("ReniAgent iniciado — tablas PostgreSQL listas")
 
 

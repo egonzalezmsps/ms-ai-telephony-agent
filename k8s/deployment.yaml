@@ -59,7 +59,7 @@ spec:
               value: "600"
             # PostgreSQL
             - name: DATABASE_URL
-              value: "postgresql://postgres:enoc@207.211.162.169:5432/reni_agent"
+              value: "postgresql://pgadmin:Or4#D3Sytem-@172.16.5.109:5432/reni_agent"
             - name: SESSION_TTL_HOURS
               value: "24"
             # Redis
