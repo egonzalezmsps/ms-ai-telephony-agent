@@ -45,7 +45,6 @@ def send_whatsapp_message(to: str, message: str) -> dict:
 
 _TEMPLATE_LANGUAGE = os.environ.get("TEMPLATE_LANGUAGE", "es_MX")
 
-
 def send_whatsapp_template(
     to: str,
     template_name: str,
@@ -59,6 +58,11 @@ def send_whatsapp_template(
     """
     body_parameters = [{"type": "text", "text": str(p)} for p in params]
 
+    components = [
+        {"type": "header", "parameters": []},
+        {"type": "body", "parameters": body_parameters},
+    ]
+
     payload = {
         "messaging_product": "whatsapp",
         "to": _normalize_phone(to),
@@ -66,12 +70,7 @@ def send_whatsapp_template(
         "template": {
             "name": template_name,
             "language": {"code": language_code},
-            "components": [
-                {
-                    "type": "body",
-                    "parameters": body_parameters,
-                }
-            ],
+            "components": components,
         },
     }
 
