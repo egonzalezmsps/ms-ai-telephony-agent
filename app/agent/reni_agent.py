@@ -752,6 +752,9 @@ def run_turn(
         "cuales son los ultra", "cuáles son los ultra",
         "que ultra hay", "qué ultra hay",
         "ver opciones ultra", "mostrame los ultra", "muéstrame los ultra",
+        "sin redes sociales", "sin apps", "sin aplicaciones sociales",
+        "no quiero redes sociales", "plan sin redes",
+        "sin facebook", "sin instagram", "sin aplicaciones",
     ]
     if any(q in msg_lower_clean for q in _ULTRA_QUESTIONS):
         from app.tools.telcel_tools import make_tools
@@ -759,6 +762,31 @@ def run_turn(
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
             result = presentar_fn(criterio="general", tipo="ultra")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    # ── Detección pre-LLM: planes Libre ──────────────────────────────
+    _LIBRE_QUESTIONS = [
+        "planes libres", "ver libres", "mostrar libres",
+        "quisiera ver los planes libres", "planes telcel libre",
+        "opciones libre", "que libres hay", "qué libres hay",
+        "cuales son los libres", "cuáles son los libres",
+        "ver opciones libre", "mostrame los libres",
+        "muéstrame los libres", "opciones en telcel libre",
+        "familia libre",
+    ]
+    if any(q in msg_lower_clean for q in _LIBRE_QUESTIONS):
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="general", tipo="libre")
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
             )
