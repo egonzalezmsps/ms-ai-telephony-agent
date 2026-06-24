@@ -72,8 +72,10 @@ def clean_response(
     )
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     text = re.sub(r'\[\s*\]', '', text).strip()
-    # Eliminar valores mal formateados sin número antes del punto (ej. ".5 GB", ".85/mes")
-    text = re.sub(r'(?<!\d)\.\d+(?=/mes|\s*GB)', '', text)
+    # Eliminar líneas completas con valores mal formateados (ej. ".45/mes", ".5 GB")
+    lines = text.split('\n')
+    lines = [l for l in lines if not re.search(r'(?<!\d)\.\d+(?:/mes|\s*GB)', l)]
+    text = '\n'.join(lines)
     text = re.sub(r'\n{3,}', '\n\n', text).strip()
 
     text = _fix_tuteo(text)
@@ -673,6 +675,12 @@ def run_turn(
         "es mas caro", "es más caro",
         "sube el precio", "sube mi renta",
         "aumenta el precio", "aumenta mi renta",
+        "confirmame renta", "confírmame renta",
+        "renta actual y nueva", "renta nueva y actual",
+        "diferencia exacta", "diferencia de renta",
+        "cuanto es la diferencia", "cuánto es la diferencia",
+        "cual es la diferencia", "cuál es la diferencia",
+        "renta actual renta nueva",
     ]
     if any(q in msg_lower_clean for q in _COMPARAR_BENEFICIOS_QUESTIONS):
         from app.tools.telcel_tools import make_tools
