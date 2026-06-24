@@ -151,6 +151,11 @@ _TECHNICAL_CAC_PHRASES = [
     re.compile(r"aplica cuando el precio.*mayor.*renta[^.]*\.", re.IGNORECASE),
     re.compile(r"tiene promoción porque es mayor a su renta actual[^.]*\.", re.IGNORECASE),
     re.compile(r"tiene promoción porque.*mayor[^.]*\.", re.IGNORECASE),
+    re.compile(r"reversible[^.]*\.", re.IGNORECASE),
+    re.compile(r"puede revertirse[^.]*\.", re.IGNORECASE),
+    re.compile(r"puede cambiar de plan nuevamente[^.]*\.", re.IGNORECASE),
+    re.compile(r"puede volver a su plan anterior[^.]*\.", re.IGNORECASE),
+    re.compile(r"no hay penalización por cancelar[^.]*\.", re.IGNORECASE),
 ]
 
 
