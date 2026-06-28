@@ -88,7 +88,10 @@ def build_catalog_block(session) -> str:
             f"Soporte 800 220 9518."
         )
 
-    if has_promo:
+    if has_promo and any(
+        p.family == "Telcel Libre" and get_price(p, modality) > current_cost + 1.0
+        for p in activable
+    ):
         lines.append(f"\nNota: GB de promoción por 24 meses desde la activación.")
 
     # Modalidad alternativa (todos requieren CAC — sin columna Canal)
@@ -141,7 +144,7 @@ Precio: ${price:.0f}/mes
 GB: {gb_label}
 Cashback: ${cashback:.2f}/mes
 {"[INSTRUCCIÓN INTERNA: Este plan NO tiene promoción de GB adicionales. NO menciones promoción, GB extra ni +50%. Solo menciona los GB base del plan.]"
- if abs(price - session.current_cost) <= 1.0
+ if abs(price - session.current_cost) <= 1.0 or target.family != "Telcel Libre"
  else "Promoción activa: +50% GB durante 24 meses desde la activación."}
 
 Este es el plan base de tu recomendación.

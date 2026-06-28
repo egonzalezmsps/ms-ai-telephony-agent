@@ -484,12 +484,27 @@ def run_turn(
     if any(q in msg_lower for q in _PROMO_QUESTIONS):
         target = recommend_plan(session.current_cost, session.subscription_type)
         plan_name = f"{target.plan_id} {session.subscription_type}" if target else "el plan recomendado"
-        response_text = (
-            f"Las promociones son beneficios que Telcel activa en planes "
-            f"seleccionados para darles más valor. "
-            f"El {plan_name} sí incluye esta promoción.\n\n"
-            f"¿Le gustaría activar el {plan_name}?"
-        )
+        if target:
+            plan_price = get_price(target, session.subscription_type)
+            tiene_promo_gb = (
+                session.has_promotion
+                and target.family == "Telcel Libre"
+                and plan_price > session.current_cost + 1.0
+            )
+        else:
+            tiene_promo_gb = False
+        if tiene_promo_gb:
+            msg_promo = (
+                f"Las promociones son beneficios que Telcel activa en planes "
+                f"seleccionados para darles más valor. "
+                f"El {plan_name} sí incluye esta promoción."
+            )
+        else:
+            msg_promo = (
+                f"El {plan_name} incluye más GB y beneficios "
+                f"para su línea sin costo adicional."
+            )
+        response_text = f"{msg_promo}\n\n¿Le gustaría activar el {plan_name}?"
         updated_history = history + [
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
@@ -713,14 +728,15 @@ def run_turn(
         if presentar_fn:
             criterio_gb = _GB_ESPECIFICO_MATCH.group(0)
             result = presentar_fn(criterio=criterio_gb, tipo="especifico")
-            response_text = result.replace(
-                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-            )
-            updated_history = history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response_text},
-            ]
-            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: planes más baratos ────────────────────────
     _MAS_BARATO_QUESTIONS = [
@@ -729,6 +745,10 @@ def run_turn(
         "más económicos", "menos costoso", "menos caro",
         "algo barato", "algo economico", "algo económico",
         "planes baratos", "opcion barata", "opción barata",
+        "menor renta", "renta menor", "renta mas baja", "renta más baja",
+        "plan de menor renta", "plan con menor renta",
+        "reducir mi renta", "bajar mi renta", "bajar la renta",
+        "pagar menos", "pagar menor",
     ]
     _QUEJA_KEYWORDS = [
         "quejar", "queja", "descuento", "resuelvelo", "resolvelo",
@@ -741,14 +761,15 @@ def run_turn(
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
             result = presentar_fn(criterio="mas barato", tipo="mas_barato")
-            response_text = result.replace(
-                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-            )
-            updated_history = history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response_text},
-            ]
-            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: planes más caros ──────────────────────────
     _MAS_CARO_QUESTIONS = [
@@ -765,14 +786,15 @@ def run_turn(
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
             result = presentar_fn(criterio="mas caro", tipo="mas_caro")
-            response_text = result.replace(
-                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-            )
-            updated_history = history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response_text},
-            ]
-            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: planes Ultra ─────────────────────────────
     _ULTRA_QUESTIONS = [
@@ -797,14 +819,15 @@ def run_turn(
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
             result = presentar_fn(criterio="general", tipo="ultra")
-            response_text = result.replace(
-                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-            )
-            updated_history = history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response_text},
-            ]
-            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: planes Libre ──────────────────────────────
     _LIBRE_QUESTIONS = [
@@ -822,14 +845,42 @@ def run_turn(
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
             result = presentar_fn(criterio="general", tipo="libre")
-            response_text = result.replace(
-                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-            )
-            updated_history = history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response_text},
-            ]
-            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    # ── Detección pre-LLM: planes con más GB ─────────────────────────
+    _MAS_GB_QUESTIONS = [
+        "mas gigas", "más gigas",
+        "mas gb", "más gb",
+        "mas datos", "más datos",
+        "planes con mas gigas", "planes con más gigas",
+        "planes con mas gb", "planes con más gb",
+        "planes con mas datos", "planes con más datos",
+        "mas capacidad", "más capacidad",
+        "mayor capacidad",
+    ]
+    if any(q in msg_lower_clean for q in _MAS_GB_QUESTIONS):
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="general", tipo="mas_gb")
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: cliente pide modalidad diferente ─────────
     alt_modality = "Abierto" if session.subscription_type == "Controlado" else "Controlado"
@@ -839,14 +890,15 @@ def run_turn(
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
             result = presentar_fn(criterio=alt_modality, tipo="general")
-            response_text = result.replace(
-                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-            )
-            updated_history = history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response_text},
-            ]
-            return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: solicitud de otra recomendación ──────────
     _OTRA_RECOMENDACION = [
@@ -974,6 +1026,12 @@ def run_turn(
 
     # Detectar y loggear terminaciones anómalas del modelo
     stop_reason = getattr(response, "stop_reason", None)
+    usage = getattr(response, "usage", None)
+    if usage:
+        input_tokens = getattr(usage, "input_tokens", "?")
+        output_tokens = getattr(usage, "output_tokens", "?")
+        logger.info("[TOKENS] input=%s output=%s phone=%s",
+                    input_tokens, output_tokens, session.phone_number)
     if stop_reason == "max_tokens":
         logger.warning("[TRUNCATED] respuesta cortada por max_tokens phone=%s msg='%s'",
                        session.phone_number, user_message[:60])
