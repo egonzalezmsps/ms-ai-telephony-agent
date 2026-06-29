@@ -236,7 +236,13 @@ def _filter_ineligible_plans(text: str, user_message: str, session) -> str:
     """
     if session is None:
         return text
-    if _CHEAPER_REQUEST_PATTERN.search(user_message):
+    _CHEAPER_WORDS = [
+        "barato", "económico", "economico", "menor costo", "menor precio",
+        "accesible", "más barato", "mas barato", "menos caro",
+    ]
+    if _CHEAPER_REQUEST_PATTERN.search(user_message) or any(
+        w in user_message.lower() for w in _CHEAPER_WORDS
+    ):
         return text  # cliente pidió explícitamente ver opciones más baratas
 
     current_cost = session.current_cost
@@ -753,6 +759,11 @@ def run_turn(
         "plan de menor renta", "plan con menor renta",
         "reducir mi renta", "bajar mi renta", "bajar la renta",
         "pagar menos", "pagar menor",
+        "menor costo", "de menor costo", "planes de menor costo",
+        "costo menor", "menor precio", "de menor precio",
+        "planes de menor precio", "precio menor",
+        "mas accesible", "más accesible",
+        "opcion accesible", "opción accesible",
     ]
     _QUEJA_KEYWORDS = [
         "quejar", "queja", "descuento", "resuelvelo", "resolvelo",
