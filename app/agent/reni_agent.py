@@ -471,7 +471,20 @@ def run_turn(
             return _apply_debug(post_sale_text, [], user_message), updated_history
 
         if session.stage == "PERSUASION":
-            pass  # Cliente canceló — cae al flujo LLM normal abajo
+            # Cliente canceló — respuesta empática sin LLM
+            from app.tools.telcel_tools import make_tools
+            tools = make_tools(session)
+            manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
+            if manejar_fn:
+                result = manejar_fn(motivo="")
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
         # else: pregunta durante espera → continúa al LLM con contexto de contrato
 
     # ── Detección pre-LLM: pregunta sobre criterio de promociones ────────────
