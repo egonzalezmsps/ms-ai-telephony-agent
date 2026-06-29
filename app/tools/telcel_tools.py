@@ -757,18 +757,17 @@ def make_tools(state):
             return presentar_planes(criterio=criterio, tipo="especifico")
 
         elif tipo == "mas_gb":
-            # Comparar contra GB del plan anclado (el que se le está ofreciendo),
-            # no contra el plan legacy del cliente
+            # Comparar contra GB del plan anclado (el que se le está ofreciendo)
             anclado_id = state.plan_anclado.replace(f" {modality}", "").strip() if state.plan_anclado else None
             anclado_obj = find_plan(anclado_id) if anclado_id else None
             if anclado_obj and not anclado_obj.is_unlimited:
                 current_gb = anclado_obj.gb_base
             else:
                 current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name) or 0
+            # Ordenar ascendente por GB — mostrar los más cercanos primero
             planes = sorted(
                 [p for p in eligible if p.is_unlimited or p.gb_base > current_gb],
-                key=lambda p: (0 if p.is_unlimited else p.gb_base),
-                reverse=True
+                key=lambda p: (999999 if p.is_unlimited else p.gb_base),
             )
             if not planes:
                 return no_plans_found()
