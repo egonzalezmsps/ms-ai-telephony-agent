@@ -1057,6 +1057,16 @@ def run_turn(
             f"¿Le gustaría activar el *{plan}*?"
         )
 
+    # Safety net — si estamos esperando confirmación del contrato,
+    # siempre recordar al cliente que debe responder
+    if session.awaiting_contract_confirmation and response_text:
+        if not any(w in response_text.upper() for w in ["ACEPTO", "CONFIRMO"]):
+            response_text = (
+                response_text.rstrip() +
+                "\n\nPara continuar, presione *Sí, activar* para confirmar, "
+                "o *No, cancelar* para cancelar y continuar con la conversación."
+            )
+
     # Safety net — si el response_text contiene el recuadro interno
     # de iniciar_contratacion, reemplazarlo con el template correcto
     if "┌─────" in response_text or "Resumen de activación" in response_text:

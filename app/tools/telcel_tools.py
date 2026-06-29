@@ -494,7 +494,9 @@ def make_tools(state):
 
                 if current_gb and not anclado_obj.is_unlimited:
                     diferencia_vs_actual = rec_gb - current_gb
-                    if abs(rec_price - current_cost) <= 1.0:
+                    if diferencia_vs_actual <= 0:
+                        cierre = f"¿Le gustaría activar el *{plan_rec}*?"
+                    elif abs(rec_price - current_cost) <= 1.0:
                         cierre = (
                             f"Pagando su renta actual de ${current_cost:.0f}/mes, "
                             f"con el *{plan_rec}* que le estamos ofreciendo obtendría {rec_gb:g} GB — "

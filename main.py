@@ -453,8 +453,8 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                     to=phone_number,
                     body_text=response_text,
                     buttons=[
-                        {"id": "ACEPTO", "title": "✅ Acepto"},
-                        {"id": "NO", "title": "❌ Cancelar"},
+                        {"id": "ACEPTO", "title": "✅ Sí, activar"},
+                        {"id": "NO", "title": "❌ No, cancelar"},
                     ]
                 )
             else:
