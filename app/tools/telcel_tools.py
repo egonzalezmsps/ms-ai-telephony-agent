@@ -650,11 +650,13 @@ def make_tools(state):
         elif tipo == "especifico":
             plan = find_plan(criterio)
             if not plan:
-                price_match = re.search(r'\$?(\d{3,5})', criterio)
-                if price_match:
-                    target_price = float(price_match.group(1))
-                    candidates = sorted(CATALOG, key=lambda p: abs(get_price(p, modality) - target_price))
-                    plan = candidates[0] if candidates else None
+                # Solo buscar por precio si el criterio NO contiene "gb" o "gigas"
+                if not re.search(r'\d+\s*(?:gb|gigas?)', criterio.lower()):
+                    price_match = re.search(r'\$?(\d{3,5})', criterio)
+                    if price_match:
+                        target_price = float(price_match.group(1))
+                        candidates = sorted(CATALOG, key=lambda p: abs(get_price(p, modality) - target_price))
+                        plan = candidates[0] if candidates else None
             if not plan:
                 # Búsqueda por datos ilimitados
                 if any(w in criterio.lower() for w in ["ilimitado", "ilimitados", "sin limite", "sin límite"]):
