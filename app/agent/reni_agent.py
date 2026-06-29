@@ -72,10 +72,6 @@ def clean_response(
     )
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     text = re.sub(r'\[\s*\]', '', text).strip()
-    # Eliminar líneas completas con valores mal formateados (ej. ".45/mes", ".5 GB")
-    lines = text.split('\n')
-    lines = [l for l in lines if not re.search(r'(?<!\d)\.\d+(?:/mes|\s*GB)', l)]
-    text = '\n'.join(lines)
     text = re.sub(r'\n{3,}', '\n\n', text).strip()
 
     text = _fix_tuteo(text)
@@ -873,6 +869,11 @@ def run_turn(
         "planes con mas datos", "planes con más datos",
         "mas capacidad", "más capacidad",
         "mayor capacidad",
+        "mayor numero de gigas", "mayor número de gigas",
+        "mayor cantidad de gigas", "mayor cantidad de datos",
+        "con mas datos", "con más datos",
+        "con mas gigas", "con más gigas",
+        "mayor capacidad de datos",
     ]
     if any(q in msg_lower_clean for q in _MAS_GB_QUESTIONS):
         from app.tools.telcel_tools import make_tools
@@ -1000,8 +1001,19 @@ def run_turn(
             return _apply_debug(post_sale_text, [], user_message), updated_history
 
         if session.stage == "PERSUASION":
-            # Cliente canceló — caer al flujo LLM normal abajo
-            pass
+            from app.tools.telcel_tools import make_tools
+            tools = make_tools(session)
+            manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
+            if manejar_fn:
+                result = manejar_fn(motivo="")
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
         # else: pregunta durante espera → continúa al LLM con contexto de contrato
 
     # ── Flujo conversacional con LLM ─────────────────────────────────────────
