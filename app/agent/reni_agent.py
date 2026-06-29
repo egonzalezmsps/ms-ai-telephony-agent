@@ -713,14 +713,9 @@ def run_turn(
             return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: cliente pregunta por GB específicos ───────────────
-    _GB_ESPECIFICO_MATCH = re.search(r'(\d+)\s*(?:gb|gigas?)', msg_lower_clean)
-    if _GB_ESPECIFICO_MATCH and any(w in msg_lower_clean for w in [
-        "plan con", "planes con", "tienes con", "hay con",
-        "existe con", "existen con", "tengo con", "quiero con",
-        "busco con", "de", "gb?", "gigas?",
-        "que sea", "que tenga", "con ese",
-        "libre de", "ultra de", "de 40", "de 20", "de 30",
-        "me interesa", "quiero uno", "busco uno",
+    _GB_ESPECIFICO_MATCH = re.search(r'\b(\d+)\s*(?:gb|gigas?)\b', msg_lower_clean)
+    if _GB_ESPECIFICO_MATCH and not any(w in msg_lower_clean for w in [
+        "cuantos", "cuántos", "tengo", "tiene mi plan", "tiene el plan",
     ]):
         from app.tools.telcel_tools import make_tools
         tools = make_tools(session)

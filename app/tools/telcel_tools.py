@@ -753,7 +753,6 @@ def make_tools(state):
             return presentar_planes(criterio=criterio, tipo="especifico")
 
         elif tipo == "mas_gb":
-            from app.catalog.plans import get_legacy_gb, find_plan
             # Comparar contra GB del plan anclado (el que se le está ofreciendo),
             # no contra el plan legacy del cliente
             anclado_id = state.plan_anclado.replace(f" {modality}", "").strip() if state.plan_anclado else None
@@ -782,6 +781,16 @@ def make_tools(state):
                 f"{lista}\n"
                 f"¿Le gustaría activar el *{plan_rec}*?"
             )
+
+        elif tipo not in ("mas_barato", "mas_caro", "ultra", "libre", "especifico",
+                          "apps", "mismo_precio", "general", "mas_gb"):
+            # El LLM usó un tipo inventado (ej. "precio", "rango_precios") —
+            # intentar extraer precio o GB del criterio y redirigir a especifico
+            _precio_match = re.search(r'\b(\d{3,4})\b', criterio)
+            if _precio_match:
+                return presentar_planes(criterio=_precio_match.group(1), tipo="especifico")
+            else:
+                return presentar_planes(criterio=criterio, tipo="especifico")
 
         else:  # "general"
             if eligible:
@@ -1046,8 +1055,6 @@ def make_tools(state):
                      NUNCA uses el plan anclado si el cliente mencionó
                      un plan diferente explícitamente.
         """
-        from app.catalog.plans import find_plan, get_price, get_cashback, get_legacy_gb
-
         modality = state.subscription_type
         current_cost = state.current_cost
         has_promo = bool(state.has_promotion)
