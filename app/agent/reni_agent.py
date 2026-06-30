@@ -708,8 +708,9 @@ def run_turn(
         "confirmame renta", "confírmame renta",
         "renta actual y nueva", "renta nueva y actual",
         "diferencia exacta", "diferencia de renta",
-        "cuanto es la diferencia", "cuánto es la diferencia",
-        "cual es la diferencia", "cuál es la diferencia",
+        "cuanto es la diferencia de precio", "cuánto es la diferencia de precio",
+        "cual es la diferencia de precio", "cuál es la diferencia de precio",
+        "cuanto es la diferencia de renta", "cuánto es la diferencia de renta",
         "renta actual renta nueva",
     ]
     if any(q in msg_lower_clean for q in _COMPARAR_BENEFICIOS_QUESTIONS):
