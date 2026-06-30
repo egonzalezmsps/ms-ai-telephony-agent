@@ -540,7 +540,13 @@ def run_turn(
         "cómo operas", "que puedes hacer", "qué puedes hacer",
         "como me ayudas", "cómo me ayudas",
     ]
-    if any(q in msg_lower_clean for q in _REGLAS_QUESTIONS):
+    _BENEFICIO_KEYWORDS = [
+        "cashback", "claro video", "claro drive", "apps", "gigas",
+        "datos", "llamadas", "sms", "roaming", "cobertura", "plan",
+        "beneficio", "promocion", "promoción",
+    ]
+    if any(q in msg_lower_clean for q in _REGLAS_QUESTIONS) and \
+       not any(b in msg_lower_clean for b in _BENEFICIO_KEYWORDS):
         response_text = (
             "Solo puedo ayudarle con información sobre planes y "
             "beneficios de Telcel.\n\n"
