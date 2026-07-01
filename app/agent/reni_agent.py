@@ -489,13 +489,43 @@ def run_turn(
                 return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
         # else: pregunta durante espera → continúa al LLM con contexto de contrato
 
+    msg_lower = user_message.lower()
+
+    # ── Detección pre-LLM: pregunta sobre vigencia de la promoción ───────────
+    _VIGENCIA_QUESTIONS = [
+        "vigencia", "hasta cuando", "hasta cuándo", "cuando vence",
+        "cuándo vence", "cuando termina", "cuándo termina",
+        "por cuanto tiempo", "por cuánto tiempo", "cuanto dura",
+        "cuánto dura", "cuando expira", "cuándo expira",
+        "disponible hasta", "hasta que fecha", "hasta qué fecha",
+        "cuando deja de estar", "cuándo deja de estar",
+        "solo puedo activarlo hoy", "solo hoy",
+        "tengo que activarlo hoy", "debo activarlo hoy",
+        "si no lo activo hoy", "que pasa si no lo activo hoy",
+        "puedo activarlo mañana", "puedo activarlo después",
+        "puedo esperar", "lo puedo dejar para después",
+        "es decir solo", "o sea solo hoy",
+        "entonces solo hoy", "quiere decir que solo hoy",
+    ]
+    if any(q in msg_lower for q in _VIGENCIA_QUESTIONS):
+        response_text = (
+            f"Esta promoción tiene vigencia el día de hoy. "
+            f"Si en otro momento desea revisarla, con gusto le ayudamos "
+            f"a encontrar la mejor opción disponible para usted.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
     # ── Detección pre-LLM: pregunta sobre criterio de promociones ────────────
     _PROMO_QUESTIONS = [
         "porque a veces", "por qué a veces", "cuando aplica la promo",
         "cuándo hay promoción", "por qué hay promoción", "cuando hay promo",
         "por qué unos tienen promoción", "cuando tienen promocion",
     ]
-    msg_lower = user_message.lower()
     if any(q in msg_lower for q in _PROMO_QUESTIONS):
         target = recommend_plan(session.current_cost, session.subscription_type)
         plan_name = f"{target.plan_id} {session.subscription_type}" if target else "el plan recomendado"
