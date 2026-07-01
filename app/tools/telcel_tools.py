@@ -65,8 +65,6 @@ def make_tools(state):
 
         modality = state.subscription_type
         price = get_price(plan, modality)
-        cashback = get_cashback(plan, modality)
-        has_promo = bool(state.has_promotion)
 
         if price < state.current_cost - 1.0:
             logger.warning("[TOOL] precio_bajo plan_id='%s' precio=%.0f renta_actual=%.0f phone=%s",
@@ -79,12 +77,6 @@ def make_tools(state):
                 f"para gestionar excepciones."
             )
 
-        gb = plan.gb_promo if (has_promo and plan.gb_promo > plan.gb_base) else plan.gb_base
-        gb_label = "Ilimitados" if plan.is_unlimited else f"{gb:g} GB"
-        if has_promo and plan.gb_promo > plan.gb_base and not plan.is_unlimited:
-            extra = plan.gb_promo - plan.gb_base
-            gb_label = f"{plan.gb_base:g} GB base + {extra:g} GB promo = {gb:g} GB totales"
-
         state.plan_selected = plan.plan_id
         state.awaiting_contract_confirmation = False
         state.awaiting_otp = False
@@ -94,18 +86,8 @@ def make_tools(state):
                     plan.plan_id, price, state.phone_number)
 
         return (
-            f"CONTRATACIÓN INICIADA — presenta este resumen al cliente y solicita confirmación explícita:\n\n"
-            f"┌─────────────────────────────────────┐\n"
-            f"  Resumen de activación\n\n"
-            f"  📋 Plan: *{plan.plan_id} {modality}*\n"
-            f"  💰 Costo mensual: *${price:.0f} MXN/mes*\n"
-            f"  📶 Datos: *{gb_label}*\n"
-            f"  {'💰 Cashback: *$' + f'{cashback:.2f}' + '/mes*' + chr(10) if cashback > 0 else ''}"
-            f"  📱 Beneficios: incluidos según familia {plan.family}\n\n"
-            f"  Plan anterior: {state.current_plan_name} (${state.current_cost:.0f}/mes)\n"
-            f"└─────────────────────────────────────┘\n\n"
-            f"Pide al cliente que confirme con ACEPTO o CONFIRMO para proceder con la activación. "
-            f"El cambio es definitivo y no se puede revertir al plan anterior."
+            "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+            "CONTRATACION_INICIADA"
         )
 
     @tool

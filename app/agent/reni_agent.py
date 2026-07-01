@@ -1109,7 +1109,10 @@ def run_turn(
 
     # Safety net — si el LLM revela lógica interna del proceso de verificación
     # reemplazar la respuesta completa con el mensaje programado de proceso
+    logger.info("[RESPONSE_TEXT_RAW] '%s' phone=%s", response_text[:100], session.phone_number)
+
     _INTERNAL_LEAK_TERMS = [
+        "CONTRATACION_INICIADA",
         "Verificación de seguridad",
         "OTP",
         "(OTP)",
@@ -1123,12 +1126,18 @@ def run_turn(
         "recibirá las instrucciones para completar",
     ]
     if any(t in response_text for t in _INTERNAL_LEAK_TERMS):
-        plan = session.plan_anclado if session.plan_anclado else "el plan"
-        response_text = (
-            f"Es muy sencillo — solo confirme que desea el cambio "
-            f"y nosotros nos encargamos del resto.\n\n"
-            f"¿Le gustaría activar el *{plan}*?"
-        )
+        if "CONTRATACION_INICIADA" in response_text:
+            session.stage = "CONTRACT"
+            contract_msg = build_summary_template(session)
+            session.awaiting_contract_confirmation = True
+            response_text = contract_msg
+        else:
+            plan = session.plan_anclado if session.plan_anclado else "el plan"
+            response_text = (
+                f"Es muy sencillo — solo confirme que desea el cambio "
+                f"y nosotros nos encargamos del resto.\n\n"
+                f"¿Le gustaría activar el *{plan}*?"
+            )
 
     # Safety net — si estamos esperando confirmación del contrato,
     # siempre recordar al cliente que debe responder
@@ -1187,6 +1196,10 @@ def run_turn(
                         break
 
     if _rigid_text:
+        if "CONTRATACION_INICIADA" in _rigid_text:
+            contract_msg = build_summary_template(session)
+            session.awaiting_contract_confirmation = True
+            _rigid_text = contract_msg
         updated_history = history + [
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": _rigid_text},
@@ -1248,5 +1261,18 @@ def run_turn(
     # Limitar a los últimos 20 mensajes (10 intercambios)
     if len(updated_history) > 20:
         updated_history = updated_history[-20:]
+
+    # Último safety net — si response_text es la señal de contratación
+    if "CONTRATACION_INICIADA" in response_text:
+        session.stage = "CONTRACT"
+        contract_msg = build_summary_template(session)
+        session.awaiting_contract_confirmation = True
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": contract_msg},
+        ]
+        if len(updated_history) > 20:
+            updated_history = updated_history[-20:]
+        return _apply_debug(contract_msg, ["iniciar_contratacion"], user_message), updated_history
 
     return _apply_debug(response_text, _tools_invoked, user_message), updated_history
