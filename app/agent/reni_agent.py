@@ -1128,13 +1128,9 @@ def run_turn(
         if isinstance(block, dict) and "toolUse" in block
     ]
     if "iniciar_contratacion" in _tools_invoked and session.stage == "CONTRACT":
-        # Solo llamar si aún no se ha mostrado el resumen
-        if not session.awaiting_contract_confirmation:
-            contract_msg = handle_contract_turn(session, user_message)
-        else:
-            contract_msg = build_summary_template(session)
-        if contract_msg:
-            response_text = contract_msg  # reemplaza COMPLETAMENTE el response_text del LLM
+        contract_msg = build_summary_template(session)
+        session.awaiting_contract_confirmation = True
+        response_text = contract_msg  # reemplaza COMPLETAMENTE el response_text del LLM
         updated_history = history + [
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
