@@ -25,6 +25,7 @@ from app.prompts.campaign_template import build_campaign_message, build_template
 from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template, send_whatsapp_interactive_buttons
 from app.whatsapp.command_handler import handle_command
 from app.config.logging_config import setup_logging
+from app.router.semantic_router import load_reference_embeddings
 setup_logging()
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,7 @@ app = FastAPI(
 def startup():
     """Crea las tablas en PostgreSQL al arrancar."""
     init_db()
+    load_reference_embeddings()
     logger.info("ReniAgent iniciado — tablas PostgreSQL listas")
 
 

@@ -35,6 +35,9 @@ from app.state.persistence import delete_session
 from app.prompts.campaign_template import build_campaign_message
 from app.catalog.plans import eligible_plans, recommend_plan, get_price
 
+from app.router.semantic_router import load_reference_embeddings
+load_reference_embeddings()
+
 
 def print_help():
     print("""

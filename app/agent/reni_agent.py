@@ -21,6 +21,7 @@ from app.tools.telcel_tools import make_tools
 from app.state.session import SessionState
 from app.contract.contract_flow import handle_contract_turn, build_summary_template
 from app.contract.post_sale import build_post_sale_message
+from app.router.semantic_router import classify
 
 DEBUG_WHATSAPP = os.getenv("DEBUG_WHATSAPP", "false").lower() == "true"
 
@@ -491,23 +492,11 @@ def run_turn(
 
     msg_lower = user_message.lower()
 
-    # ── Detección pre-LLM: pregunta sobre vigencia de la promoción ───────────
-    _VIGENCIA_QUESTIONS = [
-        "vigencia", "hasta cuando", "hasta cuándo", "cuando vence",
-        "cuándo vence", "cuando termina", "cuándo termina",
-        "por cuanto tiempo", "por cuánto tiempo", "cuanto dura",
-        "cuánto dura", "cuando expira", "cuándo expira",
-        "disponible hasta", "hasta que fecha", "hasta qué fecha",
-        "cuando deja de estar", "cuándo deja de estar",
-        "solo puedo activarlo hoy", "solo hoy",
-        "tengo que activarlo hoy", "debo activarlo hoy",
-        "si no lo activo hoy", "que pasa si no lo activo hoy",
-        "puedo activarlo mañana", "puedo activarlo después",
-        "puedo esperar", "lo puedo dejar para después",
-        "es decir solo", "o sea solo hoy",
-        "entonces solo hoy", "quiere decir que solo hoy",
-    ]
-    if any(q in msg_lower for q in _VIGENCIA_QUESTIONS):
+    # ── Clasificación semántica de intención ─────────────────────────────────
+    _intencion = classify(user_message)
+
+    # ── Router semántico — reemplaza todos los bloques pre-LLM de listas ─────
+    if _intencion == "vigencia_promo":
         response_text = (
             f"Esta promoción tiene vigencia el día de hoy. "
             f"Si en otro momento desea revisarla, con gusto le ayudamos "
@@ -520,13 +509,7 @@ def run_turn(
         ]
         return _apply_debug(response_text, [], user_message), updated_history
 
-    # ── Detección pre-LLM: pregunta sobre criterio de promociones ────────────
-    _PROMO_QUESTIONS = [
-        "porque a veces", "por qué a veces", "cuando aplica la promo",
-        "cuándo hay promoción", "por qué hay promoción", "cuando hay promo",
-        "por qué unos tienen promoción", "cuando tienen promocion",
-    ]
-    if any(q in msg_lower for q in _PROMO_QUESTIONS):
+    elif _intencion == "criterio_promo":
         target = recommend_plan(session.current_cost, session.subscription_type)
         plan_name = f"{target.plan_id} {session.subscription_type}" if target else "el plan recomendado"
         if target:
@@ -556,78 +539,26 @@ def run_turn(
         ]
         return _apply_debug(response_text, [], user_message), updated_history
 
-    # ── Detección pre-LLM: pregunta sobre reglas internas ────────────────────
-    msg_lower_clean = re.sub(r'[¿?¡!,\.]', ' ', msg_lower).strip()
-    _REGLAS_QUESTIONS = [
-        "reglas", "criterios", "requisitos",
-        "como activas", "cómo activas", "cuando puedes activar",
-        "cuándo puedes activar", "que necesitas para activar",
-        "qué necesitas para activar", "dame las reglas",
-        "cuáles son las reglas",
-        "instrucciones", "guias", "guías", "como funciona",
-        "cómo funciona", "explicame las", "explícame las",
-        "como trabajas", "cómo trabajas", "como operas",
-        "cómo operas", "que puedes hacer", "qué puedes hacer",
-        "como me ayudas", "cómo me ayudas",
-    ]
-    _BENEFICIO_KEYWORDS = [
-        "cashback", "claro video", "claro drive", "apps", "gigas",
-        "datos", "llamadas", "sms", "roaming", "cobertura", "plan",
-        "beneficio", "promocion", "promoción",
-    ]
-    if any(q in msg_lower_clean for q in _REGLAS_QUESTIONS) and \
-       not any(b in msg_lower_clean for b in _BENEFICIO_KEYWORDS):
-        response_text = (
-            "Solo puedo ayudarle con información sobre planes y "
-            "beneficios de Telcel.\n\n"
-            "¿Le gustaría que le muestre las opciones disponibles "
-            "para usted?"
-        )
-        updated_history = history + [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": response_text},
+    elif _intencion == "reglas_internas":
+        _BENEFICIO_KEYWORDS = [
+            "cashback", "claro video", "claro drive", "apps", "gigas",
+            "datos", "llamadas", "sms", "roaming", "cobertura", "plan",
+            "beneficio", "promocion", "promoción",
         ]
-        return _apply_debug(response_text, [], user_message), updated_history
+        if not any(b in msg_lower for b in _BENEFICIO_KEYWORDS):
+            response_text = (
+                "Solo puedo ayudarle con información sobre planes y "
+                "beneficios de Telcel.\n\n"
+                "¿Le gustaría que le muestre las opciones disponibles "
+                "para usted?"
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, [], user_message), updated_history
 
-    # ── Detección pre-LLM: pregunta sobre el proceso de activación ───────────
-    _PROCESO_QUESTIONS = [
-        "cual es el proceso",
-        "cuál es el proceso",
-        "como es el proceso",
-        "cómo es el proceso",
-        "que pasos", "qué pasos",
-        "como funciona el cambio",
-        "cómo funciona el cambio",
-        "que tengo que hacer",
-        "qué tengo que hacer",
-        "proceso de activacion",
-        "proceso de activación",
-        "como se activa",
-        "cómo se activa",
-        "pasos para activar",
-        "que pasa cuando activo",
-        "qué pasa cuando activo",
-        "como funciona la activacion",
-        "cómo funciona la activación",
-        "entender los pasos",
-        "pasos de activacion",
-        "pasos de activación",
-        "que instrucciones",
-        "qué instrucciones",
-        "instrucciones para activar",
-        "instrucciones sigues",
-        "como activan",
-        "cómo activan",
-        "que hago para activar",
-        "qué hago para activar",
-        "como activo",
-        "cómo activo",
-        "conocer el proceso",
-        "proceso de activacion del plan",
-        "y como funciona",
-        "y cómo funciona",
-    ]
-    if any(q in msg_lower_clean for q in _PROCESO_QUESTIONS):
+    elif _intencion == "proceso_activacion":
         response_text = (
             f"Es muy sencillo — solo confirme que desea el cambio "
             f"y nosotros nos encargamos del resto.\n\n"
@@ -639,7 +570,171 @@ def run_turn(
         ]
         return _apply_debug(response_text, [], user_message), updated_history
 
+    elif _intencion == "por_que_cac":
+        response_text = (
+            f"Algunos cambios requieren gestión a través de nuestros "
+            f"canales especializados para garantizar la mejor atención. "
+            f"Soporte al 800 220 9518 y los CAC cuentan con las "
+            f"herramientas necesarias para ese trámite.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    elif _intencion == "facturacion":
+        response_text = (
+            "Para detalles sobre su facturación y fechas de cobro, "
+            "le recomiendo consultar con Soporte al 800 220 9518 "
+            "o revisar su información en la app Mi Telcel.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    elif _intencion == "info_plan_actual":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        informar_fn = next((t for t in tools if t.tool_name == "informar_plan_actual"), None)
+        if informar_fn:
+            result = informar_fn()
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["informar_plan_actual"], user_message), updated_history
+
+    elif _intencion == "comparar_beneficios":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        comparar_fn = next((t for t in tools if t.tool_name == "comparar_planes"), None)
+        if comparar_fn:
+            result = comparar_fn(plan_id="")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
+
+    elif _intencion == "planes_mas_baratos":
+        _QUEJA_KEYWORDS = [
+            "quejar", "queja", "descuento", "resuelvelo", "resolvelo",
+            "mal servicio", "no me ayudas", "no sirve", "exijo",
+        ]
+        if not any(k in msg_lower for k in _QUEJA_KEYWORDS):
+            from app.tools.telcel_tools import make_tools
+            tools = make_tools(session)
+            presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+            if presentar_fn:
+                result = presentar_fn(criterio="mas barato", tipo="mas_barato")
+                if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                    response_text = result.replace(
+                        "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                    )
+                    updated_history = history + [
+                        {"role": "user", "content": user_message},
+                        {"role": "assistant", "content": response_text},
+                    ]
+                    return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    elif _intencion == "planes_mas_caros":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="mas caro", tipo="mas_caro")
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    elif _intencion == "planes_ultra":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="general", tipo="ultra")
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    elif _intencion == "planes_mas_gb":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="general", tipo="mas_gb")
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    elif _intencion == "otra_recomendacion":
+        session.esperando_criterio_recomendacion = True
+        response_text = (
+            f"Con gusto, {session.first_name}. ¿Qué beneficio es más "
+            f"importante para usted?\n\n"
+            f"• 📶 Más GB de datos\n"
+            f"• 💳 Mayor cashback\n"
+            f"• 📱 Apps ilimitadas incluidas\n\n"
+            f"¿Cuál prefiere?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    elif _intencion == "confirmacion_activacion":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        iniciar_fn = next((t for t in tools if t.tool_name == "iniciar_contratacion"), None)
+        if iniciar_fn and session.plan_anclado:
+            plan_id = session.plan_anclado.removesuffix(f" {session.subscription_type}").strip()
+            iniciar_fn(plan_id=plan_id)
+            if session.stage == "CONTRACT":
+                response_text = build_summary_template(session)
+                session.awaiting_contract_confirmation = True
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                if len(updated_history) > 20:
+                    updated_history = updated_history[-20:]
+                return _apply_debug(response_text, ["iniciar_contratacion"], user_message), updated_history
+
+    # ── Fallbacks pre-LLM que NO van al router semántico ──────────────────────
+    msg_lower_clean = re.sub(r'[¿?¡!,\.]', ' ', msg_lower).strip()
+
     # ── Detección pre-LLM: pregunta sobre por qué se deriva al CAC/Soporte ───
+    # (conservado como fallback — por_que_cac ya está en el router)
     _CAC_QUESTIONS = [
         "porque tengo que comunicarme",
         "por qué tengo que comunicarme",
@@ -669,101 +764,6 @@ def run_turn(
         ]
         return _apply_debug(response_text, [], user_message), updated_history
 
-    # ── Detección pre-LLM: preguntas de facturación ──────────────────
-    _FACTURACION_QUESTIONS = [
-        "cobro", "factura", "facturación", "facturacion",
-        "cuando me cobran", "cuándo me cobran",
-        "siguiente cobro", "próximo cobro", "proximo cobro",
-        "cuando pago", "cuándo pago", "fecha de pago",
-        "cuando comienza", "cuándo comienza",
-        "cuando empiezan", "cuándo empiezan",
-        "cuando inicia", "cuándo inicia",
-    ]
-    if any(q in msg_lower_clean for q in _FACTURACION_QUESTIONS):
-        response_text = (
-            "Para detalles sobre su facturación y fechas de cobro, "
-            "le recomiendo consultar con Soporte al 800 220 9518 "
-            "o revisar su información en la app Mi Telcel.\n\n"
-            f"¿Le gustaría activar el *{session.plan_anclado}*?"
-        )
-        updated_history = history + [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": response_text},
-        ]
-        return _apply_debug(response_text, [], user_message), updated_history
-
-    # ── Detección pre-LLM: pregunta por GB del plan actual ───────────
-    _GB_PLAN_QUESTIONS = [
-        "cuantos gigas", "cuántos gigas", "cuantos gb", "cuántos gb",
-        "gigas tiene mi plan", "gb tiene mi plan", "gigas tengo",
-        "cuantos datos", "cuántos datos", "datos tengo",
-        "cuanto tiene mi plan", "cuánto tiene mi plan",
-        "cual es mi plan", "cuál es mi plan",
-        "que plan tengo", "qué plan tengo",
-        "cuanto pago", "cuánto pago",
-        "que tengo contratado",
-        "qué tengo contratado", "cuanto es mi renta",
-        "cuánto es mi renta",
-    ]
-    if any(q in msg_lower_clean for q in _GB_PLAN_QUESTIONS):
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        informar_fn = next((t for t in tools if t.tool_name == "informar_plan_actual"), None)
-        if informar_fn:
-            result = informar_fn()
-            response_text = result.replace(
-                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-            )
-            updated_history = history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response_text},
-            ]
-            return _apply_debug(response_text, ["informar_plan_actual"], user_message), updated_history
-
-    # ── Detección pre-LLM: cliente pregunta qué gana comparado con su plan actual ──
-    _COMPARAR_BENEFICIOS_QUESTIONS = [
-        "que beneficios gano", "qué beneficios gano",
-        "beneficios nuevos", "que gano comparado",
-        "qué gano comparado", "en que mejora",
-        "en qué mejora", "que cambia respecto",
-        "qué cambia respecto", "que diferencia hay con mi plan",
-        "qué diferencia hay con mi plan",
-        "cuanto mas pagaria", "cuánto más pagaría",
-        "cuanto pagaria", "cuánto pagaría",
-        "cuanto cuesta la diferencia", "cuánto cuesta la diferencia",
-        "cuanto mas es", "cuánto más es",
-        "cuanto sube", "cuánto sube",
-        "cuanto aumenta", "cuánto aumenta",
-        "diferencia de precio", "diferencia en precio",
-        "voy a pagar mas", "voy a pagar más",
-        "pagare mas", "pagaré más",
-        "cuesta mas", "cuesta más",
-        "es mas caro", "es más caro",
-        "sube el precio", "sube mi renta",
-        "aumenta el precio", "aumenta mi renta",
-        "confirmame renta", "confírmame renta",
-        "renta actual y nueva", "renta nueva y actual",
-        "diferencia exacta", "diferencia de renta",
-        "cuanto es la diferencia de precio", "cuánto es la diferencia de precio",
-        "cual es la diferencia de precio", "cuál es la diferencia de precio",
-        "cuanto es la diferencia de renta", "cuánto es la diferencia de renta",
-        "renta actual renta nueva",
-    ]
-    if any(q in msg_lower_clean for q in _COMPARAR_BENEFICIOS_QUESTIONS):
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        comparar_fn = next((t for t in tools if t.tool_name == "comparar_planes"), None)
-        if comparar_fn:
-            result = comparar_fn(plan_id="")
-            response_text = result.replace(
-                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-            )
-            updated_history = history + [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response_text},
-            ]
-            return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
-
     # ── Detección pre-LLM: cliente pregunta por GB específicos ───────────────
     _GB_ESPECIFICO_MATCH = re.search(r'\b(\d+)\s*(?:gb|gigas?)\b', msg_lower_clean)
     if _GB_ESPECIFICO_MATCH and not any(w in msg_lower_clean for w in [
@@ -775,160 +775,6 @@ def run_turn(
         if presentar_fn:
             criterio_gb = _GB_ESPECIFICO_MATCH.group(0)
             result = presentar_fn(criterio=criterio_gb, tipo="especifico")
-            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
-                response_text = result.replace(
-                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-                )
-                updated_history = history + [
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response_text},
-                ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
-
-    # ── Detección pre-LLM: planes más baratos ────────────────────────
-    _MAS_BARATO_QUESTIONS = [
-        "mas barato", "más barato", "mas baratos", "más baratos",
-        "mas economico", "más económico", "mas economicos",
-        "más económicos", "menos costoso", "menos caro",
-        "algo barato", "algo economico", "algo económico",
-        "planes baratos", "opcion barata", "opción barata",
-        "menor renta", "renta menor", "renta mas baja", "renta más baja",
-        "plan de menor renta", "plan con menor renta",
-        "reducir mi renta", "bajar mi renta", "bajar la renta",
-        "pagar menos", "pagar menor",
-        "menor costo", "de menor costo", "planes de menor costo",
-        "costo menor", "menor precio", "de menor precio",
-        "planes de menor precio", "precio menor",
-        "mas accesible", "más accesible",
-        "opcion accesible", "opción accesible",
-    ]
-    _QUEJA_KEYWORDS = [
-        "quejar", "queja", "descuento", "resuelvelo", "resolvelo",
-        "mal servicio", "no me ayudas", "no sirve", "exijo",
-    ]
-    if any(q in msg_lower_clean for q in _MAS_BARATO_QUESTIONS) and \
-       not any(k in msg_lower_clean for k in _QUEJA_KEYWORDS):
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
-        if presentar_fn:
-            result = presentar_fn(criterio="mas barato", tipo="mas_barato")
-            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
-                response_text = result.replace(
-                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-                )
-                updated_history = history + [
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response_text},
-                ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
-
-    # ── Detección pre-LLM: planes más caros ──────────────────────────
-    _MAS_CARO_QUESTIONS = [
-        "mas caro", "más caro", "mas caros", "más caros",
-        "mas premium", "más premium", "plan superior",
-        "algo mas caro", "algo más caro",
-        "plan mas caro", "plan más caro",
-        "opciones mas caras", "opciones más caras",
-        "algo mayor", "plan mayor",
-    ]
-    if any(q in msg_lower_clean for q in _MAS_CARO_QUESTIONS):
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
-        if presentar_fn:
-            result = presentar_fn(criterio="mas caro", tipo="mas_caro")
-            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
-                response_text = result.replace(
-                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-                )
-                updated_history = history + [
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response_text},
-                ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
-
-    # ── Detección pre-LLM: planes Ultra ─────────────────────────────
-    _ULTRA_QUESTIONS = [
-        "solo ultra", "solo me interesa ultra", "quiero ultra",
-        "planes ultra", "ver ultra", "mostrar ultra",
-        "ultra disponibles", "que ultras", "qué ultras",
-        "opciones en telcel ultra", "opciones para mi en telcel ultra",
-        "opciones ultra", "que opciones ultra", "qué opciones ultra",
-        "cuales son los ultra", "cuáles son los ultra",
-        "que ultra hay", "qué ultra hay",
-        "ver opciones ultra", "mostrame los ultra", "muéstrame los ultra",
-        "sin redes sociales", "sin apps", "sin aplicaciones sociales",
-        "no quiero redes sociales", "plan sin redes",
-        "sin facebook", "sin instagram", "sin aplicaciones",
-        "y ultras", "y los ultras", "tienen ultras",
-        "tendrás ultras", "tendras ultras", "y ultra",
-        "también ultra", "tambien ultra",
-    ]
-    if any(q in msg_lower_clean for q in _ULTRA_QUESTIONS):
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
-        if presentar_fn:
-            result = presentar_fn(criterio="general", tipo="ultra")
-            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
-                response_text = result.replace(
-                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-                )
-                updated_history = history + [
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response_text},
-                ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
-
-    # ── Detección pre-LLM: planes Libre ──────────────────────────────
-    _LIBRE_QUESTIONS = [
-        "planes libres", "ver libres", "mostrar libres",
-        "quisiera ver los planes libres", "planes telcel libre",
-        "opciones libre", "que libres hay", "qué libres hay",
-        "cuales son los libres", "cuáles son los libres",
-        "ver opciones libre", "mostrame los libres",
-        "muéstrame los libres", "opciones en telcel libre",
-        "familia libre",
-    ]
-    if any(q in msg_lower_clean for q in _LIBRE_QUESTIONS):
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
-        if presentar_fn:
-            result = presentar_fn(criterio="general", tipo="libre")
-            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
-                response_text = result.replace(
-                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-                )
-                updated_history = history + [
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response_text},
-                ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
-
-    # ── Detección pre-LLM: planes con más GB ─────────────────────────
-    _MAS_GB_QUESTIONS = [
-        "mas gigas", "más gigas",
-        "mas gb", "más gb",
-        "mas datos", "más datos",
-        "planes con mas gigas", "planes con más gigas",
-        "planes con mas gb", "planes con más gb",
-        "planes con mas datos", "planes con más datos",
-        "mas capacidad", "más capacidad",
-        "mayor capacidad",
-        "mayor numero de gigas", "mayor número de gigas",
-        "mayor cantidad de gigas", "mayor cantidad de datos",
-        "con mas datos", "con más datos",
-        "con mas gigas", "con más gigas",
-        "mayor capacidad de datos",
-    ]
-    if any(q in msg_lower_clean for q in _MAS_GB_QUESTIONS):
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
-        if presentar_fn:
-            result = presentar_fn(criterio="general", tipo="mas_gb")
             if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
