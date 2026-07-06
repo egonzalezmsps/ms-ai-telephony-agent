@@ -34,7 +34,7 @@ THRESHOLDS = {
     "planes_mas_baratos": 0.78,
     "planes_mas_caros": 0.75,
     "planes_ultra": 0.80,
-    "planes_mas_gb": 0.74,
+    "planes_mas_gb": 0.72,
     "otra_recomendacion": 0.78,
     "confirmacion_activacion": 0.82,
 }
@@ -113,9 +113,6 @@ INTENCIONES = {
         "que gano con el cambio de plan",
         "en que mejora el nuevo plan",
         "que diferencia hay con mi plan actual",
-        "cuanto mas pagaria con el nuevo plan",
-        "cuanto sube la renta",
-        "diferencia de precio entre los planes",
         "que beneficios nuevos obtendria",
         "vale la pena el cambio de plan",
         "que cambia respecto a mi plan actual",
@@ -124,6 +121,9 @@ INTENCIONES = {
         "quiero analizar los beneficios",
         "explicame todos los beneficios",
         "quiero conocer bien los beneficios",
+        "que beneficios nuevos tendria con el cambio",
+        "en que es mejor el nuevo plan",
+        "que mejora con el cambio de plan",
     ],
     "planes_mas_baratos": [
         "tienes planes mas baratos",

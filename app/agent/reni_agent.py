@@ -84,6 +84,7 @@ def clean_response(
 
     # Elimina paréntesis incompletos y su contenido hasta fin de texto
     if text.count('(') > text.count(')'):
+        logger.warning("[PARENTESIS_INCOMPLETO] text='%s' phone=%s", text[-100:], session.phone_number if session else "")
         text = re.sub(r'\([^)]*$', '', text).strip()
         text = re.sub(r'[\s,+\.]+$', '', text).strip()
 
@@ -198,10 +199,13 @@ def _fix_incorrect_promo(text: str, session) -> str:
     Si el primer precio mencionado en la respuesta coincide con la renta actual
     del cliente (±$1), elimina las menciones de promoción de GB — no aplica.
     """
-    price_match = re.search(r'\$(\d+)/mes', text)
-    if not price_match:
+    # Buscar TODOS los precios y verificar que NINGUNO sea diferente
+    # a la renta actual — si hay un precio diferente, la promoción sí aplica
+    prices = re.findall(r'\$(\d+)/mes', text)
+    if not prices:
         return text
-    if abs(float(price_match.group(1)) - session.current_cost) > 1.0:
+    # Si algún precio es diferente a la renta actual, no eliminar promoción
+    if any(abs(float(p) - session.current_cost) > 1.0 for p in prices):
         return text
     for pattern in _PROMO_PATTERNS:
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
@@ -955,7 +959,7 @@ def run_turn(
 
     # Safety net — si el LLM revela lógica interna del proceso de verificación
     # reemplazar la respuesta completa con el mensaje programado de proceso
-    logger.info("[RESPONSE_TEXT_RAW] '%s' phone=%s", response_text[:100], session.phone_number)
+    logger.info("[RESPONSE_TEXT_RAW]\n%s\nphone=%s", response_text, session.phone_number)
 
     _INTERNAL_LEAK_TERMS = [
         "CONTRATACION_INICIADA",
@@ -1067,7 +1071,7 @@ def run_turn(
     # "[tool_name]" o "tool_name(param='valor')" en lugar de invocarlas.
     # Si se detecta ese patrón, se reintenta una vez con un agente fresco.
     _TOOL_PATTERN = re.compile(
-        r'(\[[a-z_]+\]|[a-z_]+\([^)]*\)|\([a-z_]+,\s*\w+=)',
+        r'(\[[a-z_]+(?:\([^)]*\))?\]|[a-z_]+\([^)]*\)|\([a-z_]+,\s*\w+=)',
         re.IGNORECASE
     )
     if _TOOL_PATTERN.search(response_text):
