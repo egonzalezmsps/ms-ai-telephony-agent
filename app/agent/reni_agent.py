@@ -14,7 +14,7 @@ from typing import List, Dict, Tuple
 
 from strands import Agent
 
-from app.catalog.plans import CATALOG, find_plan, get_price, recommend_plan
+from app.catalog.plans import CATALOG, PRICE_TOLERANCE_MXN, find_plan, get_price, recommend_plan
 from app.config.oci_model import oci_model
 from app.prompts.system_prompt import build_system_prompt
 from app.tools.telcel_tools import make_tools
@@ -411,21 +411,33 @@ def _strip_incorrect_cac(
 
 
 def _check_invented_plans(text: str, session: SessionState) -> str:
-    """
-    Safety net: si el LLM menciona planes que no existen en el catálogo
-    o con datos incorrectos, reemplaza la respuesta con mensaje seguro.
-    """
     plan_mentions = re.findall(
-        r'Telcel\s+(?:Libre|Ultra)\s+\w+',
+        r'Telcel\s+(?:Libre|Ultra)\s+(?:\d+|VIP|Ilimitado)',
         text,
         re.IGNORECASE
     )
     for mention in plan_mentions:
         clean = re.sub(r'\s+(Controlado|Abierto)$', '', mention.strip(), flags=re.IGNORECASE)
-        if not find_plan(clean):
+        plan_obj = find_plan(clean)
+
+        # Plan no existe
+        if not plan_obj:
             logger.warning("[PLAN_INVENTADO] '%s' phone=%s", clean, session.phone_number)
             plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
             return f"¿Le gustaría activar el *{plan}*?"
+
+        # Plan existe pero verificar precio — buscar precio justo después del nombre del plan
+        price_real = get_price(plan_obj, session.subscription_type)
+        pattern = re.escape(mention) + r'[^$]*\$(\d{3,4})/mes'
+        price_match = re.search(pattern, text, re.IGNORECASE)
+        if price_match:
+            price_mentioned = float(price_match.group(1))
+            if abs(price_mentioned - price_real) > PRICE_TOLERANCE_MXN:
+                logger.warning("[PRECIO_INCORRECTO] plan='%s' real=$%.0f mencionado=$%.0f phone=%s",
+                               clean, price_real, price_mentioned, session.phone_number)
+                plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
+                return f"¿Le gustaría activar el *{plan}*?"
+
     return text
 
 

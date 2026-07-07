@@ -569,7 +569,15 @@ def make_tools(state):
         elif tipo == "ultra":
             planes = [p for p in eligible if p.family == "Telcel Ultra"]
             if not planes:
-                return no_plans_found()
+                plan_rec = state.plan_anclado or "el plan recomendado"
+                return (
+                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"En modalidad {modality} no contamos con planes Telcel Ultra "
+                    f"disponibles para activar en este canal con su renta actual.\n\n"
+                    f"Para explorar opciones Ultra puede comunicarse con Soporte "
+                    f"al 800 220 9518 o acudir a un Centro de Atención a Clientes.\n\n"
+                    f"¿Le gustaría activar el *{plan_rec}*?"
+                )
             if len(planes) == 1:
                 plan = planes[0]
                 price = get_price(plan, modality)

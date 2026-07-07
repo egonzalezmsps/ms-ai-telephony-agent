@@ -33,7 +33,7 @@ THRESHOLDS = {
     "comparar_beneficios": 0.72,
     "planes_mas_baratos": 0.78,
     "planes_mas_caros": 0.75,
-    "planes_ultra": 0.80,
+    "planes_ultra": 0.76,
     "planes_mas_gb": 0.72,
     "otra_recomendacion": 0.78,
     "confirmacion_activacion": 0.82,
