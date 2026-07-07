@@ -25,6 +25,7 @@ class SessionState:
 
     # ── Plan actual ───────────────────────────────────────────────
     current_plan_name: str = ""
+    previous_plan_name: str = ""
     current_cost: float = 0.0
     current_plan_gb: Optional[float] = None
     current_plan_cashback: Optional[float] = None

@@ -55,6 +55,15 @@ def make_tools(state):
             plan_id: ID exacto del plan a contratar. Ej: "Telcel Libre 5"
         """
         logger.info("[TOOL] iniciar_contratacion plan_id='%s' phone=%s", plan_id, state.phone_number)
+
+        if state.authentication_locked:
+            logger.warning("[TOOL] intento_bloqueado plan_id='%s' phone=%s", plan_id, state.phone_number)
+            return (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                "Por seguridad hemos bloqueado el proceso de verificación. "
+                "Comuníquese con Soporte al 800 220 9518."
+            )
+
         plan = find_plan(plan_id)
         if not plan:
             logger.warning("[TOOL] plan no encontrado plan_id='%s' phone=%s", plan_id, state.phone_number)

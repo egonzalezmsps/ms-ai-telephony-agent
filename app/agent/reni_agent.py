@@ -455,6 +455,22 @@ def run_turn(
         ]
         return _apply_debug(titular_msg, [], user_message), updated_history
 
+    # ── Stage END — cambio ya procesado ──────────────────────────────────────
+    if session.stage == "END":
+        _cierre = (
+            f"Su cambio de plan ya fue procesado, {session.first_name}.\n\n"
+            f"🔄 *Detalle del cambio:*\n"
+            f"- Plan anterior: *{session.previous_plan_name} {session.subscription_type}*\n"
+            f"- Plan nuevo: *{session.plan_selected} {session.subscription_type}*\n\n"
+            f"En breve nos contactaremos para dar seguimiento.\n\n"
+            f"Si tiene alguna duda puede comunicarse con Soporte al 800 220 9518."
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": _cierre},
+        ]
+        return _apply_debug(_cierre, [], user_message), updated_history
+
     # ── Flujo de contratación — tiene prioridad sobre detecciones pre-LLM ────
     # Se mueve aquí para que ninguna detección pre-LLM intercepte mensajes como
     # "ACEPTO cuando comienza el cobro" mientras se espera confirmación.

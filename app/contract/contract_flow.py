@@ -91,13 +91,14 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             "en un Centro de Atención a Clientes (CAC)."
         )
 
-    # 1. Bloqueado por intentos fallidos de OTP
+    # 1. Bloqueado por intentos fallidos de OTP — el aviso ya se mostró al
+    # momento del bloqueo (ver punto 2). Libera el turno hacia el flujo normal
+    # en vez de repetir el mensaje ante cualquier pregunta no relacionada;
+    # iniciar_contratacion ya rechaza un nuevo intento de activación mientras
+    # authentication_locked siga activo.
     if session.authentication_locked:
         session.stage = "END"
-        return (
-            "Por seguridad hemos bloqueado el proceso de verificación. "
-            "Comuníquese con Soporte al 800 220 9518."
-        )
+        return None
 
     # 2. Esperando OTP
     if session.awaiting_otp:
