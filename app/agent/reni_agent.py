@@ -410,6 +410,25 @@ def _strip_incorrect_cac(
     return clean_text
 
 
+def _check_invented_plans(text: str, session: SessionState) -> str:
+    """
+    Safety net: si el LLM menciona planes que no existen en el catálogo
+    o con datos incorrectos, reemplaza la respuesta con mensaje seguro.
+    """
+    plan_mentions = re.findall(
+        r'Telcel\s+(?:Libre|Ultra)\s+\w+',
+        text,
+        re.IGNORECASE
+    )
+    for mention in plan_mentions:
+        clean = re.sub(r'\s+(Controlado|Abierto)$', '', mention.strip(), flags=re.IGNORECASE)
+        if not find_plan(clean):
+            logger.warning("[PLAN_INVENTADO] '%s' phone=%s", clean, session.phone_number)
+            plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
+            return f"¿Le gustaría activar el *{plan}*?"
+    return text
+
+
 def create_agent(session: SessionState, messages: List[Dict] = None) -> Agent:
     """Crea el agente con system prompt, herramientas e historial inicial."""
     return Agent(
@@ -1116,6 +1135,7 @@ def run_turn(
         "no aplica",
     }
     is_rejection = user_message.strip().lower() in REJECTION_WORDS
+    response_text = _check_invented_plans(response_text, session)
     response_text = clean_response(response_text, is_rejection=is_rejection, session=session, user_message=user_message)
     response_text = _strip_incorrect_cac(response_text, user_message, session)
 
