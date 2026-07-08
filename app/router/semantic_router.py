@@ -174,6 +174,13 @@ INTENCIONES = {
         "prefiero sin aplicaciones",
         "opciones sin apps ilimitadas",
         "algo sin redes ni apps",
+        "me interesa pero sin redes sociales",
+        "me gusta pero sin apps ilimitadas",
+        "si pero sin redes sociales",
+        "quiero uno pero sin redes",
+        "me interesa pero sin aplicaciones sociales",
+        "tienes otro pero sin redes",
+        "hay otro sin apps incluidas",
     ],
     "planes_libre": [
         "quiero ver los planes telcel libre",
