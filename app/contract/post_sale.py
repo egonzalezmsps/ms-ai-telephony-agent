@@ -30,4 +30,6 @@ def build_post_sale_message(session: SessionState) -> str:
             session.current_plan_name = plan_obj.plan_id
             session.current_cost = get_price(plan_obj, session.subscription_type)
 
+    session.end_reason = "success"
+
     return message

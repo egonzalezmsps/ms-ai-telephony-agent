@@ -98,6 +98,7 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
     # authentication_locked siga activo.
     if session.authentication_locked:
         session.stage = "END"
+        session.end_reason = "blocked"
         return None
 
     # 2. Esperando OTP

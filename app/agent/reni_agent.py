@@ -487,7 +487,8 @@ def run_turn(
         return _apply_debug(titular_msg, [], user_message), updated_history
 
     # ── Stage END — cambio ya procesado ──────────────────────────────────────
-    if session.stage == "END":
+    if session.stage == "END" and session.end_reason == "success":
+        # mostrar detalle del cambio procesado
         _cierre = (
             f"Su cambio de plan ya fue procesado, {session.first_name}.\n\n"
             f"🔄 *Detalle del cambio:*\n"
@@ -501,6 +502,9 @@ def run_turn(
             {"role": "assistant", "content": _cierre},
         ]
         return _apply_debug(_cierre, [], user_message), updated_history
+    elif session.stage == "END" and session.end_reason == "blocked":
+        # solo responder preguntas informativas normalmente
+        pass  # continúa al flujo normal
 
     # ── Flujo de contratación — tiene prioridad sobre detecciones pre-LLM ────
     # Se mueve aquí para que ninguna detección pre-LLM intercepte mensajes como

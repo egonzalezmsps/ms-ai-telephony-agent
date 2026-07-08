@@ -43,6 +43,7 @@ class SessionState:
     plan_anclado: str = ""                  # plan contextual activo para preguntas de cierre
     rejection_count: int = 0               # contador de rechazos para manejo de objeciones
     stage: str = "PERSUASION"               # PERSUASION | CONTRACT | POST_SALE | END
+    end_reason: str = ""                    # "success" | "blocked"
     esperando_criterio_recomendacion: bool = False  # esperando respuesta a "¿qué prefiere?"
 
     # ── Titular ───────────────────────────────────────────────────
