@@ -432,7 +432,8 @@ def _check_invented_plans(text: str, session: SessionState) -> str:
         price_match = re.search(pattern, text, re.IGNORECASE)
         if price_match:
             price_mentioned = float(price_match.group(1))
-            if abs(price_mentioned - price_real) > PRICE_TOLERANCE_MXN:
+            price_alt = get_price(plan_obj, "Abierto" if session.subscription_type == "Controlado" else "Controlado")
+            if abs(price_mentioned - price_real) > PRICE_TOLERANCE_MXN and abs(price_mentioned - price_alt) > PRICE_TOLERANCE_MXN:
                 logger.warning("[PRECIO_INCORRECTO] plan='%s' real=$%.0f mencionado=$%.0f phone=%s",
                                clean, price_real, price_mentioned, session.phone_number)
                 plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
@@ -725,6 +726,22 @@ def run_turn(
         presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
         if presentar_fn:
             result = presentar_fn(criterio="general", tipo="ultra")
+            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = result.replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+
+    elif _intencion == "planes_libre":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        if presentar_fn:
+            result = presentar_fn(criterio="general", tipo="libre")
             if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
