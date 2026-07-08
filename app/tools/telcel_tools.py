@@ -633,8 +633,23 @@ def make_tools(state):
             if not planes:
                 return no_plans_found()
             if len(planes) == 1:
-                state.plan_anclado = f"{planes[0].plan_id} {modality}"
-                return format_one(planes[0])
+                plan = planes[0]
+                price = get_price(plan, modality)
+                cashback = get_cashback(plan, modality)
+                cashback_str = f"💰 Cashback ${cashback:.2f}/mes\n" if cashback > 0 else ""
+                state.plan_anclado = f"{plan.plan_id} {modality}"
+                return (
+                    f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"En la familia Telcel Libre contamos con el "
+                    f"*{plan.plan_id} {modality}* a ${price:.0f}/mes:\n\n"
+                    f"📶 {gb_label(plan)}\n"
+                    f"📞 {plan.calls_sms}\n"
+                    f"{cashback_str}"
+                    f"📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber\n"
+                    f"🎬 Claro Video\n"
+                    f"💾 Claro Drive 20 GB\n\n"
+                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                )
             plan_rec = state.plan_anclado
             lista = ""
             for p in planes:

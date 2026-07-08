@@ -186,6 +186,12 @@ INTENCIONES = {
         "opciones telcel libre",
         "que opciones libre hay",
         "los planes libre disponibles",
+        "con redes sociales incluidas",
+        "quiero redes sociales incluidas",
+        "con apps incluidas",
+        "con aplicaciones sociales",
+        "con facebook e instagram incluidos",
+        "planes con apps ilimitadas",
     ],
     "planes_mas_gb": [
         "quiero mas gigas en mi plan",
