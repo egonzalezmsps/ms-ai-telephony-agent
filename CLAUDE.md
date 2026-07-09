@@ -15,7 +15,7 @@ Atiende clientes por WhatsApp para ofrecerles migración a planes vigentes (Telc
 - Seis herramientas Strands activas (ver sección de herramientas)
 - El flujo de contratación (CONTRACT) es 100% determinístico — sin LLM
 - Persistencia de sesión en PostgreSQL por número de teléfono
-- 11+ detecciones pre-LLM que interceptan y responden sin invocar al modelo
+- 20+ detecciones pre-LLM que interceptan y responden sin invocar al modelo
 
 ---
 
@@ -71,6 +71,8 @@ VERIFY_TOKEN=tu-verify-token-whatsapp
 WHATSAPP_ACCESS_TOKEN=tu-token-meta
 WHATSAPP_PHONE_NUMBER_ID=tu-phone-id-meta
 WHATSAPP_API_VERSION=v22.0          # opcional, default v22.0
+WHATSAPP_APP_SECRET=tu-app-secret   # opcional — si se define, valida firma HMAC de Meta
+TEMPLATE_LANGUAGE=es_MX             # opcional, default es_MX
 
 # Debug
 DEBUG_WHATSAPP=false                 # si true, adjunta [TOOLS] a cada respuesta
@@ -82,7 +84,7 @@ DEBUG_WHATSAPP=false                 # si true, adjunta [TOOLS] a cada respuesta
 
 ```
 ms-ai-telephony-agent/
-├── main.py                          ← FastAPI: /chat, /webhook (WhatsApp), /session
+├── main.py                          ← FastAPI: /chat, /campaign, /webhook (WhatsApp), /session
 ├── requirements.txt
 ├── scripts/
 │   ├── test_agent.py               ← CLI de pruebas (/select, /list, /reset, /perfil)
@@ -104,7 +106,7 @@ ms-ai-telephony-agent/
 │   │   ├── contract_flow.py        ← Flujo OTP determinístico (sin LLM)
 │   │   └── post_sale.py            ← Template de confirmación con folio
 │   ├── prompts/
-│   │   ├── general_rules.py        ← Reglas fijas del agente (642 líneas de reglas de negocio)
+│   │   ├── general_rules.py        ← Reglas fijas del agente (743 líneas de reglas de negocio)
 │   │   ├── system_prompt.py        ← Contexto dinámico + catálogo inyectado
 │   │   └── campaign_template.py    ← Mensaje inicial determinístico (sin LLM)
 │   ├── state/
@@ -483,6 +485,7 @@ Si `OCI_USER` no está definido en el entorno, `build_oci_model()` usa `oci_auth
 - **Deduplicación de mensajes**: `_processed_msg_ids` (in-memory set); limpieza automática al llegar a 500 IDs
 - **Lock por teléfono**: `_get_phone_lock()` previene turnos simultáneos del mismo número
 - **Procesamiento en background**: el webhook de WhatsApp retorna 200 inmediatamente; el turno se procesa via `BackgroundTasks`
+- **campaign_app.db**: integración opcional para trazabilidad de campañas; si el módulo no está disponible, el agente funciona igual. Actualiza estado de `CampanaCliente` al final de cada turno vía `_maybe_update_campana_cliente()`
 
 ---
 
@@ -492,13 +495,17 @@ Si `OCI_USER` no está definido en el entorno, `build_oci_model()` usa `oci_auth
 |---|---|---|---|
 | `GET` | `/actuator/health` | — | Health check → `{"status": "UP"}` |
 | `POST` | `/chat` | `x-api-key` | Turno de conversación |
+| `POST` | `/campaign` | `x-api-key` | Inicia campaña: envía template WhatsApp y crea sesión en PostgreSQL |
+| `POST` | `/campaign/dispatch` | `x-api-key` | Batch dispatch desde UI Streamlit (requiere `campaign_app.db`) |
 | `DELETE` | `/session` | `x-api-key` | Elimina sesión por `phone_number` |
 | `GET` | `/webhook` | — | Verificación de webhook Meta |
-| `POST` | `/webhook` | — | Recibe mensajes WhatsApp (BackgroundTasks) |
+| `POST` | `/webhook` | — | Recibe mensajes WhatsApp (BackgroundTasks); valida firma HMAC si `WHATSAPP_APP_SECRET` está definido |
 
 **ChatRequest** — campos opcionales: `message`, `phone_number`, `first_name`, `full_name`, `current_plan_name`, `current_cost`, `current_plan_gb`, `current_plan_cashback`, `subscription_type`, `has_promotion`, `usage_summary`, `is_titular`
 
 El endpoint `/chat` en el primer turno devuelve el mensaje de campaña sin llamar al LLM.
+
+**POST /webhook** soporta tipos de mensaje `text` y `button` (pulsaciones de botones de template quick_reply). Otros tipos se ignoran silenciosamente.
 
 ---
 
@@ -519,7 +526,6 @@ El endpoint `/chat` en el primer turno devuelve el mensaje de campaña sin llama
 ## Pendiente de implementar
 
 - [ ] **OTP real** — reemplazar `T12345` en `contract_flow.py` por servicio SMS real
-- [ ] **Integración WhatsApp completa** — falta validación de firma Meta y manejo de tipos de mensaje distintos a texto
 - [ ] **Logs y métricas** — auditoría de conversaciones y tasa de conversión
 - [ ] **Seguridad** — ARCO, tokenización PII
 - [ ] **Tests automatizados** — actualmente solo `test_prices.py` y CLI manual

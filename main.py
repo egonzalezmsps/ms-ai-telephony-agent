@@ -22,9 +22,10 @@ from app.state.session import SessionState
 from app.state.persistence import init_db, load_session, save_session, delete_session
 from app.state.serializer import session_to_dict, dict_to_session
 from app.prompts.campaign_template import build_campaign_message, build_template_params
-from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template
+from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template, send_whatsapp_interactive_buttons
 from app.whatsapp.command_handler import handle_command
 from app.config.logging_config import setup_logging
+from app.router.semantic_router import load_reference_embeddings
 setup_logging()
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,7 @@ def startup():
             logger.info("Tablas de campaña listas")
         except Exception as e:
             logger.warning(f"No se pudieron crear tablas de campaña: {e}")
+    load_reference_embeddings()
     logger.info("ReniAgent iniciado — tablas PostgreSQL listas")
 
 
@@ -456,7 +458,17 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                 history=updated_history,
             )
             _maybe_update_campana_cliente(session, updated_history)
-            send_whatsapp_message(phone_number, response_text)
+            if session.awaiting_contract_confirmation:
+                send_whatsapp_interactive_buttons(
+                    to=phone_number,
+                    body_text=response_text,
+                    buttons=[
+                        {"id": "ACEPTO", "title": "✅ Sí, activar"},
+                        {"id": "NO", "title": "❌ No, cancelar"},
+                    ]
+                )
+            else:
+                send_whatsapp_message(phone_number, response_text)
             logger.info(f"WA OUT | {phone_number} [stage={session.stage}]: {response_text[:80]}")
         else:
             session = SessionState(
@@ -515,12 +527,17 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         msg = messages[0]
         msg_type = msg.get("type")
 
-        # Soportar texto y pulsaciones de botones de template (quick_reply)
+        # Soportar texto, botones de template (quick_reply) y botones interactivos
         if msg_type == "text":
             message_text = msg["text"]["body"]
         elif msg_type == "button":
-            # El usuario pulsó un botón de template — tratar el texto del botón como mensaje
+            # Botón de template (quick_reply)
             message_text = msg["button"]["text"]
+        elif msg_type == "interactive":
+            # Botón interactivo — usar el id del botón (ACEPTO o NO)
+            interactive = msg.get("interactive", {})
+            btn_reply = interactive.get("button_reply", {})
+            message_text = btn_reply.get("id", btn_reply.get("title", ""))
         else:
             return {"status": "ok"}
 

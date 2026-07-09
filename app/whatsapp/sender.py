@@ -79,3 +79,36 @@ def send_whatsapp_template(
         logger.error(f"WhatsApp template error {resp.status_code}: {resp.text}")
         raise requests.HTTPError(f"{resp.status_code} — {resp.text}", response=resp)
     return resp.json()
+
+
+def send_whatsapp_interactive_buttons(to: str, body_text: str, buttons: list) -> dict:
+    """
+    Envía un mensaje interactivo con botones de respuesta rápida.
+
+    buttons: lista de dicts con keys 'id' y 'title'. Máximo 3 botones.
+    Ejemplo: [{"id": "ACEPTO", "title": "✅ Acepto"}, {"id": "NO", "title": "❌ Cancelar"}]
+    """
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": _normalize_phone(to),
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": body_text},
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": btn["id"],
+                            "title": btn["title"][:20],
+                        }
+                    }
+                    for btn in buttons[:3]
+                ]
+            }
+        }
+    }
+    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=10)
+    resp.raise_for_status()
+    return resp.json()

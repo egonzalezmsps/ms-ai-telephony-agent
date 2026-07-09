@@ -63,9 +63,7 @@ def build_summary_template(session) -> str:
         f"{apps_line}"
         f"🎬 Claro Video\n"
         f"💾 Claro Drive (20 GB)\n\n"
-        f"⚠️ Este cambio es definitivo y no podrá revertirse al plan anterior.\n\n"
-        f"Para confirmar responda ACEPTO o CONFIRMO.\n"
-        f"Para cancelar responda NO."
+        f"⚠️ Este cambio es definitivo y no podrá revertirse al plan anterior."
     )
 
 
@@ -93,13 +91,15 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             "en un Centro de Atención a Clientes (CAC)."
         )
 
-    # 1. Bloqueado por intentos fallidos de OTP
+    # 1. Bloqueado por intentos fallidos de OTP — el aviso ya se mostró al
+    # momento del bloqueo (ver punto 2). Libera el turno hacia el flujo normal
+    # en vez de repetir el mensaje ante cualquier pregunta no relacionada;
+    # iniciar_contratacion ya rechaza un nuevo intento de activación mientras
+    # authentication_locked siga activo.
     if session.authentication_locked:
         session.stage = "END"
-        return (
-            "Por seguridad hemos bloqueado el proceso de verificación. "
-            "Comuníquese con Soporte al 800 220 9518."
-        )
+        session.end_reason = "blocked"
+        return None
 
     # 2. Esperando OTP
     if session.awaiting_otp:
@@ -131,9 +131,17 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
     # 3. Esperando confirmación verbal del resumen
     if session.awaiting_contract_confirmation:
         msg = user_message.strip().upper().strip("!.¿? ")
-
         palabras = set(msg.strip().upper().split())
-        if "ACEPTO" in palabras or "CONFIRMO" in palabras:
+
+        # Primero verificar rechazo — tiene prioridad sobre ACEPTO
+        if "NO" in palabras or msg.startswith("NO"):
+            session.stage = "PERSUASION"
+            session.awaiting_contract_confirmation = False
+            session.plan_selected = None
+            return None
+
+        # Solo ACEPTO o CONFIRMO proceden con la activación
+        elif "ACEPTO" in palabras or "CONFIRMO" in palabras:
             plan = find_plan(session.plan_selected)
             if plan:
                 new_price = get_price(plan, session.subscription_type)
@@ -159,28 +167,21 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                     f"del {session.plan_selected}."
                 )
 
-        if any(w in msg for w in ["NO", "CANCEL", "CANCELAR"]):
-            session.stage = "PERSUASION"
-            session.awaiting_contract_confirmation = False
-            session.plan_selected = None
-            return None  # → volver a persuasión
-
-        if msg in _VAGUE_CONFIRMATIONS:
+        # Afirmación vaga — pedir confirmación explícita
+        elif msg in _VAGUE_CONFIRMATIONS:
             return (
                 f"Para confirmar la activación del {session.plan_selected}, "
-                f"responda *ACEPTO* o *CONFIRMO*.\n\n"
-                f"Para cancelar responda *NO*."
+                f"presione *Sí, activar* o responda *ACEPTO*.\n\n"
+                f"Para cancelar presione *No, cancelar*."
             )
 
-        if msg.startswith("ACEP") or msg.startswith("CONF"):
+        # Todo lo demás → recordar que debe confirmar o cancelar
+        else:
             return (
-                f"Para confirmar la activación del {session.plan_selected}, "
-                f"responda *ACEPTO* o *CONFIRMO*.\n\n"
-                f"Para cancelar responda *NO*."
+                f"Para continuar, presione *Sí, activar* o responda *ACEPTO* "
+                f"para confirmar la activación del *{session.plan_selected}*.\n\n"
+                f"O presione *No, cancelar* para cancelar y continuar la conversación."
             )
-
-        # Mensaje no reconocido (pregunta durante espera) → LLM responde
-        return None
 
     # 4. Primer ingreso al flujo — mostrar resumen
     session.awaiting_contract_confirmation = True
