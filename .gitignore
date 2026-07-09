@@ -36,6 +36,8 @@ Thumbs.db
 logs/
 
 pem/
+*.key
+*.pem
 
 # Claude docs
 superpowers/
