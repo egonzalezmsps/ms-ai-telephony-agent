@@ -17,32 +17,38 @@ import datetime as _dt
 from zoneinfo import ZoneInfo as _ZoneInfo
 DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now(_ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
 
-TEMPLATE_HEADER = "Evolucione su plan con Telcel ahora sin plazos forzosos"
+TEMPLATE_HEADER = "🚀 Evolucione su plan con Telcel, ahora sin plazos forzosos"
 
 # Cuerpos de plantilla con marcadores {{N}} — espejo exacto de las plantillas WhatsApp
 _BODY_LIBRE = (
-    "Hola, *{{1}}* 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
-    "por eso le ofrecemos el *{{2}}* a *${{3}} MXN/mes*.\n"
-    "*{{4}}*\n\n"
-    "• 📞 *Minutos y SMS ilimitados* (México, EUA, Cánada)\n"
-    "• 📈 *{{5}}*\n"
+    "Hola, *{{1}}* 👋\n"
+    "En *Telcel* queremos que disfrute de una mejor experiencia. Por ello, tenemos una "
+    "oferta especial para usted: cambie a *{{2}}* por solo *${{3}} MXN* al mes.\n\n"
+    "Con este plan obtendrá más conectividad y mejores beneficios para aprovechar al "
+    "máximo su servicio:\n\n"
+    "• 📞 *Minutos y SMS ilimitados* en México, Estados Unidos y Canadá\n"
+    "• 📈 *{{4}}*\n"
     "• 📱 *Apps Ilimitadas* (WhatsApp, Facebook, Messenger, X, Instagram, Snapchat, Uber)\n"
-    "• 💰 *Cashback de ${{6}} MXN/mes*\n"
+    "• 💰 *Cashback de ${{5}} MXN/mes*\n"
     "• 🎬 *Claro Video*\n"
     "• 💾 *Claro Drive con 20 GB de almacenamiento en la nube*\n\n"
-    "¿Le gustaría activarlo?"
+    "¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente "
+    "qué beneficios adicionales obtendría?"
 )
 
 _BODY_ULTRA = (
-    "Hola, *{{1}}* 👋. En *Telcel* buscamos mejorar la experiencia de nuestros planes, "
-    "por eso le ofrecemos el *{{2}}* a *${{3}} MXN/mes*.\n"
-    "*{{4}}*\n\n"
-    "• 📞 *Minutos y SMS ilimitados* (México, EUA, Cánada)\n"
-    "• 📈 *{{5}}*\n"
-    "• ✉ *WhatsApp Ilimitado*\n"
+    "Hola, *{{1}}* 👋\n"
+    "En *Telcel* queremos que disfrute de una mejor experiencia. Por ello, tenemos una "
+    "oferta especial para usted: cambie a *{{2}}* por solo *${{3}} MXN* al mes.\n\n"
+    "Con este plan obtendrá más conectividad y mejores beneficios para aprovechar al "
+    "máximo su servicio:\n\n"
+    "• 📞 *Minutos y SMS ilimitados* en México, Estados Unidos y Canadá\n"
+    "• 📈 *{{4}}*\n"
+    "• ✉️ *WhatsApp Ilimitado*\n"
     "• 🎬 *Claro Video*\n"
     "• 💾 *Claro Drive con 20 GB de almacenamiento en la nube*\n\n"
-    "¿Le gustaría activarlo?"
+    "¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente "
+    "qué beneficios adicionales obtendría?"
 )
 
 
@@ -59,8 +65,8 @@ def build_template_params(session: SessionState) -> Optional[dict]:
     Returns {"template_name": str, "params": list} for the correct WhatsApp template.
     Returns None if no eligible plan exists for this customer.
 
-    Telcel Libre  → TEMPLATE_LIBRE  — 6 params: nombre, plan, precio, hook, datos, cashback
-    Telcel Ultra  → TEMPLATE_ULTRA  — 5 params: nombre, plan, precio, hook, GB
+    Telcel Libre  → TEMPLATE_LIBRE  — 5 params: nombre, plan, precio, datos, cashback
+    Telcel Ultra  → TEMPLATE_ULTRA  — 4 params: nombre, plan, precio, GB
     """
     target = recommend_plan(session.current_cost, session.subscription_type)
     if not target:
@@ -70,12 +76,6 @@ def build_template_params(session: SessionState) -> Optional[dict]:
     cashback = get_cashback(target, session.subscription_type)
     has_promo = bool(session.has_promotion)
     plan_name = f"{target.plan_id} {session.subscription_type}"
-
-    hook = (
-        "Mantenga su renta actual con más beneficios para su línea:"
-        if abs(price - session.current_cost) < 1
-        else "Disfrute de más datos y beneficios con un plan mejorado:"
-    )
 
     if target.family == "Telcel Libre":
         if has_promo and target.gb_promo > target.gb_base and price > session.current_cost + 1.0:
@@ -90,9 +90,8 @@ def build_template_params(session: SessionState) -> Optional[dict]:
                 session.first_name,       # {{1}} nombre
                 plan_name,                # {{2}} plan
                 f"{price:.0f}",           # {{3}} precio
-                hook,                     # {{4}} hook
-                datos,                    # {{5}} datos
-                f"{cashback:.2f}",        # {{6}} cashback
+                datos,                    # {{4}} datos
+                f"{cashback:.2f}",        # {{5}} cashback
             ],
         }
     else:  # Telcel Ultra
@@ -104,8 +103,7 @@ def build_template_params(session: SessionState) -> Optional[dict]:
                 session.first_name,       # {{1}} nombre
                 plan_name,                # {{2}} plan
                 f"{price:.0f}",           # {{3}} precio
-                hook,                     # {{4}} hook
-                gb,                       # {{5}} GB
+                gb,                       # {{4}} GB
             ],
         }
 

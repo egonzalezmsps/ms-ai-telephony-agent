@@ -546,6 +546,44 @@ def run_turn(
                 return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
         # else: pregunta durante espera → continúa al LLM con contexto de contrato
 
+    # ── Detección pre-LLM: botones quick_reply del mensaje de campaña ────────
+    # ("Sí, compáralo" / "En otro momento") — coincidencia determinística por
+    # id de botón interactivo o por texto/payload de botón de template, sin
+    # depender del router semántico.
+    _msg_btn_norm = re.sub(r'[¿?¡!,\.]', ' ', user_message.strip().lower())
+    _msg_btn_norm = _norm_name(_msg_btn_norm)
+    _msg_btn_norm = re.sub(r'\s+', ' ', _msg_btn_norm).strip()
+
+    if _msg_btn_norm in {"comparar", "si comparalo"}:
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        comparar_fn = next((t for t in tools if t.tool_name == "comparar_planes"), None)
+        if comparar_fn:
+            result = comparar_fn(plan_id="")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
+
+    if _msg_btn_norm in {"despues", "en otro momento"} and session.stage == "PERSUASION":
+        from app.tools.telcel_tools import make_tools
+        tools = make_tools(session)
+        manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
+        if manejar_fn:
+            result = manejar_fn(motivo="")
+            response_text = result.replace(
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
+
     msg_lower = user_message.lower()
 
     # ── Clasificación semántica de intención ─────────────────────────────────

@@ -483,7 +483,17 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                 session_data=session_to_dict(session),
                 history=initial_history,
             )
-            send_whatsapp_message(phone_number, campaign_msg)
+            if build_template_params(session) is not None:
+                send_whatsapp_interactive_buttons(
+                    to=phone_number,
+                    body_text=campaign_msg,
+                    buttons=[
+                        {"id": "COMPARAR", "title": "Sí, compáralo"},
+                        {"id": "DESPUES", "title": "En otro momento"},
+                    ]
+                )
+            else:
+                send_whatsapp_message(phone_number, campaign_msg)
             logger.info(f"WA NEW | {phone_number} — sesión creada, campaña enviada")
 
     except Exception as e:
@@ -531,8 +541,10 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         if msg_type == "text":
             message_text = msg["text"]["body"]
         elif msg_type == "button":
-            # Botón de template (quick_reply)
-            message_text = msg["button"]["text"]
+            # Botón de template (quick_reply) — usar el payload configurado en el
+            # template si existe; si no, cae al texto visible del botón
+            btn = msg.get("button", {})
+            message_text = btn.get("payload") or btn.get("text", "")
         elif msg_type == "interactive":
             # Botón interactivo — usar el id del botón (ACEPTO o NO)
             interactive = msg.get("interactive", {})
