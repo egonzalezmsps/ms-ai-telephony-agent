@@ -17,8 +17,6 @@ import datetime as _dt
 from zoneinfo import ZoneInfo as _ZoneInfo
 DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now(_ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
 
-TEMPLATE_HEADER = "🚀 Evolucione su plan con Telcel, ahora sin plazos forzosos"
-
 # Cuerpos de plantilla con marcadores {{N}} — espejo exacto de las plantillas WhatsApp
 _BODY_LIBRE = (
     "Hola, *{{1}}* 👋\n"
@@ -30,8 +28,7 @@ _BODY_LIBRE = (
     "• 📈 *{{4}}*\n"
     "• 📱 *Apps Ilimitadas* (WhatsApp, Facebook, Messenger, X, Instagram, Snapchat, Uber)\n"
     "• 💰 *Cashback de ${{5}} MXN/mes*\n"
-    "• 🎬 *Claro Video*\n"
-    "• 💾 *Claro Drive con 20 GB de almacenamiento en la nube*\n\n"
+    "• 🎬 *Claro Video y Claro Drive (20 GB)*\n\n"
     "¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente "
     "qué beneficios adicionales obtendría?"
 )
@@ -45,19 +42,18 @@ _BODY_ULTRA = (
     "• 📞 *Minutos y SMS ilimitados* en México, Estados Unidos y Canadá\n"
     "• 📈 *{{4}}*\n"
     "• ✉️ *WhatsApp Ilimitado*\n"
-    "• 🎬 *Claro Video*\n"
-    "• 💾 *Claro Drive con 20 GB de almacenamiento en la nube*\n\n"
+    "• 🎬 *Claro Video y Claro Drive (20 GB)*\n\n"
     "¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente "
     "qué beneficios adicionales obtendría?"
 )
 
 
 def _render_template(body: str, params: list) -> str:
-    """Sustituye los marcadores {{N}} con los valores de params y antepone el header."""
+    """Sustituye los marcadores {{N}} con los valores de params."""
     text = body
     for i, value in enumerate(params, start=1):
         text = text.replace("{{" + str(i) + "}}", value)
-    return f"*{TEMPLATE_HEADER}*\n\n{text}"
+    return text
 
 
 def build_template_params(session: SessionState) -> Optional[dict]:

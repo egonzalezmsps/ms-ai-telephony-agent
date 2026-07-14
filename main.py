@@ -443,7 +443,23 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
         if message_text.startswith("/"):
             cmd_response = handle_command(phone_number, message_text)
             if cmd_response is not None:
-                send_whatsapp_message(phone_number, cmd_response)
+                cmd_name = message_text.strip().lower().split()[0]
+                sent_with_buttons = False
+                if cmd_name in ("/seleccionar", "/select"):
+                    cmd_session_data = load_session(phone_number)
+                    cmd_session = dict_to_session(cmd_session_data["session_data"]) if cmd_session_data else None
+                    if cmd_session is not None and build_template_params(cmd_session) is not None:
+                        send_whatsapp_interactive_buttons(
+                            to=phone_number,
+                            body_text=cmd_response,
+                            buttons=[
+                                {"id": "COMPARAR", "title": "Sí, compáralo"},
+                                {"id": "DESPUES", "title": "En otro momento"},
+                            ]
+                        )
+                        sent_with_buttons = True
+                if not sent_with_buttons:
+                    send_whatsapp_message(phone_number, cmd_response)
                 return
 
         existing = load_session(phone_number)
