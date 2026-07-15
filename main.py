@@ -177,6 +177,11 @@ def health():
     return {"status": "UP"}
 
 
+@app.get("/health", include_in_schema=False)
+def health_simple():
+    return "ok"
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(
     request: ChatRequest,

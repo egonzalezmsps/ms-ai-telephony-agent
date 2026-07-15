@@ -23,7 +23,7 @@ spec:
             name: oci-api-key-config
       containers:
         - name: telcel-ai-app
-          image: us-chicago-1.ocir.io/idkrobdezpcz/orion-telcel-ai-app:v1
+          image: mx-monterrey-1.ocir.io/axrmvrmnextg/orion-telcel-ai-app:v1
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
