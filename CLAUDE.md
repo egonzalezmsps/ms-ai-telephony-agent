@@ -41,6 +41,30 @@ python -m uvicorn main:app --reload
 python scripts/test_agent.py
 ```
 
+### Tests y scripts de verificación
+
+No hay `pytest` en `requirements.txt`/`uv.lock` — instalarlo aparte (`pip install pytest`) antes de correr lo siguiente:
+
+```bash
+# Tests unitarios de campaign_app (crud, md_importer, models)
+pytest tests/campaign_app/
+
+# Un solo archivo o test
+pytest tests/campaign_app/test_crud.py
+pytest tests/campaign_app/test_crud.py::test_nombre_del_test
+
+# Scripts de verificación manual (no son pytest, se corren directo)
+python scripts/test_prices.py              # valida precios del catálogo
+python scripts/test_all_profiles.py        # corre mensajes de prueba contra los 18 perfiles del CSV
+python scripts/test_cross_plans.py         # comparaciones cruzadas de planes entre perfiles
+python scripts/test_check_invented_plans.py # prueba _check_invented_plans() de reni_agent.py
+python scripts/test_router.py              # prueba directa del router semántico (classify())
+python scripts/test_embeddings.py          # exploración directa de la API de embeddings OCI/Cohere
+python scripts/list_models.py              # lista modelos disponibles en OCI Generative AI
+```
+
+No hay linter ni formatter configurado en el proyecto (sin `ruff`/`black`/`mypy` en `pyproject.toml`).
+
 ### Variables de entorno requeridas (`.env`)
 
 ```env
