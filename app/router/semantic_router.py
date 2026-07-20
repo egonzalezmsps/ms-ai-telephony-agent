@@ -54,6 +54,13 @@ INTENCIONES = {
         "tengo que activarlo hoy",
         "es decir solo hoy puedo activarlo",
         "si no lo activo hoy que pasa",
+        "cuando es la fecha limite",
+        "cual es la fecha limite",
+        "cuando vence el plazo",
+        "tiene fecha limite",
+        "hay fecha limite",
+        "hasta cuando es la oferta",
+        "cuando expira la oferta",
     ],
     "criterio_promo": [
         "porque a veces tienen promocion",

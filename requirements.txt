@@ -4,6 +4,7 @@ strands-agents-tools>=0.1.0
 
 # LLM provider
 litellm>=1.40.0
+orjson>=3.9.0
 
 # OCI SDK
 oci>=2.100.0
