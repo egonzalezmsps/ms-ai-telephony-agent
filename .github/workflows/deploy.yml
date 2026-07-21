@@ -1,0 +1,43 @@
+name: Deploy telcel-ai-app
+
+on:
+  push:
+    branches:
+      - DeploymentTelcel
+
+env:
+  IMAGE: mx-monterrey-1.ocir.io/axrmvrmnextg/orion-telcel-ai-app
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, oke]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag (short SHA del commit)
+        id: vars
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Login a OCIR
+        run: echo "${{ secrets.OCIR_AUTH_TOKEN }}" | docker login mx-monterrey-1.ocir.io -u "${{ secrets.OCIR_USERNAME }}" --password-stdin
+
+      - name: Build y push de la imagen
+        run: |
+          docker build -t $IMAGE:${{ steps.vars.outputs.tag }} -t $IMAGE:latest .
+          docker push $IMAGE:${{ steps.vars.outputs.tag }}
+          docker push $IMAGE:latest
+
+      - name: Configurar kubectl (in-cluster, usando el ServiceAccount del pod)
+        run: |
+          kubectl config set-cluster in-cluster --server=https://kubernetes.default.svc --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          kubectl config set-credentials sa --token="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+          kubectl config set-context in-cluster --cluster=in-cluster --user=sa --namespace=default
+          kubectl config use-context in-cluster
+
+      - name: Actualizar el Deployment con la nueva imagen
+        run: |
+          kubectl set image deployment/telcel-ai-deployment \
+            telcel-ai-app=$IMAGE:${{ steps.vars.outputs.tag }} \
+            -n default
+          kubectl rollout status deployment/telcel-ai-deployment -n default --timeout=120s
