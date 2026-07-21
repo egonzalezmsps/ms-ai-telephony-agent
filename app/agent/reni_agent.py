@@ -1035,6 +1035,11 @@ def run_turn(
     # tiene efecto en la memoria de la conversación.
     logger.info("[HISTORIAL] %d mensajes previos phone=%s",
                 len(prior_messages), session.phone_number)
+    logger.info("[HISTORIAL_DETALLE] %d mensajes phone=%s ultimo_rol=%s ultimo_preview='%s'",
+                len(prior_messages),
+                session.phone_number,
+                prior_messages[-1].get("role", "?") if prior_messages else "ninguno",
+                str(prior_messages[-1].get("content", ""))[:80] if prior_messages else "")
     agent = create_agent(session, messages=prior_messages)
 
     try:
