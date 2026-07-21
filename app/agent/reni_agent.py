@@ -1278,4 +1278,18 @@ def run_turn(
             updated_history = updated_history[-20:]
         return _apply_debug(contract_msg, ["iniciar_contratacion"], user_message), updated_history
 
+    # Safety net — LLM generó resumen de contratación sin invocar iniciar_contratacion
+    if (session.stage == "PERSUASION" and
+        session.plan_anclado and
+        "está por confirmar el cambio de plan" in response_text and
+        "Plan actual:" in response_text and
+        "Nuevo plan:" in response_text):
+        session.stage = "CONTRACT"
+        session.plan_selected = session.plan_anclado.removesuffix(
+            f" {session.subscription_type}"
+        ).strip()
+        session.awaiting_contract_confirmation = True
+        logger.info("[SAFETY_CONTRACT] LLM generó resumen sin tool phone=%s",
+                    session.phone_number)
+
     return _apply_debug(response_text, _tools_invoked, user_message), updated_history
