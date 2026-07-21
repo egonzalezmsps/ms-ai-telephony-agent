@@ -1033,6 +1033,8 @@ def run_turn(
     # El historial va en el constructor, no como kwarg de agent().
     # Pasar messages= a agent() lo mete en **kwargs (deprecado) y no
     # tiene efecto en la memoria de la conversación.
+    logger.info("[HISTORIAL] %d mensajes previos phone=%s",
+                len(prior_messages), session.phone_number)
     agent = create_agent(session, messages=prior_messages)
 
     try:
