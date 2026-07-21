@@ -235,7 +235,15 @@ def chat(
         )
 
     # Ejecutar turno
-    response_text, updated_history = run_turn(session, request.message, history)
+    try:
+        response_text, updated_history = run_turn(session, request.message, history)
+    except Exception as e:
+        logger.error(
+            f"Error procesando /chat de {request.phone_number} "
+            f"[stage={session.stage}]: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Error procesando el mensaje")
 
     # Guardar sesión actualizada en PostgreSQL
     save_session(

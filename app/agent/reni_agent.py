@@ -1035,9 +1035,30 @@ def run_turn(
     # tiene efecto en la memoria de la conversación.
     agent = create_agent(session, messages=prior_messages)
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning, module="strands")
-        response = agent(user_message)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module="strands")
+            response = agent(user_message)
+    except UnicodeError:
+        model_params = oci_model.config.get("params", {})
+        logger.error(
+            "[UNICODE_ERROR] fallo de codificación en la llamada al modelo "
+            "phone=%s stage=%s temperature=%s max_tokens=%s msg='%s'",
+            session.phone_number, session.stage,
+            model_params.get("temperature"), model_params.get("max_tokens"),
+            user_message[:120], exc_info=True,
+        )
+        raise
+    except Exception:
+        model_params = oci_model.config.get("params", {})
+        logger.error(
+            "[LLM_ERROR] fallo en la llamada al modelo "
+            "phone=%s stage=%s temperature=%s max_tokens=%s msg='%s'",
+            session.phone_number, session.stage,
+            model_params.get("temperature"), model_params.get("max_tokens"),
+            user_message[:120], exc_info=True,
+        )
+        raise
 
     response_text = ""
     if hasattr(response, "message") and response.message:
@@ -1181,10 +1202,26 @@ def run_turn(
         re.IGNORECASE
     )
     if _TOOL_PATTERN.search(response_text):
+        logger.warning(
+            "[TOOL_LEAK_RETRY] patrón de tool detectado en texto, reintentando "
+            "phone=%s stage=%s original='%s'",
+            session.phone_number, session.stage, response_text[:200],
+        )
         agent_retry = create_agent(session, messages=prior_messages)
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning, module="strands")
-            response2 = agent_retry(user_message)
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning, module="strands")
+                response2 = agent_retry(user_message)
+        except Exception:
+            model_params = oci_model.config.get("params", {})
+            logger.error(
+                "[LLM_ERROR] fallo en el reintento por tool-leak "
+                "phone=%s stage=%s temperature=%s max_tokens=%s msg='%s'",
+                session.phone_number, session.stage,
+                model_params.get("temperature"), model_params.get("max_tokens"),
+                user_message[:120], exc_info=True,
+            )
+            raise
         retry_text = ""
         if hasattr(response2, "message") and response2.message:
             for block in response2.message.get("content", []):
@@ -1193,8 +1230,15 @@ def run_turn(
         retry_text = _TOOL_PATTERN.sub('', retry_text).strip()
         if retry_text:
             response_text = retry_text
+            logger.info(
+                "[TOOL_LEAK_RETRY] reintento exitoso phone=%s", session.phone_number
+            )
         else:
             response_text = "Por favor, ¿podría repetir su pregunta?"
+            logger.warning(
+                "[TOOL_LEAK_RETRY] reintento devolvió vacío, usando fallback phone=%s",
+                session.phone_number,
+            )
 
     REJECTION_WORDS = {
         "no",

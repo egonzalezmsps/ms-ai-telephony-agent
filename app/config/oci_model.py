@@ -46,24 +46,37 @@ def build_oci_model() -> LiteLLMModel:
 
     # Si hay credenciales de API key, úsalas
     oci_user = os.environ.get("OCI_USER")
-    if oci_user:
-        key_file = os.environ.get("OCI_KEY_FILE", "./.oci/oci_api_key.pem")
-        params["oci_user"] = oci_user
-        params["oci_fingerprint"] = os.environ["OCI_FINGERPRINT"]
-        params["oci_tenancy"] = os.environ["OCI_TENANCY"]
-        params["oci_key"] = _read_key_file(key_file)
-        logger.info("[OCI] Auth: API key user=%s", oci_user[:30])
-    # Si no, usa Instance Principal (autenticación automática en OKE)
-    else:
-        params["oci_auth"] = "instance_principal"
-        logger.info("[OCI] Auth: instance_principal")
+    auth_mode = "instance_principal"
+    try:
+        if oci_user:
+            auth_mode = "api_key"
+            key_file = os.environ.get("OCI_KEY_FILE", "./.oci/oci_api_key.pem")
+            params["oci_user"] = oci_user
+            params["oci_fingerprint"] = os.environ["OCI_FINGERPRINT"]
+            params["oci_tenancy"] = os.environ["OCI_TENANCY"]
+            params["oci_key"] = _read_key_file(key_file)
+            logger.info("[OCI] Auth: API key user=%s", oci_user[:30])
+        # Si no, usa Instance Principal (autenticación automática en OKE)
+        else:
+            params["oci_auth"] = "instance_principal"
+            logger.info("[OCI] Auth: instance_principal")
 
-    model = LiteLLMModel(
-        model_id=f"oci/{model_id}",
-        params=params,
+        model = LiteLLMModel(
+            model_id=f"oci/{model_id}",
+            params=params,
+        )
+    except Exception:
+        logger.error(
+            "[OCI] Fallo al construir el modelo model_id=%s region=%s auth=%s",
+            model_id, region, auth_mode, exc_info=True,
+        )
+        raise
+    logger.info(
+        "[OCI] Modelo listo en %.2fs model_id=%s region=%s auth=%s "
+        "temperature=%.1f max_tokens=%d top_p=%.2f",
+        time.time() - t0, model_id, region, auth_mode,
+        params["temperature"], params["max_tokens"], params["top_p"],
     )
-    logger.info("[OCI] Modelo listo en %.2fs temperature=%.1f max_tokens=%d",
-                time.time() - t0, params["temperature"], params["max_tokens"])
     return model
 
 
