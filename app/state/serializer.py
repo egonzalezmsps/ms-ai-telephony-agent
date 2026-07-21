@@ -4,6 +4,7 @@ state/serializer.py
 Convierte SessionState a dict (para guardar en DB) y viceversa.
 """
 
+
 from app.state.session import SessionState
 
 
