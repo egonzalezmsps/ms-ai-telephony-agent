@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-runner
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: github-runner
+  template:
+    metadata:
+      labels:
+        app: github-runner
+    spec:
+      serviceAccountName: github-ci-deployer
+      containers:
+        - name: dind
+          image: docker:dind
+          securityContext:
+            privileged: true
+          args:
+            - --storage-driver=vfs
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run
+        - name: runner
+          image: docker.io/myoung34/github-runner:latest
+          env:
+            - name: REPO_URL
+              value: "https://github.com/egonzalezmsps/ms-ai-telephony-agent"
+            - name: RUNNER_NAME
+              value: "oke-runner"
+            - name: RUNNER_WORKDIR
+              value: "/tmp/runner/work"
+            - name: RUNNER_SCOPE
+              value: "repo"
+            - name: LABELS
+              value: "self-hosted,oke"
+            - name: DOCKER_HOST
+              value: "unix:///var/run/docker.sock"
+            - name: ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-runner-pat
+                  key: ACCESS_TOKEN
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run
+      volumes:
+        - name: docker-sock
+          emptyDir: {}
