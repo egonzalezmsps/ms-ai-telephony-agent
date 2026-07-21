@@ -28,6 +28,13 @@ jobs:
           docker push $IMAGE:${{ steps.vars.outputs.tag }}
           docker push $IMAGE:latest
 
+      - name: Instalar kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
       - name: Configurar kubectl (in-cluster, usando el ServiceAccount del pod)
         run: |
           kubectl config set-cluster in-cluster --server=https://kubernetes.default.svc --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
