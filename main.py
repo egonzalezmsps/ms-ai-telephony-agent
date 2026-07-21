@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Debe ejecutarse antes de importar módulos que lean os.environ al cargarse
 
+from app.config.logging_config import setup_logging
+setup_logging()  # Debe correr antes de importar módulos que loguean al cargarse (p.ej. oci_model)
+
 from fastapi import FastAPI, Header, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -24,9 +27,7 @@ from app.state.serializer import session_to_dict, dict_to_session
 from app.prompts.campaign_template import build_campaign_message, build_template_params
 from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template, send_whatsapp_interactive_buttons
 from app.whatsapp.command_handler import handle_command
-from app.config.logging_config import setup_logging
 from app.router.semantic_router import load_reference_embeddings
-setup_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,7 @@ app = FastAPI(
 @app.on_event("startup")
 def startup():
     """Crea las tablas en PostgreSQL al arrancar."""
+    logger.info("[DEPLOY] Modelo OCI activo: %s", os.environ.get("OCI_MODEL_ID", "desconocido"))
     init_db()
     if _CAMPAIGN_DB_AVAILABLE:
         try:

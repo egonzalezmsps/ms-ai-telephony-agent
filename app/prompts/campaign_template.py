@@ -16,6 +16,7 @@ TEMPLATE_ULTRA = _os.environ.get("TEMPLATE_ULTRA", "telcel_migration_campaing__1
 import datetime as _dt
 from zoneinfo import ZoneInfo as _ZoneInfo
 DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now(_ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
+OCI_MODEL_NAME = _os.environ.get("OCI_MODEL_ID", "desconocido")
 
 # Cuerpos de plantilla con marcadores {{N}} — espejo exacto de las plantillas WhatsApp
 _BODY_LIBRE = (
@@ -121,10 +122,12 @@ def build_campaign_message(session: SessionState) -> str:
         )
         if DEPLOY_TIMESTAMP:
             msg += f"\n\n_(deploy: {DEPLOY_TIMESTAMP})_"
+            msg += f"\n_(modelo: {OCI_MODEL_NAME})_"
         return msg
 
     body = _BODY_LIBRE if result["template_name"] == TEMPLATE_LIBRE else _BODY_ULTRA
     msg = _render_template(body, result["params"])
     if DEPLOY_TIMESTAMP:
         msg += f"\n\n_(deploy: {DEPLOY_TIMESTAMP})_"
+        msg += f"\n_(modelo: {OCI_MODEL_NAME})_"
     return msg
