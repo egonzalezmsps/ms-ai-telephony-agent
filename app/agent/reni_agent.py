@@ -1078,9 +1078,22 @@ def run_turn(
             if isinstance(block, dict) and "text" in block:
                 response_text += block.get("text", "")
     response_text = response_text.strip()
-    logger.info("[RESPONSE_DEBUG] stop_reason=%s text_len=%d phone=%s",
+    input_tokens = "?"
+    output_tokens = "?"
+    latency_ms = "?"
+    if hasattr(response, "message") and response.message:
+        metadata = response.message.get("metadata", {})
+        usage = metadata.get("usage", {})
+        input_tokens = usage.get("inputTokens", "?")
+        output_tokens = usage.get("outputTokens", "?")
+        latency_ms = metadata.get("metrics", {}).get("latencyMs", "?")
+
+    logger.info("[RESPONSE_DEBUG] stop_reason=%s text_len=%d input_tokens=%s output_tokens=%s latency_ms=%s phone=%s",
                 getattr(response, "stop_reason", "?"),
                 len(response_text),
+                input_tokens,
+                output_tokens,
+                latency_ms,
                 session.phone_number)
     if hasattr(response, "message") and response.message:
         logger.info("[RESPONSE_MESSAGE] %s phone=%s",
