@@ -38,7 +38,7 @@ spec:
             - name: OCI_REGION
               value: "us-chicago-1"
             - name: OCI_MODEL_ID
-              value: "google.gemini-2.5-flash-lite"
+              value: "google.gemini-2.5-flash"
             - name: OCI_SERVICE_ENDPOINT
               value: "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com"
             - name: OCI_COMPARTMENT_ID
