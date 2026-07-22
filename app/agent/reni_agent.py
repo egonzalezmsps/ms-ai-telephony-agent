@@ -1027,7 +1027,7 @@ def run_turn(
     # NO {"type": "text", "text": "..."}.
     prior_messages = [
         {"role": msg["role"], "content": [{"text": msg["content"]}]}
-        for msg in history
+        for msg in history[-8:]
     ]
 
     # El historial va en el constructor, no como kwarg de agent().
@@ -1040,6 +1040,11 @@ def run_turn(
                 session.phone_number,
                 prior_messages[-1].get("role", "?") if prior_messages else "ninguno",
                 str(prior_messages[-1].get("content", ""))[:80] if prior_messages else "")
+    system_prompt = build_system_prompt(session)
+    logger.info("[SYSTEM_PROMPT_LEN] chars=%d history_msgs=%d phone=%s",
+                len(system_prompt),
+                len(prior_messages),
+                session.phone_number)
     agent = create_agent(session, messages=prior_messages)
 
     try:
