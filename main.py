@@ -624,7 +624,7 @@ def delete(
     delete_session(request.phone_number)
     return {"deleted": request.phone_number}
 
-
+"""Agrega logs)."""
 @app.get("/logs", include_in_schema=False)
 def get_logs(api_key: Optional[str] = Query(default=None)):
     """Descarga el archivo de log activo (app.log) para monitoreo remoto."""
