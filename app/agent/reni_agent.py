@@ -1035,6 +1035,11 @@ def run_turn(
     # tiene efecto en la memoria de la conversación.
     logger.info("[HISTORIAL] %d mensajes previos phone=%s",
                 len(prior_messages), session.phone_number)
+    logger.info("[HISTORIAL_DETALLE] %d mensajes phone=%s ultimo_rol=%s ultimo_preview='%s'",
+                len(prior_messages),
+                session.phone_number,
+                prior_messages[-1].get("role", "?") if prior_messages else "ninguno",
+                str(prior_messages[-1].get("content", ""))[:80] if prior_messages else "")
     agent = create_agent(session, messages=prior_messages)
 
     try:
@@ -1068,6 +1073,14 @@ def run_turn(
             if isinstance(block, dict) and "text" in block:
                 response_text += block.get("text", "")
     response_text = response_text.strip()
+    logger.info("[RESPONSE_DEBUG] stop_reason=%s text_len=%d phone=%s",
+                getattr(response, "stop_reason", "?"),
+                len(response_text),
+                session.phone_number)
+    if hasattr(response, "message") and response.message:
+        logger.info("[RESPONSE_MESSAGE] %s phone=%s",
+                    str(response.message)[:200],
+                    session.phone_number)
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
     response_text = re.sub(r'\[\s*\]', '', response_text).strip()
 
