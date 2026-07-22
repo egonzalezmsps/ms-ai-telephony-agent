@@ -12,11 +12,11 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Debe ejecutarse antes de importar módulos que lean os.environ al cargarse
 
-from app.config.logging_config import setup_logging
+from app.config.logging_config import setup_logging, LOGS_DIR
 setup_logging()  # Debe correr antes de importar módulos que loguean al cargarse (p.ej. oci_model)
 
 from fastapi import FastAPI, Header, HTTPException, Query, BackgroundTasks, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -623,3 +623,21 @@ def delete(
 
     delete_session(request.phone_number)
     return {"deleted": request.phone_number}
+
+
+@app.get("/logs", include_in_schema=False)
+def get_logs(api_key: Optional[str] = Query(default=None)):
+    """Descarga el archivo de log activo (app.log) para monitoreo remoto."""
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    log_path = os.path.join(LOGS_DIR, "app.log")
+    if not os.path.exists(log_path):
+        raise HTTPException(status_code=404, detail="Log file not found")
+
+    return FileResponse(
+        path=log_path,
+        media_type="text/plain",
+        filename="app.log",
+    )
