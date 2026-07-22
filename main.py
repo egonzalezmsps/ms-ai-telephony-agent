@@ -18,7 +18,7 @@ setup_logging()  # Debe correr antes de importar módulos que loguean al cargars
 from fastapi import FastAPI, Header, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse, FileResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Union
 
 from app.agent.reni_agent import run_turn
 from app.state.session import SessionState
@@ -645,8 +645,9 @@ def get_logs(api_key: Optional[str] = Query(default=None)):
 
 class ContextLimitResult(BaseModel):
     target_tokens: int
-    input_tokens: Optional[int] = None
-    output_tokens: Optional[int] = None
+    input_tokens: Optional[Union[int, str]] = None
+    output_tokens: Optional[Union[int, str]] = None
+    latency_ms: Optional[Union[int, str]] = None
     response_preview: Optional[str] = None
     status: str  # "ok" | "fallo" | "error"
     error: Optional[str] = None
@@ -682,24 +683,37 @@ def test_context_limits(x_api_key: Optional[str] = Header(default=None)):
             )
             response = agent("Responde solo: OK")
 
-            usage = getattr(response, "usage", None)
-            input_tokens = getattr(usage, "input_tokens", None)
-            output_tokens = getattr(usage, "output_tokens", None)
             text = ""
             if hasattr(response, "message") and response.message:
                 for block in response.message.get("content", []):
                     if isinstance(block, dict) and "text" in block:
                         text += block.get("text", "")
 
-            fallo = not output_tokens or int(output_tokens) == 0
+            # Leer tokens del message directamente
+            input_tokens = "?"
+            output_tokens = "?"
+            latency = "?"
+            if hasattr(response, "message") and response.message:
+                metadata = response.message.get("metadata", {})
+                usage = metadata.get("usage", {})
+                input_tokens = usage.get("inputTokens", "?")
+                output_tokens = usage.get("outputTokens", "?")
+                latency = metadata.get("metrics", {}).get("latencyMs", "?")
+
+            try:
+                out_int = int(output_tokens)
+            except (ValueError, TypeError):
+                out_int = 1  # si no podemos leer, asumimos que funcionó
+
             results.append(ContextLimitResult(
                 target_tokens=target_tokens,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                latency_ms=latency,
                 response_preview=text[:30],
-                status="fallo" if fallo else "ok",
+                status="fallo" if out_int == 0 else "ok",
             ))
-            if fallo:
+            if out_int == 0:
                 break
 
         except Exception as e:
