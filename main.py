@@ -641,3 +641,73 @@ def get_logs(api_key: Optional[str] = Query(default=None)):
         media_type="text/plain",
         filename="app.log",
     )
+
+
+class ContextLimitResult(BaseModel):
+    target_tokens: int
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    response_preview: Optional[str] = None
+    status: str  # "ok" | "fallo" | "error"
+    error: Optional[str] = None
+
+
+@app.get("/test/limits", include_in_schema=False)
+def test_context_limits(x_api_key: Optional[str] = Header(default=None)):
+    """
+    Prueba el límite de contexto del modelo OCI con inputs de tamaño creciente.
+    Réplica de scripts/test_context_limit.py expuesta como endpoint.
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    from strands import Agent
+    from app.config.oci_model import oci_model
+
+    WORD = "navegación "
+    sizes = [1000, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000]
+    results = []
+
+    for target_tokens in sizes:
+        chars = target_tokens * 4
+        filler = WORD * (chars // len(WORD))
+
+        try:
+            agent = Agent(
+                model=oci_model,
+                system_prompt=f"Eres un asistente. Contexto: {filler}",
+                tools=[],
+                callback_handler=None,
+            )
+            response = agent("Responde solo: OK")
+
+            usage = getattr(response, "usage", None)
+            input_tokens = getattr(usage, "input_tokens", None)
+            output_tokens = getattr(usage, "output_tokens", None)
+            text = ""
+            if hasattr(response, "message") and response.message:
+                for block in response.message.get("content", []):
+                    if isinstance(block, dict) and "text" in block:
+                        text += block.get("text", "")
+
+            fallo = not output_tokens or int(output_tokens) == 0
+            results.append(ContextLimitResult(
+                target_tokens=target_tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                response_preview=text[:30],
+                status="fallo" if fallo else "ok",
+            ))
+            if fallo:
+                break
+
+        except Exception as e:
+            results.append(ContextLimitResult(
+                target_tokens=target_tokens,
+                status="error",
+                error=str(e),
+            ))
+            break
+
+    return {"results": results}
