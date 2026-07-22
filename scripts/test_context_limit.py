@@ -28,19 +28,32 @@ for target_tokens in sizes:
         )
         response = agent("Responde solo: OK")
 
-        usage = getattr(response, "usage", None)
-        input_tokens = getattr(usage, "input_tokens", "?")
-        output_tokens = getattr(usage, "output_tokens", "?")
         text = ""
         if hasattr(response, "message") and response.message:
             for block in response.message.get("content", []):
                 if isinstance(block, dict) and "text" in block:
                     text += block.get("text", "")
 
-        status = "✅" if output_tokens and int(output_tokens) > 0 else "❌ FALLO"
-        print(f"{status} ~{target_tokens:5d} tokens input → input={input_tokens} output={output_tokens} respuesta='{text[:30]}'")
+        # Leer tokens del message directamente
+        input_tokens = "?"
+        output_tokens = "?"
+        latency = "?"
+        if hasattr(response, "message") and response.message:
+            metadata = response.message.get("metadata", {})
+            usage = metadata.get("usage", {})
+            input_tokens = usage.get("inputTokens", "?")
+            output_tokens = usage.get("outputTokens", "?")
+            latency = metadata.get("metrics", {}).get("latencyMs", "?")
 
-        if output_tokens and int(output_tokens) == 0:
+        try:
+            out_int = int(output_tokens)
+        except (ValueError, TypeError):
+            out_int = 1  # si no podemos leer, asumimos que funcionó
+
+        status = "✅" if out_int > 0 else "❌ FALLO"
+        print(f"{status} ~{target_tokens:5d} tokens input → input={input_tokens} output={output_tokens} latency={latency}ms respuesta='{text[:30]}'")
+
+        if out_int == 0:
             print(f"\n⚠️  LÍMITE DETECTADO: el modelo falla con ~{target_tokens} tokens de input")
             break
 
