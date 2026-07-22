@@ -8,8 +8,10 @@ El agente recuerda todos los turnos anteriores de la sesión.
 import logging
 import os
 import re
+import time
 import unicodedata
 import warnings
+from collections import deque
 from typing import List, Dict, Tuple
 
 from strands import Agent
@@ -24,6 +26,17 @@ from app.contract.post_sale import build_post_sale_message
 from app.router.semantic_router import classify
 
 DEBUG_WHATSAPP = os.getenv("DEBUG_WHATSAPP", "false").lower() == "true"
+
+_request_timestamps: deque = deque()
+
+
+def _check_rpm() -> int:
+    """Retorna el número de invocaciones al LLM en el último minuto."""
+    now = time.time()
+    while _request_timestamps and _request_timestamps[0] < now - 60:
+        _request_timestamps.popleft()
+    _request_timestamps.append(now)
+    return len(_request_timestamps)
 
 
 def _apply_debug(response_text: str, tools_invoked: list = None,
@@ -1045,6 +1058,13 @@ def run_turn(
                 len(system_prompt),
                 len(prior_messages),
                 session.phone_number)
+    rpm = _check_rpm()
+    rpm_estimado = rpm * 2  # factor de tool calling (~2 peticiones por turno)
+    logger.info("[RPM] invocaciones_llm=%d rpm_estimado=%d phone=%s",
+                rpm, rpm_estimado, session.phone_number)
+    if rpm_estimado > 1800:
+        logger.warning("[RPM_ALERT] rpm_estimado=%d cerca del limite phone=%s",
+                       rpm_estimado, session.phone_number)
     agent = create_agent(session, messages=prior_messages)
 
     try:

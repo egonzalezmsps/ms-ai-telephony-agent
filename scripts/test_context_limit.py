@@ -12,7 +12,7 @@ print("\nProbando límite de contexto del modelo...\n")
 
 # Texto de relleno (~4 tokens por palabra)
 WORD = "navegación "
-sizes = [1000, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000]
+sizes = [1000, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 20000, 30000, 40000, 50000]
 
 for target_tokens in sizes:
     # ~4 chars por token aproximadamente
