@@ -1081,16 +1081,20 @@ def run_turn(
             user_message[:120], exc_info=True,
         )
         raise
-    except Exception:
-        model_params = oci_model.config.get("params", {})
-        logger.error(
-            "[LLM_ERROR] fallo en la llamada al modelo "
-            "phone=%s stage=%s temperature=%s max_tokens=%s msg='%s'",
-            session.phone_number, session.stage,
-            model_params.get("temperature"), model_params.get("max_tokens"),
-            user_message[:120], exc_info=True,
-        )
-        raise
+    except Exception as e:
+        error_str = str(e)
+        if "429" in error_str:
+            logger.warning("[RPM_EXCEEDED] Error 429 throttling phone=%s msg='%s'",
+                          session.phone_number, user_message[:60])
+        else:
+            logger.error("[LLM_ERROR] %s phone=%s", error_str[:200], session.phone_number)
+        plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
+        response_text = f"¿Le gustaría activar el *{plan}*?"
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
 
     response_text = ""
     if hasattr(response, "message") and response.message:
