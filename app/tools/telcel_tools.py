@@ -124,6 +124,13 @@ def make_tools(state):
             - "¿por qué no puedes activarlo aquí?"
             - "¿por qué me mandas con soporte?"
             - "¿no puedes hacer tú el cambio?"
+
+            Usa tema="invitacion" cuando el cliente pregunte:
+            - "¿por qué me llegó esta invitación?"
+            - "¿por qué me contactaron?"
+            - "¿cómo obtuvieron mi número?"
+            - "¿por qué me mandaron este mensaje?"
+            - "¿por qué me llegó este mensaje?"
         """
         plan_name = state.plan_anclado or "el plan recomendado"
 
@@ -184,6 +191,13 @@ def make_tools(state):
                 f"especializados para garantizar la mejor atención. "
                 f"Soporte al 800 220 9518 y los CAC cuentan con las herramientas "
                 f"necesarias para ese trámite.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
+            ),
+            "invitacion": (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"Le contactamos porque identificamos que su plan actual puede "
+                f"mejorar con más beneficios al mismo precio o similar. "
+                f"Es una oferta personalizada basada en su perfil de uso.\n\n"
                 f"¿Le gustaría activar el *{state.plan_anclado}*?"
             ),
         }
