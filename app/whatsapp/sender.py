@@ -8,7 +8,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 _COUNTRY_CODE = os.environ.get("WHATSAPP_COUNTRY_CODE", "52")
-_REQUEST_TIMEOUT = int(os.environ.get("WHATSAPP_REQUEST_TIMEOUT", "25"))
+_REQUEST_TIMEOUT = 25
 
 
 def _normalize_phone(number: str) -> str:
