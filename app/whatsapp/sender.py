@@ -8,6 +8,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 _COUNTRY_CODE = os.environ.get("WHATSAPP_COUNTRY_CODE", "52")
+_REQUEST_TIMEOUT = int(os.environ.get("WHATSAPP_REQUEST_TIMEOUT", "25"))
 
 
 def _normalize_phone(number: str) -> str:
@@ -38,7 +39,7 @@ def send_whatsapp_message(to: str, message: str) -> dict:
         "type": "text",
         "text": {"body": message},
     }
-    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=10)
+    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 
@@ -74,7 +75,7 @@ def send_whatsapp_template(
         },
     }
 
-    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=10)
+    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT)
     if not resp.ok:
         logger.error(f"WhatsApp template error {resp.status_code}: {resp.text}")
         raise requests.HTTPError(f"{resp.status_code} — {resp.text}", response=resp)
@@ -109,6 +110,6 @@ def send_whatsapp_interactive_buttons(to: str, body_text: str, buttons: list) ->
             }
         }
     }
-    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=10)
+    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
