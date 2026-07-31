@@ -720,6 +720,20 @@ def run_turn(
             return _apply_debug(response_text, ["informar_plan_actual"], user_message), updated_history
 
     elif _intencion == "comparar_beneficios":
+        plan_match = re.search(
+            r'telcel\s+(libre|ultra)\s+(\d+|vip|ilimitado)',
+            user_message,
+            re.IGNORECASE
+        )
+        if plan_match:
+            plan_mencionado = f"Telcel {plan_match.group(1).capitalize()} {plan_match.group(2).upper() if plan_match.group(2).lower() in ['vip'] else plan_match.group(2).capitalize()}"
+            from app.catalog.plans import find_plan
+            plan_obj = find_plan(plan_mencionado)
+            if plan_obj:
+                session.plan_anclado = f"{plan_obj.plan_id} {session.subscription_type}"
+                logger.info("[COMPARAR] plan_mencionado='%s' phone=%s",
+                           session.plan_anclado, session.phone_number)
+
         from app.tools.telcel_tools import make_tools
         tools = make_tools(session)
         comparar_fn = next((t for t in tools if t.tool_name == "comparar_planes"), None)
