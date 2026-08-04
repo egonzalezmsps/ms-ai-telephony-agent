@@ -666,6 +666,18 @@ def run_turn(
             return _apply_debug(response_text, [], user_message), updated_history
 
     elif _intencion == "proceso_activacion":
+        if session.stage == "END" and session.end_reason == "blocked":
+            response_text = (
+                "Su proceso de verificación fue bloqueado por seguridad. "
+                "Para continuar, comuníquese con Soporte al 800 220 9518 "
+                "o acuda a un Centro de Atención a Clientes."
+            )
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, [], user_message), updated_history
+
         response_text = (
             f"Es muy sencillo — solo confirme que desea el cambio "
             f"y nosotros nos encargamos del resto.\n\n"
