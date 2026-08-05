@@ -432,25 +432,10 @@ def _check_invented_plans(text: str, session: SessionState) -> str:
     for mention in plan_mentions:
         clean = re.sub(r'\s+(Controlado|Abierto)$', '', mention.strip(), flags=re.IGNORECASE)
         plan_obj = find_plan(clean)
-
-        # Plan no existe
         if not plan_obj:
             logger.warning("[PLAN_INVENTADO] '%s' phone=%s", clean, session.phone_number)
             plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
             return f"¿Le gustaría activar el *{plan}*?"
-
-        # Plan existe pero verificar precio — buscar precio justo después del nombre del plan
-        price_real = get_price(plan_obj, session.subscription_type)
-        pattern = re.escape(mention) + r'[^$]*\$(\d{3,4})/mes'
-        price_match = re.search(pattern, text, re.IGNORECASE)
-        if price_match:
-            price_mentioned = float(price_match.group(1))
-            price_alt = get_price(plan_obj, "Abierto" if session.subscription_type == "Controlado" else "Controlado")
-            if abs(price_mentioned - price_real) > PRICE_TOLERANCE_MXN and abs(price_mentioned - price_alt) > PRICE_TOLERANCE_MXN:
-                logger.warning("[PRECIO_INCORRECTO] plan='%s' real=$%.0f mencionado=$%.0f phone=%s",
-                               clean, price_real, price_mentioned, session.phone_number)
-                plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
-                return f"¿Le gustaría activar el *{plan}*?"
 
     return text
 
@@ -1110,8 +1095,8 @@ def run_turn(
     except Exception as e:
         error_str = str(e)
         if "429" in error_str:
-            logger.warning("[RPM_EXCEEDED] Error 429 throttling phone=%s msg='%s'",
-                          session.phone_number, user_message[:60])
+            logger.warning("[RPM_EXCEEDED] Error 429 throttling phone=%s msg='%s' error='%s'",
+                          session.phone_number, user_message[:60], error_str)
         else:
             logger.error("[LLM_ERROR] %s phone=%s", error_str[:200], session.phone_number)
         plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
@@ -1145,6 +1130,15 @@ def run_turn(
                 output_tokens,
                 latency_ms,
                 session.phone_number)
+    try:
+        out_int = int(output_tokens)
+        if 0 < out_int < 30:
+            logger.warning("[RESPUESTA_SOSPECHOSA] output_tokens=%s text_len=%d texto='%s' phone=%s msg='%s'",
+                          output_tokens, len(response_text),
+                          response_text[:100],
+                          session.phone_number, user_message[:60])
+    except (ValueError, TypeError):
+        pass
     if hasattr(response, "message") and response.message:
         logger.info("[RESPONSE_MESSAGE] %s phone=%s",
                     str(response.message)[:200],

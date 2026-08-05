@@ -104,4 +104,4 @@ for n_msgs in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20]:
         print(f"❌ history={n_msgs:2d} msgs → ERROR: {e}")
         break
 
-    time.sleep(10)  # esperar 10 segundos entre peticiones
+    # time.sleep(10)  # esperar 10 segundos entre peticiones

@@ -48,4 +48,18 @@ def setup_logging():
 
     logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
+    # Propagar logs de strands al logger principal (para que terminen en app.log)
+    strands_logger = logging.getLogger("strands")
+    strands_logger.setLevel(logging.DEBUG)
+    strands_logger.propagate = True
+
+    strands_event_logger = logging.getLogger("strands.event_loop.event_loop")
+    strands_event_logger.setLevel(logging.DEBUG)
+    strands_event_logger.propagate = True
+
+    # También capturar litellm que es el cliente HTTP
+    litellm_logger = logging.getLogger("litellm")
+    litellm_logger.setLevel(logging.WARNING)
+    litellm_logger.propagate = True
+
     logging.getLogger(__name__).info("[LOGGING] Escribiendo logs en %s", log_path)
