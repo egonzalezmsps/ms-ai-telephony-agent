@@ -118,6 +118,8 @@ spec:
               value: "template_libre"
             - name: TEMPLATE_LIBRE
               value: "template_ultra"
+            - name: TEMPLATE_LANGUAGE
+              value: "es"
           livenessProbe:
             httpGet:
               path: /actuator/health

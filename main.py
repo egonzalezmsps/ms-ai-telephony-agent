@@ -28,6 +28,7 @@ from app.prompts.campaign_template import build_campaign_message, build_template
 from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template, send_whatsapp_interactive_buttons
 from app.whatsapp.command_handler import handle_command
 from app.router.semantic_router import load_reference_embeddings
+from app.tools.prospect_loader import load_prospects, build_session_from_row
 
 logger = logging.getLogger(__name__)
 
@@ -155,19 +156,7 @@ class ChatResponse(BaseModel):
 
 
 class CampaignRequest(BaseModel):
-    phone_number: str
-    first_name: Optional[str] = "Cliente"
-    full_name: Optional[str] = ""
-    current_plan_name: Optional[str] = "Telcel Plus 150"
-    current_cost: Optional[float] = 150.0
-    current_plan_gb: Optional[float] = None
-    current_plan_cashback: Optional[float] = None
-    subscription_type: Optional[str] = "Abierto"
-    has_promotion: Optional[bool] = True
-    usage_summary: Optional[str] = None
-    is_titular: Optional[bool] = True
-    template_name: Optional[str] = None   # defaults to TEMPLATE_NAME env var
-    language_code: Optional[str] = "es_MX"
+    phone_numbers: list[str]
 
 
 class SessionDeleteRequest(BaseModel):
@@ -267,74 +256,87 @@ def campaign(
     request: CampaignRequest,
     x_api_key: Optional[str] = Header(default=None),
 ):
-    """Inicia una campaña enviando el template de WhatsApp al cliente y creando la sesión."""
+    """
+    Busca cada número en docs/Masivo_clientes.csv, determina con esos datos
+    (plan actual, renta, modalidad) qué plan/plantilla corresponde, y envía
+    el template de WhatsApp — igual que hacía antes para un solo número,
+    pero repetido por cada uno de la lista.
+    """
     expected_key = os.getenv("API_KEY", "")
     if expected_key and x_api_key != expected_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    session = SessionState(
-        first_name=request.first_name,
-        full_name=request.full_name,
-        phone_number=request.phone_number,
-        current_plan_name=request.current_plan_name,
-        current_cost=request.current_cost,
-        current_plan_gb=request.current_plan_gb,
-        current_plan_cashback=request.current_plan_cashback,
-        subscription_type=request.subscription_type,
-        has_promotion=request.has_promotion,
-        usage_summary=request.usage_summary,
-        is_titular=request.is_titular,
-    )
+    prospects_by_linea = {str(row.get("linea", "")).strip(): row for row in load_prospects()}
 
-    template_result = build_template_params(session)
-    campaign_msg = build_campaign_message(session)
+    results = {"sent": [], "failed": []}
 
-    if template_result is None:
-        # Sin plan elegible — texto plano como fallback
+    for phone_number in request.phone_numbers:
+        row = prospects_by_linea.get(phone_number.strip())
+        if not row:
+            results["failed"].append({"phone_number": phone_number, "reason": "no encontrado en CSV de prospectos"})
+            continue
+
         try:
-            send_whatsapp_message(request.phone_number, campaign_msg)
-        except Exception as e:
-            logger.error(f"CAMPAIGN | texto plano falló: {e}")
-        logger.info(f"CAMPAIGN | {request.phone_number} — sin plan elegible, texto plano enviado")
-        sent_template = False
-        template_name = None
-    else:
-        template_name = request.template_name or template_result["template_name"]
-        params_list = template_result["params"]
-        wa_id = request.phone_number
-        try:
-            wa_resp = send_whatsapp_template(
-                to=request.phone_number,
-                template_name=template_name,
-                params=params_list,
-            )
-            # wa_id es el número en formato canónico de Meta — es la clave que llega en webhooks
-            wa_id = wa_resp.get("contacts", [{}])[0].get("wa_id", request.phone_number)
-            logger.info(f"CAMPAIGN | {request.phone_number} → wa_id={wa_id} — template '{template_name}' enviado")
-            sent_template = True
-        except Exception as e:
-            logger.warning(f"CAMPAIGN | template falló, usando texto plano: {e}")
-            try:
-                send_whatsapp_message(request.phone_number, campaign_msg)
-            except Exception as e2:
-                logger.error(f"CAMPAIGN | fallback texto también falló: {e2}")
+            session = build_session_from_row(row)
+            template_result = build_template_params(session)
+            campaign_msg = build_campaign_message(session)
+
+            wa_id = phone_number
             sent_template = False
+            template_name = None
+            delivered = False
 
-    # Guardar sesión bajo wa_id para que el webhook la encuentre al recibir la respuesta
-    save_session(
-        phone_number=wa_id,
-        session_data=session_to_dict(session),
-        history=[{"role": "assistant", "content": campaign_msg}],
-    )
+            if template_result is None:
+                # Sin plan elegible — texto plano como fallback
+                try:
+                    send_whatsapp_message(phone_number, campaign_msg)
+                    delivered = True
+                except Exception as e:
+                    logger.error(f"CAMPAIGN | {phone_number} texto plano falló: {e}")
+                logger.info(f"CAMPAIGN | {phone_number} — sin plan elegible, texto plano enviado")
+            else:
+                template_name = template_result["template_name"]
+                try:
+                    wa_resp = send_whatsapp_template(
+                        to=phone_number,
+                        template_name=template_name,
+                        params=template_result["params"],
+                    )
+                    # wa_id es el número en formato canónico de Meta — es la clave que llega en webhooks
+                    wa_id = wa_resp.get("contacts", [{}])[0].get("wa_id", phone_number)
+                    logger.info(f"CAMPAIGN | {phone_number} → wa_id={wa_id} — template '{template_name}' enviado")
+                    sent_template = True
+                    delivered = True
+                except Exception as e:
+                    logger.warning(f"CAMPAIGN | {phone_number} template falló, usando texto plano: {e}")
+                    try:
+                        send_whatsapp_message(phone_number, campaign_msg)
+                        delivered = True
+                    except Exception as e2:
+                        logger.error(f"CAMPAIGN | {phone_number} fallback texto también falló: {e2}")
 
-    return {
-        "status": "sent",
-        "phone_number": request.phone_number,
-        "wa_id": wa_id,
-        "sent_template": sent_template,
-        "template_name": template_name if sent_template else None,
-        "params": template_result["params"] if template_result else None,
-    }
+            if not delivered:
+                results["failed"].append({"phone_number": phone_number, "reason": "envío de WhatsApp falló (template y texto plano)"})
+                continue
+
+            # Guardar sesión bajo wa_id para que el webhook la encuentre al recibir la respuesta
+            save_session(
+                phone_number=wa_id,
+                session_data=session_to_dict(session),
+                history=[{"role": "assistant", "content": campaign_msg}],
+            )
+
+            results["sent"].append({
+                "phone_number": phone_number,
+                "wa_id": wa_id,
+                "sent_template": sent_template,
+                "template_name": template_name if sent_template else None,
+            })
+        except Exception as e:
+            logger.error(f"CAMPAIGN | {phone_number} error inesperado: {e}", exc_info=True)
+            results["failed"].append({"phone_number": phone_number, "reason": str(e)})
+
+    return results
 
 
 class DispatchRequest(BaseModel):

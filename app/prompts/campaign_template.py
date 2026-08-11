@@ -11,8 +11,15 @@ from app.state.session import SessionState
 
 
 import os as _os
-TEMPLATE_LIBRE = _os.environ.get("TEMPLATE_LIBRE", "telcel_migration_campaing_1_libre")
-TEMPLATE_ULTRA = _os.environ.get("TEMPLATE_ULTRA", "telcel_migration_campaing__1_ultra")
+TEMPLATE_LIBRE = _os.environ.get("TEMPLATE_LIBRE", "template_ultra")
+TEMPLATE_ULTRA = _os.environ.get("TEMPLATE_ULTRA", "template_libre")
+
+# Frase fija compartida por ambas plantillas de Meta (variable {{4}} en ambos
+# cuerpos aprobados) — no varía por plan ni por cliente.
+FRASE_INTRO = (
+    "Con este plan obtendrá más conectividad y mejores beneficios para "
+    "aprovechar al máximo su servicio:"
+)
 import datetime as _dt
 from zoneinfo import ZoneInfo as _ZoneInfo
 DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now(_ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
@@ -23,12 +30,11 @@ _BODY_LIBRE = (
     "Hola, *{{1}}* 👋\n"
     "En *Telcel* queremos que disfrute de una mejor experiencia. Por ello, tenemos una "
     "oferta especial para usted: cambie a *{{2}}* por solo *${{3}} MXN* al mes.\n\n"
-    "Con este plan obtendrá más conectividad y mejores beneficios para aprovechar al "
-    "máximo su servicio:\n\n"
+    "{{4}}\n\n"
     "• 📞 *Minutos y SMS ilimitados* en México, Estados Unidos y Canadá\n"
-    "• 📈 *{{4}}*\n"
+    "• 📈 *{{5}}*\n"
     "• 📱 *Apps Ilimitadas* (WhatsApp, Facebook, Messenger, X, Instagram, Snapchat, Uber)\n"
-    "• 💰 *Cashback de ${{5}} MXN/mes*\n"
+    "• 💰 *Cashback de ${{6}} MXN/mes*\n"
     "• 🎬 *Claro Video y Claro Drive (20 GB)*\n\n"
     "¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente "
     "qué beneficios adicionales obtendría?"
@@ -38,10 +44,9 @@ _BODY_ULTRA = (
     "Hola, *{{1}}* 👋\n"
     "En *Telcel* queremos que disfrute de una mejor experiencia. Por ello, tenemos una "
     "oferta especial para usted: cambie a *{{2}}* por solo *${{3}} MXN* al mes.\n\n"
-    "Con este plan obtendrá más conectividad y mejores beneficios para aprovechar al "
-    "máximo su servicio:\n\n"
+    "{{4}}\n\n"
     "• 📞 *Minutos y SMS ilimitados* en México, Estados Unidos y Canadá\n"
-    "• 📈 *{{4}}*\n"
+    "• 📈 *{{5}}*\n"
     "• ✉️ *WhatsApp Ilimitado*\n"
     "• 🎬 *Claro Video y Claro Drive (20 GB)*\n\n"
     "¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente "
@@ -62,8 +67,8 @@ def build_template_params(session: SessionState) -> Optional[dict]:
     Returns {"template_name": str, "params": list} for the correct WhatsApp template.
     Returns None if no eligible plan exists for this customer.
 
-    Telcel Libre  → TEMPLATE_LIBRE  — 5 params: nombre, plan, precio, datos, cashback
-    Telcel Ultra  → TEMPLATE_ULTRA  — 4 params: nombre, plan, precio, GB
+    Telcel Libre  → TEMPLATE_LIBRE  — 6 params: nombre, plan, precio, frase_intro, datos, cashback
+    Telcel Ultra  → TEMPLATE_ULTRA  — 5 params: nombre, plan, precio, frase_intro, GB
     """
     target = recommend_plan(session.current_cost, session.subscription_type)
     if not target:
@@ -87,8 +92,9 @@ def build_template_params(session: SessionState) -> Optional[dict]:
                 session.first_name,       # {{1}} nombre
                 plan_name,                # {{2}} plan
                 f"{price:.0f}",           # {{3}} precio
-                datos,                    # {{4}} datos
-                f"{cashback:.2f}",        # {{5}} cashback
+                FRASE_INTRO,              # {{4}} frase fija
+                datos,                    # {{5}} datos
+                f"{cashback:.2f}",        # {{6}} cashback
             ],
         }
     else:  # Telcel Ultra
@@ -100,7 +106,8 @@ def build_template_params(session: SessionState) -> Optional[dict]:
                 session.first_name,       # {{1}} nombre
                 plan_name,                # {{2}} plan
                 f"{price:.0f}",           # {{3}} precio
-                gb,                       # {{4}} GB
+                FRASE_INTRO,              # {{4}} frase fija
+                gb,                       # {{5}} GB
             ],
         }
 
