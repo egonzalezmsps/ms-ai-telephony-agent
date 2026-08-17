@@ -15,6 +15,7 @@ PROMO_TERM_MONTHS = 24
 
 @dataclass(frozen=True)
 class Plan:
+    plan_code: str                 # código corto del plan para integraciones (ej. "TL5", "TU3")
     plan_id: str
     family: str                    # "Telcel Libre" | "Telcel Ultra"
     price_abierto: float
@@ -30,23 +31,23 @@ class Plan:
 
 CATALOG: List[Plan] = [
     # ── Telcel Libre ─────────────────────────────────────────────────────────
-    Plan("Telcel Libre 1",          "Telcel Libre",   249,  299,  4,   6.0,  12.45,  14.95, True,  False),
-    Plan("Telcel Libre 2",          "Telcel Libre",   319,  369,  5,   7.5,  15.95,  18.45, True,  False),
-    Plan("Telcel Libre 3",          "Telcel Libre",   399,  449,  6,   9.0,  39.90,  44.90, True,  False),
-    Plan("Telcel Libre 4",          "Telcel Libre",   499,  549, 10,  15.0,  74.85,  82.35, True,  False),
-    Plan("Telcel Libre 5",          "Telcel Libre",   599,  699, 20,  30.0,  89.85, 104.85, True,  False),
-    Plan("Telcel Libre 6",          "Telcel Libre",   699,  799, 30,  45.0, 104.85, 119.85, True,  False),
-    Plan("Telcel Libre 7",          "Telcel Libre",   799,  899, 40,  60.0, 119.85, 134.85, True,  False),
-    Plan("Telcel Libre 9",          "Telcel Libre",   999, 1099, 45,  67.5, 149.85, 164.85, True,  False),
-    Plan("Telcel Libre 12",         "Telcel Libre",  1299, 1399, 55,  82.5, 194.85, 209.85, True,  False),
-    Plan("Telcel Libre VIP",        "Telcel Libre",  1499, 1599, 40,  60.0, 629.58, 671.58, True,  False),
+    Plan("TL1",    "Telcel Libre 1",          "Telcel Libre",   249,  299,  4,   6.0,  12.45,  14.95, True,  False),
+    Plan("TL2",    "Telcel Libre 2",          "Telcel Libre",   319,  369,  5,   7.5,  15.95,  18.45, True,  False),
+    Plan("TL3",    "Telcel Libre 3",          "Telcel Libre",   399,  449,  6,   9.0,  39.90,  44.90, True,  False),
+    Plan("TL4",    "Telcel Libre 4",          "Telcel Libre",   499,  549, 10,  15.0,  74.85,  82.35, True,  False),
+    Plan("TL5",    "Telcel Libre 5",          "Telcel Libre",   599,  699, 20,  30.0,  89.85, 104.85, True,  False),
+    Plan("TL6",    "Telcel Libre 6",          "Telcel Libre",   699,  799, 30,  45.0, 104.85, 119.85, True,  False),
+    Plan("TL7",    "Telcel Libre 7",          "Telcel Libre",   799,  899, 40,  60.0, 119.85, 134.85, True,  False),
+    Plan("TL9",    "Telcel Libre 9",          "Telcel Libre",   999, 1099, 45,  67.5, 149.85, 164.85, True,  False),
+    Plan("TL12",   "Telcel Libre 12",         "Telcel Libre",  1299, 1399, 55,  82.5, 194.85, 209.85, True,  False),
+    Plan("TLVIP",  "Telcel Libre VIP",        "Telcel Libre",  1499, 1599, 40,  60.0, 629.58, 671.58, True,  False),
     # ── Telcel Ultra ─────────────────────────────────────────────────────────
-    Plan("Telcel Ultra 3",          "Telcel Ultra",   349,  399, 15,  15.0,   0.00,   0.00, False, False),
-    Plan("Telcel Ultra 4",          "Telcel Ultra",   449,  499, 25,  25.0,   0.00,   0.00, False, False),
-    Plan("Telcel Ultra 5",          "Telcel Ultra",   549,  599, 40,  40.0,   0.00,   0.00, False, False),
-    Plan("Telcel Ultra 7",          "Telcel Ultra",   749,  799, 60,  60.0,   0.00,   0.00, False, False),
-    Plan("Telcel Ultra 9",          "Telcel Ultra",   949,  999,100, 100.0,   0.00,   0.00, False, False),
-    Plan("Telcel Ultra Ilimitado",  "Telcel Ultra",  1349, 1399,  0,   0.0,   0.00,   0.00, False, True),
+    Plan("TU3",    "Telcel Ultra 3",          "Telcel Ultra",   349,  399, 15,  15.0,   0.00,   0.00, False, False),
+    Plan("TU4",    "Telcel Ultra 4",          "Telcel Ultra",   449,  499, 25,  25.0,   0.00,   0.00, False, False),
+    Plan("TU5",    "Telcel Ultra 5",          "Telcel Ultra",   549,  599, 40,  40.0,   0.00,   0.00, False, False),
+    Plan("TU7",    "Telcel Ultra 7",          "Telcel Ultra",   749,  799, 60,  60.0,   0.00,   0.00, False, False),
+    Plan("TU9",    "Telcel Ultra 9",          "Telcel Ultra",   949,  999,100, 100.0,   0.00,   0.00, False, False),
+    Plan("TUILIM", "Telcel Ultra Ilimitado",  "Telcel Ultra",  1349, 1399,  0,   0.0,   0.00,   0.00, False, True),
 ]
 
 

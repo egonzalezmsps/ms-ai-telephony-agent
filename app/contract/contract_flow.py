@@ -107,7 +107,9 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
 
         if msg == session.generated_otp:
             process_id_api = session.process_id_api
-            invoke_api_create_product = True # invoca al api de create product (pasas el process_id_api como parametro). True es exitoso, False falla el api
+            plan = find_plan(session.plan_selected)
+            plan_code = plan.plan_code if plan else None
+            invoke_api_create_product = True # invoca al api de create product (pasas el process_id_api y el plan_code como parametros). True es exitoso, False falla el api
             if invoke_api_create_product:
                 session.is_authenticated = True
                 session.awaiting_otp = False
@@ -159,7 +161,8 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 if invoke_api_create_process:
                     process_id_api = 'ABXXXXX333' # id generado del proceso
                     session.process_id_api = process_id_api
-                    invoke_api_create_product = True # invoca al api de create product (pasas el process_id_api como parametro). True es exitoso, False falla el api
+                    plan_code = plan.plan_code
+                    invoke_api_create_product = True # invoca al api de create product (pasas el process_id_api y el plan_code como parametros). True es exitoso, False falla el api
                     if invoke_api_create_product:
                         session.is_authenticated = True
                         session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
