@@ -1130,6 +1130,27 @@ def run_turn(
                 output_tokens,
                 latency_ms,
                 session.phone_number)
+
+    # Tokens acumulados incluyendo tool calling
+    accumulated_input = "?"
+    accumulated_output = "?"
+    cycles = "?"
+    try:
+        if hasattr(response, "metrics") and response.metrics:
+            acc = response.metrics.accumulated_usage
+            accumulated_input = acc.get("inputTokens", "?")
+            accumulated_output = acc.get("outputTokens", "?")
+
+            # Número de ciclos/peticiones al modelo
+            if hasattr(response.metrics, "cycle_count"):
+                cycles = response.metrics.cycle_count
+            elif hasattr(response.metrics, "cycles"):
+                cycles = len(response.metrics.cycles)
+    except Exception:
+        pass
+
+    logger.info("[TOKENS_ACUMULADOS] input=%s output=%s cycles=%s phone=%s",
+                accumulated_input, accumulated_output, cycles, session.phone_number)
     try:
         out_int = int(output_tokens)
         if 0 < out_int < 30:

@@ -105,12 +105,15 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
     if session.awaiting_otp:
         msg = user_message.strip().upper()
 
-        if msg == OTP_FIXED:
-            session.is_authenticated = True
-            session.awaiting_otp = False
-            session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
-            session.stage = "POST_SALE"
-            return None  # → generar post-venta
+        if msg == session.generated_otp:
+            process_id_api = session.process_id_api
+            invoke_api_create_product = True # invoca al api de create product (pasas el process_id_api como parametro). True es exitoso, False falla el api
+            if invoke_api_create_product:
+                session.is_authenticated = True
+                session.awaiting_otp = False
+                session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
+                session.stage = "POST_SALE"
+                return None  # → generar post-venta
 
         session.otp_attempt_count += 1
         if session.otp_attempt_count >= MAX_OTP_ATTEMPTS:
@@ -152,21 +155,34 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             session.awaiting_contract_confirmation = False
 
             if is_same_price:
-                session.is_authenticated = True
-                session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
-                session.stage = "POST_SALE"
-                return None  # → generar post-venta directo sin OTP
+                invoke_api_create_process = True # invoca al api de create process (pasas el # telefono como parametro). True es exitoso, False falla el api
+                if invoke_api_create_process:
+                    process_id_api = 'ABXXXXX333' # id generado del proceso
+                    session.process_id_api = process_id_api
+                    invoke_api_create_product = True # invoca al api de create product (pasas el process_id_api como parametro). True es exitoso, False falla el api
+                    if invoke_api_create_product:
+                        session.is_authenticated = True
+                        session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
+                        session.stage = "POST_SALE"
+                        return None  # → generar post-venta directo sin OTP
             else:
-                session.awaiting_otp = True
-                session.otp_sent = True
-                phone_masked = session.phone_number[-4:] if session.phone_number else "****"
-                return (
-                    f"Para verificar su identidad, le hemos enviado un código "
-                    f"de verificación al número terminado en {phone_masked}.\n\n"
-                    f"Por favor, ingrese el código para confirmar la activación "
-                    f"del {session.plan_selected}."
-                )
-
+                invoke_api_create_process = True # invoca al api de create process (pasas el # telefono como paramentro. Asegurate que la conversación lo este extrayendo adecuadameente). True es exitoso, False falla el api
+                if invoke_api_create_process:
+                    process_id_api = 'ABXXXXX333' # id generado del proceso
+                    session.process_id_api = process_id_api
+                    generated_otp = 'T12345' # genera un OTP de 5 digitos
+                    invoke_api_communication_message = True # invoca al api de comunicacion (incluye el process_id y el OTP en el body). True es exitoso, False falla el api
+                    if invoke_api_communication_message:
+                        session.awaiting_otp = True
+                        session.otp_sent = True
+                        session.generated_otp = generated_otp
+                        phone_masked = session.phone_number[-4:] if session.phone_number else "****"
+                        return (
+                        f"Para verificar su identidad, le hemos enviado un código "
+                        f"de verificación al número terminado en {phone_masked}.\n\n"
+                        f"Por favor, ingrese el código para confirmar la activación "
+                        f"del {session.plan_selected}."
+                        )
         # Afirmación vaga — pedir confirmación explícita
         elif msg in _VAGUE_CONFIRMATIONS:
             return (

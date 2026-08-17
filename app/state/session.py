@@ -61,4 +61,6 @@ class SessionState:
     is_authenticated: bool = False
     authentication_locked: bool = False
     contract_folio: Optional[str] = None
+    generated_otp: Optional[str] = None
+    process_id_api: Optional[str] = None
 
