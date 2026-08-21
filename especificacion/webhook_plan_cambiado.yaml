@@ -1,0 +1,156 @@
+openapi: 3.0.3
+info:
+  title: ReniAgent — Plan Changed Webhook
+  version: "1.0.0"
+  description: >
+    Contract for an external system (e.g. CRM or Telcel core) to notify ReniAgent that
+    a customer's plan migration has already been processed outside of the agent's own
+    contracting flow (OTP + confirmation). The webhook only requires the customer's
+    phone number; with that value the agent can locate the matching session and mark
+    it as resolved.
+
+servers:
+  - url: https://api.example.com
+    description: Placeholder — replace with the real deployment URL
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /webhook/plan-cambiado:
+    post:
+      summary: Notify that a customer's plan has already been changed
+      description: >
+        Callback invoked by an external system once a phone number's plan migration
+        has been completed. Lets ReniAgent close/update the conversation tied to that
+        number without depending on the customer texting back.
+      operationId: notifyPlanChanged
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/SourceSystem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanChangedRequest'
+            example:
+              phone_number: "5215512345678"
+      responses:
+        "200":
+          description: Notification received and processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanChangedResponse'
+              examples:
+                received:
+                  summary: Notification accepted
+                  value:
+                    phone_number: "5215512345678"
+                    status: received
+                    received_at: "2026-08-14T15:32:07Z"
+        "400":
+          description: Invalid body (e.g. missing phone_number)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "phone_number is required"
+        "401":
+          description: Missing or invalid x-api-key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Invalid API key"
+        "404":
+          description: No active session found for that phone number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Session not found"
+        "500":
+          description: >
+            Internal server error — ReniAgent failed to process the notification
+            (e.g. service down or unexpected failure). The caller should not assume
+            the notification was processed and should contact the SPS team instead
+            of retrying aggressively on its own.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: "Internal server error"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Same API key used by /chat, /campaign, /campaign/dispatch and /session.
+
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: >
+        Unique identifier (UUID recommended) for the notification, used for log
+        correlation and to let the caller safely retry without double-processing.
+      schema:
+        type: string
+        format: uuid
+      example: "3f1b2c9a-4e2d-4a2b-9c3f-1a2b3c4d5e6f"
+    SourceSystem:
+      name: X-Source-System
+      in: header
+      required: false
+      description: >
+        Name of the system issuing the notification (e.g. "CRM", "core-telcel"),
+        useful for auditing when more than one system can call this webhook.
+      schema:
+        type: string
+      example: "core-telcel"
+
+  schemas:
+    PlanChangedRequest:
+      type: object
+      required:
+        - phone_number
+      properties:
+        phone_number:
+          type: string
+          description: >
+            Customer's phone number. Same format already accepted by /chat and
+            /session: a WhatsApp wa_id (e.g. "5215512345678") or a bare 10-digit
+            line without country code.
+          example: "5215512345678"
+
+    PlanChangedResponse:
+      type: object
+      properties:
+        phone_number:
+          type: string
+          example: "5215512345678"
+        status:
+          type: string
+          enum: [received]
+          example: received
+        received_at:
+          type: string
+          format: date-time
+          description: UTC timestamp when ReniAgent processed the notification.
+          example: "2026-08-14T15:32:07Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Invalid API key"

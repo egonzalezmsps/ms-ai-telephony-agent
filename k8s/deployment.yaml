@@ -1,4 +1,3 @@
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -65,9 +64,51 @@ spec:
               value: "24"
             # Redis
             - name: REDIS_HOST
-              value: "aaauwo7dsya3u3vi5yvwqeuzv6uh646zwukqjru7nrnpr2hy4xqgznq-p.redis.us-chicago-1.oci.oraclecloud.com"
+              value: "redis.default.svc.cluster.local"
             - name: REDIS_PORT
               value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: redis-password
+            # Telcel APIs foráneas (QA) - createProcess
+            - name: TELCEL_CREATE_PROCESS_ENDPOINT
+              value: "https://54dlyo3lz2.execute-api.us-east-1.amazonaws.com/Prod/elegibility/createProcess"
+            - name: TELCEL_CREATE_PROCESS_API_KEY
+              value: "V9OnWgtyuh1yOBwjZMepOaKfDwCylCpc2WlevjZ6"
+            - name: TELCEL_CREATE_PROCESS_ENC_KEY
+              value: "1181827F0DA14E384C1B837482CC011C"
+            - name: TELCEL_CREATE_PROCESS_ENC_IV
+              value: "1181827F0DA14E38"
+            - name: TELCEL_CREATE_PROCESS_USER
+              value: "U_ORCL"
+            # Telcel APIs foráneas (QA) - CommunicationMessage (OTP SMS)
+            - name: TELCEL_COMM_MSG_ENDPOINT
+              value: "https://4ovnsxr1ca.execute-api.us-east-1.amazonaws.com/Prod/communicationMessage"
+            - name: TELCEL_COMM_MSG_API_KEY
+              value: "NW220bQRwF1N8hFINLXuG5W5lYOrK5SH4BycQ9T2"
+            - name: TELCEL_COMM_MSG_ENC_KEY
+              value: "96E48B4A187DF104DF67EFBC660FE7FD"
+            - name: TELCEL_COMM_MSG_ENC_IV
+              value: "96E48B4A187DF104"
+            - name: TELCEL_COMM_MSG_USER
+              value: "U_ORCL"
+            - name: TELCEL_COMM_MSG_MOCK
+              value: "true"
+            # Telcel APIs foráneas (QA) - CreateProductOrder (activa el plan)
+            - name: TELCEL_CREATE_PRODUCT_ORDER_ENDPOINT
+              value: "https://ehtet0mv9g.execute-api.us-east-1.amazonaws.com/Prod/process/productOrder"
+            - name: TELCEL_CREATE_PRODUCT_ORDER_API_KEY
+              value: "gaIJNr3uWH3HmGi6L0qJ34T2fPlcrMpw4iwjHoUr"
+            - name: TELCEL_CREATE_PRODUCT_ORDER_ENC_KEY
+              value: "0AA784CBE3C18A86CD2A169D92E8521F"
+            - name: TELCEL_CREATE_PRODUCT_ORDER_ENC_IV
+              value: "0AA784CBE3C18A86"
+            - name: TELCEL_CREATE_PRODUCT_ORDER_USER
+              value: "U_ORCL"
+            - name: TELCEL_CREATE_PRODUCT_ORDER_MOCK
+              value: "true"
             # Oracle NoSQL
             - name: NOSQL_TABLE
               value: "orion_telcel_ai_conversations"

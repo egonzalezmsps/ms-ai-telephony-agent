@@ -5,14 +5,25 @@ Flujo de contratación determinístico (sin LLM).
 Maneja: confirmación verbal → OTP → autenticación → post-venta.
 """
 
+import logging
 import uuid
 from typing import Optional
 
 from app.catalog.plans import find_plan, get_price, get_cashback
+from app.integrations.telcel_apis.client import (
+    TelcelAPIError,
+    call_communication_message,
+    call_create_process,
+    call_create_product_order,
+)
 
-OTP_FIXED = "T12345"          # OTP fijo para pruebas; reemplazar por integración real
+logger = logging.getLogger(__name__)
+
 MAX_OTP_ATTEMPTS = 3
 MAX_OTP_RESENDS = 3
+
+_SOPORTE_TEL = "800 220 9518"
+_OTP_INVALID_CODE = "BE_MP_BPS_0040"
 
 
 
@@ -25,6 +36,46 @@ _VAGUE_CONFIRMATIONS = {
     "SI POR FAVOR", "SÍ POR FAVOR", "POR FAVOR",
     "ADELANTE", "PROCEDE", "PROCEDER",
 }
+
+
+def _to_msisdn(phone_number: str) -> str:
+    """Normaliza a 10 dígitos (msisdn) para las APIs Telcel. Mismo patrón que _to_linea() en main.py."""
+    n = (phone_number or "").lstrip("+")
+    if n.startswith("521") and len(n) == 13:
+        return n[3:]
+    if n.startswith("52") and len(n) == 12:
+        return n[2:]
+    return n
+
+
+def _technical_failure(session) -> str:
+    session.stage = "END"
+    session.end_reason = "blocked"
+    return (
+        "Tuvimos un problema técnico al procesar su solicitud. "
+        f"Por favor comuníquese con Soporte al {_SOPORTE_TEL}."
+    )
+
+
+def _run_telcel_call(session, api_name: str, fn, *args):
+    """Ejecuta una llamada a una API Telcel; loggea y retorna (False, None) ante cualquier falla."""
+    try:
+        return True, fn(*args)
+    except Exception as exc:
+        logger.error(
+            "[TELCEL_API_ERROR] %s phone=%s error=%s",
+            api_name, session.phone_number, exc, exc_info=True,
+        )
+        return False, None
+
+
+def _is_otp_invalid(exc: TelcelAPIError) -> bool:
+    body = exc.raw_body if isinstance(exc.raw_body, dict) else {}
+    detail = body.get("detailResponse") or {}
+    if str(detail.get("code")) == _OTP_INVALID_CODE:
+        return True
+    meaning = f"{detail.get('businessMeaning', '')} {detail.get('description', '')}".upper()
+    return "OTP" in meaning
 
 
 def build_summary_template(session) -> str:
@@ -101,37 +152,55 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
         session.end_reason = "blocked"
         return None
 
-    # 2. Esperando OTP
+    # 2. Esperando OTP — CreateProductOrder valida el código implícitamente
+    # del lado de Telcel (ningún request de las 3 APIs tiene un campo de OTP;
+    # el error de negocio BE_MP_BPS_0040 es la señal de "código incorrecto").
     if session.awaiting_otp:
-        msg = user_message.strip().upper()
-
-        if msg == session.generated_otp:
-            process_id_api = session.process_id_api
-            plan = find_plan(session.plan_selected)
-            plan_code = plan.plan_code if plan else None
-            invoke_api_create_product = True # invoca al api de create product (pasas el process_id_api y el plan_code como parametros). True es exitoso, False falla el api
-            if invoke_api_create_product:
-                session.is_authenticated = True
-                session.awaiting_otp = False
-                session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
-                session.stage = "POST_SALE"
-                return None  # → generar post-venta
-
-        session.otp_attempt_count += 1
-        if session.otp_attempt_count >= MAX_OTP_ATTEMPTS:
-            session.authentication_locked = True
-            session.awaiting_otp = False
-            return (
-                "Ha superado el número de intentos permitidos. "
-                "Comuníquese con Soporte al 800 220 9518."
+        plan = find_plan(session.plan_selected)
+        if not plan or not plan.telcel_product_id:
+            logger.error(
+                "[TELCEL_PRODUCT_ID_MISSING] plan=%s phone=%s",
+                session.plan_selected, session.phone_number,
             )
+            return _technical_failure(session)
 
-        remaining = MAX_OTP_ATTEMPTS - session.otp_attempt_count
-        return (
-            f"El código ingresado no es correcto. "
-            f"Le quedan {remaining} intento(s). "
-            f"Por favor, ingrese el código que recibió por SMS."
-        )
+        try:
+            call_create_product_order(plan.telcel_product_id, session.process_id_api)
+        except TelcelAPIError as exc:
+            if _is_otp_invalid(exc):
+                session.otp_attempt_count += 1
+                if session.otp_attempt_count >= MAX_OTP_ATTEMPTS:
+                    session.authentication_locked = True
+                    session.awaiting_otp = False
+                    return (
+                        "Ha superado el número de intentos permitidos. "
+                        f"Comuníquese con Soporte al {_SOPORTE_TEL}."
+                    )
+
+                remaining = MAX_OTP_ATTEMPTS - session.otp_attempt_count
+                return (
+                    f"El código ingresado no es correcto. "
+                    f"Le quedan {remaining} intento(s). "
+                    f"Por favor, ingrese el código que recibió por SMS."
+                )
+
+            logger.error(
+                "[TELCEL_API_ERROR] create_product_order phone=%s error=%s",
+                session.phone_number, exc,
+            )
+            return _technical_failure(session)
+        except Exception as exc:
+            logger.error(
+                "[TELCEL_API_ERROR] create_product_order phone=%s error=%s",
+                session.phone_number, exc, exc_info=True,
+            )
+            return _technical_failure(session)
+
+        session.is_authenticated = True
+        session.awaiting_otp = False
+        session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
+        session.stage = "POST_SALE"
+        return None  # → generar post-venta
 
     # 3. Esperando confirmación verbal del resumen
     if session.awaiting_contract_confirmation:
@@ -156,36 +225,57 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
 
             session.awaiting_contract_confirmation = False
 
+            if not plan or not plan.telcel_product_id:
+                logger.error(
+                    "[TELCEL_PRODUCT_ID_MISSING] plan=%s phone=%s",
+                    session.plan_selected, session.phone_number,
+                )
+                return _technical_failure(session)
+
+            ok, process_result = _run_telcel_call(
+                session, "create_process", call_create_process, _to_msisdn(session.phone_number),
+            )
+            if not ok:
+                return _technical_failure(session)
+
+            process_id = (process_result.get("decrypted") or {}).get("processId")
+            if not process_id:
+                logger.error(
+                    "[TELCEL_API_ERROR] create_process sin processId phone=%s raw=%s",
+                    session.phone_number, process_result.get("raw"),
+                )
+                return _technical_failure(session)
+
+            session.process_id_api = process_id
+
             if is_same_price:
-                invoke_api_create_process = True # invoca al api de create process (pasas el # telefono como parametro). True es exitoso, False falla el api
-                if invoke_api_create_process:
-                    process_id_api = 'ABXXXXX333' # id generado del proceso
-                    session.process_id_api = process_id_api
-                    plan_code = plan.plan_code
-                    invoke_api_create_product = True # invoca al api de create product (pasas el process_id_api y el plan_code como parametros). True es exitoso, False falla el api
-                    if invoke_api_create_product:
-                        session.is_authenticated = True
-                        session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
-                        session.stage = "POST_SALE"
-                        return None  # → generar post-venta directo sin OTP
+                ok, _ = _run_telcel_call(
+                    session, "create_product_order",
+                    call_create_product_order, plan.telcel_product_id, process_id,
+                )
+                if not ok:
+                    return _technical_failure(session)
+
+                session.is_authenticated = True
+                session.contract_folio = f"TC-{uuid.uuid4().hex[:8].upper()}"
+                session.stage = "POST_SALE"
+                return None  # → generar post-venta directo sin OTP
             else:
-                invoke_api_create_process = True # invoca al api de create process (pasas el # telefono como paramentro. Asegurate que la conversación lo este extrayendo adecuadameente). True es exitoso, False falla el api
-                if invoke_api_create_process:
-                    process_id_api = 'ABXXXXX333' # id generado del proceso
-                    session.process_id_api = process_id_api
-                    generated_otp = 'T12345' # genera un OTP de 5 digitos
-                    invoke_api_communication_message = True # invoca al api de comunicacion (incluye el process_id y el OTP en el body). True es exitoso, False falla el api
-                    if invoke_api_communication_message:
-                        session.awaiting_otp = True
-                        session.otp_sent = True
-                        session.generated_otp = generated_otp
-                        phone_masked = session.phone_number[-4:] if session.phone_number else "****"
-                        return (
-                        f"Para verificar su identidad, le hemos enviado un código "
-                        f"de verificación al número terminado en {phone_masked}.\n\n"
-                        f"Por favor, ingrese el código para confirmar la activación "
-                        f"del {session.plan_selected}."
-                        )
+                ok, _ = _run_telcel_call(
+                    session, "communication_message", call_communication_message, process_id,
+                )
+                if not ok:
+                    return _technical_failure(session)
+
+                session.awaiting_otp = True
+                session.otp_sent = True
+                phone_masked = session.phone_number[-4:] if session.phone_number else "****"
+                return (
+                    f"Para verificar su identidad, le hemos enviado un código "
+                    f"de verificación al número terminado en {phone_masked}.\n\n"
+                    f"Por favor, ingrese el código para confirmar la activación "
+                    f"del {session.plan_selected}."
+                )
         # Afirmación vaga — pedir confirmación explícita
         elif msg in _VAGUE_CONFIRMATIONS:
             return (

@@ -41,7 +41,6 @@ def session_to_dict(session: SessionState) -> dict:
         "is_authenticated": session.is_authenticated,
         "authentication_locked": session.authentication_locked,
         "contract_folio": session.contract_folio,
-        "generated_otp": session.generated_otp,
         "process_id_api": session.process_id_api,
     }
 
@@ -79,6 +78,5 @@ def dict_to_session(data: dict) -> SessionState:
         is_authenticated=bool(data.get("is_authenticated", False)),
         authentication_locked=bool(data.get("authentication_locked", False)),
         contract_folio=data.get("contract_folio"),
-        generated_otp=data.get("generated_otp"),
         process_id_api=data.get("process_id_api"),
     )
