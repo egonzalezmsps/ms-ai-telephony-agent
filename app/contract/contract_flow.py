@@ -39,12 +39,14 @@ _VAGUE_CONFIRMATIONS = {
 
 
 def _to_msisdn(phone_number: str) -> str:
-    """Normaliza a 10 dígitos (msisdn) para las APIs Telcel. Mismo patrón que _to_linea() en main.py."""
+    """Normaliza a MSISDN completo con código de país (52 + 10 dígitos) para las APIs Telcel."""
     n = (phone_number or "").lstrip("+")
     if n.startswith("521") and len(n) == 13:
-        return n[3:]
+        return "52" + n[3:]
     if n.startswith("52") and len(n) == 12:
-        return n[2:]
+        return n
+    if len(n) == 10:
+        return "52" + n
     return n
 
 

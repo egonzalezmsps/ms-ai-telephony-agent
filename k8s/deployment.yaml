@@ -83,6 +83,8 @@ spec:
               value: "1181827F0DA14E38"
             - name: TELCEL_CREATE_PROCESS_USER
               value: "U_ORCL"
+            - name: TELCEL_CREATE_PROCESS_MOCK
+              value: "true"
             # Telcel APIs foráneas (QA) - CommunicationMessage (OTP SMS)
             - name: TELCEL_COMM_MSG_ENDPOINT
               value: "https://4ovnsxr1ca.execute-api.us-east-1.amazonaws.com/Prod/communicationMessage"
