@@ -47,7 +47,10 @@ spec:
             - name: OCI_TENANCY
               value: "ocid1.tenancy.oc1..aaaaaaaap5s754zivtxd3uwmpoflh3wpgily2tsnerjys4fx55mxp7ahn6kq"
             - name: OCI_FINGERPRINT
-              value: "8e:64:9f:d0:bc:46:1b:25:0c:ca:f0:60:98:91:34:d4"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: OCI_FINGERPRINT
             - name: OCI_KEY_FILE
               value: "/app/.oci/oci_api_key.pem"
             - name: OCI_ENABLE_STREAMING
@@ -59,7 +62,10 @@ spec:
               value: "600"
             # PostgreSQL / sesiones
             - name: DATABASE_URL
-              value: "postgresql://pgadmin:Or4#D3Sytem-@10.0.10.166:5432/reni_agent"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: DATABASE_URL
             - name: SESSION_TTL_HOURS
               value: "24"
             # Redis
@@ -76,11 +82,20 @@ spec:
             - name: TELCEL_CREATE_PROCESS_ENDPOINT
               value: "https://54dlyo3lz2.execute-api.us-east-1.amazonaws.com/Prod/elegibility/createProcess"
             - name: TELCEL_CREATE_PROCESS_API_KEY
-              value: "V9OnWgtyuh1yOBwjZMepOaKfDwCylCpc2WlevjZ6"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_CREATE_PROCESS_API_KEY
             - name: TELCEL_CREATE_PROCESS_ENC_KEY
-              value: "1181827F0DA14E384C1B837482CC011C"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_CREATE_PROCESS_ENC_KEY
             - name: TELCEL_CREATE_PROCESS_ENC_IV
-              value: "1181827F0DA14E38"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_CREATE_PROCESS_ENC_IV
             - name: TELCEL_CREATE_PROCESS_USER
               value: "U_ORCL"
             - name: TELCEL_CREATE_PROCESS_MOCK
@@ -89,11 +104,20 @@ spec:
             - name: TELCEL_COMM_MSG_ENDPOINT
               value: "https://4ovnsxr1ca.execute-api.us-east-1.amazonaws.com/Prod/communicationMessage"
             - name: TELCEL_COMM_MSG_API_KEY
-              value: "NW220bQRwF1N8hFINLXuG5W5lYOrK5SH4BycQ9T2"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_COMM_MSG_API_KEY
             - name: TELCEL_COMM_MSG_ENC_KEY
-              value: "96E48B4A187DF104DF67EFBC660FE7FD"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_COMM_MSG_ENC_KEY
             - name: TELCEL_COMM_MSG_ENC_IV
-              value: "96E48B4A187DF104"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_COMM_MSG_ENC_IV
             - name: TELCEL_COMM_MSG_USER
               value: "U_ORCL"
             - name: TELCEL_COMM_MSG_MOCK
@@ -102,11 +126,20 @@ spec:
             - name: TELCEL_CREATE_PRODUCT_ORDER_ENDPOINT
               value: "https://ehtet0mv9g.execute-api.us-east-1.amazonaws.com/Prod/process/productOrder"
             - name: TELCEL_CREATE_PRODUCT_ORDER_API_KEY
-              value: "gaIJNr3uWH3HmGi6L0qJ34T2fPlcrMpw4iwjHoUr"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_CREATE_PRODUCT_ORDER_API_KEY
             - name: TELCEL_CREATE_PRODUCT_ORDER_ENC_KEY
-              value: "0AA784CBE3C18A86CD2A169D92E8521F"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_CREATE_PRODUCT_ORDER_ENC_KEY
             - name: TELCEL_CREATE_PRODUCT_ORDER_ENC_IV
-              value: "0AA784CBE3C18A86"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: TELCEL_CREATE_PRODUCT_ORDER_ENC_IV
             - name: TELCEL_CREATE_PRODUCT_ORDER_USER
               value: "U_ORCL"
             - name: TELCEL_CREATE_PRODUCT_ORDER_MOCK
@@ -123,7 +156,10 @@ spec:
               value: "idkrobdezpcz"
             # OpenAI
             - name: OPENAI_API_KEY
-              value: "sk-xxxx"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: OPENAI_API_KEY
             - name: OPENAI_MODEL
               value: "gpt-4o-mini"
             - name: TEMPERATURE
@@ -133,29 +169,47 @@ spec:
               value: "docs/csv/Masivo_clientes.csv"
             # WhatsApp
             - name: WHATSAPP_ACCESS_TOKEN
-              value: "EAAMzCzdUfw4BQ08YVaZABaahKqZAZCBZAZAqFlbnVZC3pwt9mFUqwweTQYZBQChIPBAltF9ue05DS4InZAJLVZA89uzzEDnE5PWotBMq62dcSqBAK4oNaI4c2XUGY1uwdbj5HVVw41fKIfbsvpreQQt8sCM3nnK8iLdF5XVYvUbhq93tJEssM5AVulGvwY2IcgVbyNwZDZD"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: WHATSAPP_ACCESS_TOKEN
             - name: WHATSAPP_PHONE_NUMBER_ID
               value: "1035233273006117"
             - name: WHATSAPP_API_VERSION
               value: "v22.0"
             - name: VERIFY_TOKEN
-              value: "17enoc17"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: VERIFY_TOKEN
             - name: WHATSAPP_URL
               value: "https://graph.facebook.com/v22.0"
             # LangChain
             - name: LANGCHAIN_TRACING_V2
               value: "true"
             - name: LANGSMITH_API_KEY
-              value: "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"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: LANGSMITH_API_KEY
             # Private / auth
             - name: PRIVATE_KEY
-              value: "LfBchliYEiCZhnkS_TbJjZXBRHs0pLSA6ZBtlheMQ8Y="
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: PRIVATE_KEY
             - name: ACCESS_SECRET_KEY
-              value: "Agal8iL6r5I26rweXXza0K4BQXhx6PLvwfdpy_w76H8"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: ACCESS_SECRET_KEY
             - name: ACCESS_TOKEN_EXPIRE_MINUTES
               value: "30"
             - name: API_KEY
-              value: "zvDQevdVVrijrczOGUc4fRJ0ZC6h-yHfF7ZZgsK8hZY"
+              valueFrom:
+                secretKeyRef:
+                  name: telcel-ai-secrets
+                  key: API_KEY
             # Templates
             - name: TEMPLATE_ULTRA
               value: "template_libre"

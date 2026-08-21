@@ -1,6 +1,8 @@
 # Credenciales y secrets
 .env
 .oci/
+k8s/*secrets*.yaml
+k8s/deployment.yaml
 
 # Python cache
 __pycache__/
