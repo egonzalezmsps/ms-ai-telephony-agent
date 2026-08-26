@@ -349,6 +349,81 @@ def remove_plan_from_campana(campana_id: int, plan_id: int):
 
 # ── Cliente ───────────────────────────────────────────────────────────────────
 
+# El CSV de Telcel usa nombres de columna distintos al modelo de BD.
+CSV_COL_MAP = {
+    "plan":                              "plan_actual_nombre",
+    "tiposuscripcion":                   "tipo_suscripcion",
+    "rentaplan":                         "renta_plan",
+    "facturacion_promedio_3meses":       "facturacion_promedio",
+    "conmbtotal_promedio_3meses":        "consumo_mb_total_prom",
+    "conmbwhatsapp_prom3meses":          "consumo_mb_whatsapp_prom",
+    "conmbredsoc_prom3meses":            "consumo_mb_redes_prom",
+    "conmbyoutube_prom3meses":           "consumo_mb_youtube_prom",
+    "conmbuber_prom3meses":              "consumo_mb_uber_prom",
+    "conmbinstagr_prom3meses":           "consumo_mb_instagram_prom",
+    "conmbotros_prom3meses":             "consumo_mb_otros_prom",
+    "totalmb_nacexcedentes_prom3meses":  "excedentes_nac_mb_prom",
+    "totalmb_intexcedentes_prom3meses":  "excedentes_int_mb_prom",
+    "total_ingresos_nacexce_prom3meses": "ingresos_exc_nac_prom",
+    "total_ingresos_intcexce_prom3meses":"ingresos_exc_int_prom",
+}
+
+SUSCRIPCION_MAP = {
+    "POSTPAGO": "Abierto",
+    "MIXTO":    "Controlado",
+}
+
+_NUMERIC_CLIENTE_FIELDS = {
+    "renta_plan", "facturacion_promedio",
+    "consumo_mb_total_prom", "consumo_mb_whatsapp_prom",
+    "consumo_mb_redes_prom", "consumo_mb_youtube_prom",
+    "consumo_mb_uber_prom", "consumo_mb_instagram_prom",
+    "consumo_mb_otros_prom", "excedentes_nac_mb_prom",
+    "excedentes_int_mb_prom", "ingresos_exc_nac_prom",
+    "ingresos_exc_int_prom",
+}
+
+
+def normalize_cliente_csv_row(row: dict, valid_cols: set) -> dict:
+    """Rename CSV columns to model names, map subscription values, keep only valid cols."""
+    renamed = {}
+    for k, v in row.items():
+        model_key = CSV_COL_MAP.get(k.lower(), k)
+        renamed[model_key] = v
+    if "tipo_suscripcion" in renamed:
+        renamed["tipo_suscripcion"] = SUSCRIPCION_MAP.get(
+            renamed["tipo_suscripcion"].upper(), renamed["tipo_suscripcion"]
+        )
+    return {k: v for k, v in renamed.items() if k in valid_cols and v != ""}
+
+
+def import_clientes_csv(rows: list) -> dict:
+    """Normaliza filas crudas de CSV (formato Telcel) y hace upsert en 'clientes'.
+    Retorna {"imported": [lineas...], "skipped": [{"row": i, "reason": "..."}], "total": N}."""
+    valid_cols = {c.name for c in Cliente.__table__.columns}
+    cleaned = []
+    skipped = []
+    for i, row in enumerate(rows):
+        data = normalize_cliente_csv_row(row, valid_cols)
+        for f in _NUMERIC_CLIENTE_FIELDS:
+            if f in data:
+                try:
+                    data[f] = float(str(data[f]).replace(",", "."))
+                except ValueError:
+                    del data[f]
+        if not data.get("linea"):
+            skipped.append({"row": i, "reason": "sin 'linea' válida"})
+            continue
+        cleaned.append(data)
+
+    bulk_upsert_clientes(cleaned)
+    return {
+        "imported": [d["linea"] for d in cleaned],
+        "skipped": skipped,
+        "total": len(rows),
+    }
+
+
 def get_all_clientes():
     with get_db() as db:
         return db.query(Cliente).order_by(Cliente.linea).all()

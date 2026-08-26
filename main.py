@@ -3,6 +3,8 @@ main.py — Entry point FastAPI para ReniAgent con persistencia PostgreSQL.
 """
 
 import os
+import csv
+import io
 import hmac
 import hashlib
 import json
@@ -15,7 +17,7 @@ load_dotenv()  # Debe ejecutarse antes de importar módulos que lean os.environ 
 from app.config.logging_config import setup_logging, LOGS_DIR
 setup_logging()  # Debe correr antes de importar módulos que loguean al cargarse (p.ej. oci_model)
 
-from fastapi import FastAPI, Header, HTTPException, Query, BackgroundTasks, Request
+from fastapi import FastAPI, File, UploadFile, Header, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional, Union
@@ -478,6 +480,36 @@ def campaign_dispatch_lote(
 
     logger.info(f"DISPATCH_LOTE | campana_id={request.campana_id} resueltos={len(lineas)} de limite={request.limite}")
     return campaign_dispatch(DispatchRequest(campana_id=request.campana_id, lineas=lineas), x_api_key)
+
+
+@app.post("/campaign/import-clientes")
+def campaign_import_clientes(
+    file: UploadFile = File(...),
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Importa/actualiza clientes en la tabla 'clientes' a partir de un CSV subido
+    (mismo formato que docs/Masivo_backup.csv). No toca 'campanas' ni 'campana_clientes'.
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if not _CAMPAIGN_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
+
+    content = file.file.read().decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(content))
+    rows = list(reader)
+    if not rows or "linea" not in rows[0]:
+        raise HTTPException(status_code=400, detail="El CSV no tiene la columna 'linea'.")
+
+    result = campaign_crud.import_clientes_csv(rows)
+    logger.info(
+        f"IMPORT_CLIENTES | {result['total']} filas | "
+        f"{len(result['imported'])} importados | {len(result['skipped'])} omitidos"
+    )
+    return result
 
 
 @app.get("/webhook")
