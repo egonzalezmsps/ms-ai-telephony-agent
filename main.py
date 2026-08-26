@@ -540,34 +540,50 @@ def campaign_import_clientes(
     if not _CAMPAIGN_DB_AVAILABLE:
         raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
 
-    content = file.file.read().decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(content))
-    rows = list(reader)
-    if not rows or "linea" not in rows[0]:
-        raise HTTPException(status_code=400, detail="El CSV no tiene la columna 'linea'.")
+    nombre_archivo = file.filename or "sin_nombre.csv"
+    logger.info(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | recibido | campana_id={campana_id} | reemplazar={reemplazar}")
 
-    borrado = None
-    if reemplazar:
-        borrado = campaign_crud.delete_all_clientes()
-        logger.warning(
-            f"IMPORT_CLIENTES | reemplazar=true | borrados antes de importar: "
-            f"{borrado['clientes_borrados']} clientes, {borrado['campana_clientes_borrados']} vínculos"
+    try:
+        content = file.file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(content))
+        rows = list(reader)
+        if not rows or "linea" not in rows[0]:
+            logger.warning(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | rechazado: CSV vacío o sin columna 'linea'")
+            raise HTTPException(status_code=400, detail="El CSV no tiene la columna 'linea'.")
+
+        logger.info(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | {len(rows)} filas leídas, columnas={reader.fieldnames}")
+
+        borrado = None
+        if reemplazar:
+            borrado = campaign_crud.delete_all_clientes()
+            logger.warning(
+                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | reemplazar=true | borrados antes de importar: "
+                f"{borrado['clientes_borrados']} clientes, {borrado['campana_clientes_borrados']} vínculos"
+            )
+
+        result = campaign_crud.import_clientes_csv(rows)
+        if borrado is not None:
+            result["reemplazados"] = borrado
+
+        if result["skipped"]:
+            logger.warning(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | {len(result['skipped'])} filas omitidas: {result['skipped']}")
+
+        if campana_id is not None and result["imported"]:
+            campaign_crud.add_clientes_to_campana(campana_id, result["imported"])
+            result["campana_id"] = campana_id
+            logger.info(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | {len(result['imported'])} líneas vinculadas a campana_id={campana_id}")
+
+        logger.info(
+            f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | completado | {result['total']} filas | "
+            f"{len(result['imported'])} importados | {len(result['skipped'])} omitidos"
         )
+        return result
 
-    result = campaign_crud.import_clientes_csv(rows)
-    if borrado is not None:
-        result["reemplazados"] = borrado
-
-    if campana_id is not None and result["imported"]:
-        campaign_crud.add_clientes_to_campana(campana_id, result["imported"])
-        result["campana_id"] = campana_id
-
-    logger.info(
-        f"IMPORT_CLIENTES | {result['total']} filas | "
-        f"{len(result['imported'])} importados | {len(result['skipped'])} omitidos"
-        + (f" | vinculados a campana_id={campana_id}" if campana_id is not None else "")
-    )
-    return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | error inesperado: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error importando CSV: {e}")
 
 
 @app.get("/campaign/clientes")
