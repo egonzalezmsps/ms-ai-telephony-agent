@@ -6,6 +6,7 @@ from .models import (
     Promocion, Campana, CampanaPlan, Cliente, CampanaCliente,
 )
 from sqlalchemy.orm import selectinload
+from sqlalchemy import func
 
 
 # ── Familia ───────────────────────────────────────────────────────────────────
@@ -399,6 +400,9 @@ def normalize_cliente_csv_row(row: dict, valid_cols: set) -> dict:
 
 def import_clientes_csv(rows: list) -> dict:
     """Normaliza filas crudas de CSV (formato Telcel) y hace upsert en 'clientes'.
+    Si el CSV trae columna 'orden', se respeta tal cual (permite reordenar clientes
+    existentes). Si no la trae, a los clientes NUEVOS se les asigna el siguiente
+    orden disponible; los existentes conservan el suyo sin tocarlo.
     Retorna {"imported": [lineas...], "skipped": [{"row": i, "reason": "..."}], "total": N}."""
     valid_cols = {c.name for c in Cliente.__table__.columns}
     cleaned = []
@@ -411,10 +415,26 @@ def import_clientes_csv(rows: list) -> dict:
                     data[f] = float(str(data[f]).replace(",", "."))
                 except ValueError:
                     del data[f]
+        if "orden" in data:
+            try:
+                data["orden"] = int(float(str(data["orden"])))
+            except ValueError:
+                del data["orden"]
         if not data.get("linea"):
             skipped.append({"row": i, "reason": "sin 'linea' válida"})
             continue
         cleaned.append(data)
+
+    with get_db() as db:
+        lineas = [d["linea"] for d in cleaned]
+        existentes = {
+            r[0] for r in db.query(Cliente.linea).filter(Cliente.linea.in_(lineas)).all()
+        } if lineas else set()
+        siguiente_orden = (db.query(func.max(Cliente.orden)).scalar() or 0) + 1
+        for data in cleaned:
+            if "orden" not in data and data["linea"] not in existentes:
+                data["orden"] = siguiente_orden
+                siguiente_orden += 1
 
     bulk_upsert_clientes(cleaned)
     return {
@@ -426,7 +446,7 @@ def import_clientes_csv(rows: list) -> dict:
 
 def get_all_clientes():
     with get_db() as db:
-        return db.query(Cliente).order_by(Cliente.creado_en).all()
+        return db.query(Cliente).order_by(Cliente.orden, Cliente.creado_en).all()
 
 
 def upsert_cliente(data: dict) -> Cliente:
@@ -464,7 +484,7 @@ def get_campana_clientes(campana_id: int):
             .join(Cliente, CampanaCliente.linea == Cliente.linea)
             .options(selectinload(CampanaCliente.cliente))
             .filter(CampanaCliente.campana_id == campana_id)
-            .order_by(Cliente.creado_en)
+            .order_by(Cliente.orden, Cliente.creado_en)
             .all()
         )
 

@@ -139,6 +139,7 @@ class Cliente(Base):
     excedentes_int_mb_prom = Column(Float, nullable=True)
     ingresos_exc_nac_prom = Column(Float, nullable=True)
     ingresos_exc_int_prom = Column(Float, nullable=True)
+    orden = Column(Integer, nullable=True)
     creado_en = Column(DateTime, default=datetime.utcnow)
     campanas = relationship("CampanaCliente", back_populates="cliente")
 

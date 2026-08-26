@@ -551,6 +551,7 @@ def campaign_get_all_clientes(
     clientes = campaign_crud.get_all_clientes()
     result = [{
         "fila": i,
+        "orden": c.orden,
         "linea": c.linea,
         "nombre": c.nombre,
         "apellidos": c.apellidos,
@@ -587,6 +588,7 @@ def campaign_get_clientes(
         c = cc.cliente
         clientes.append({
             "fila": i,
+            "orden": c.orden if c else None,
             "linea": cc.linea,
             "nombre": c.nombre if c else None,
             "apellidos": c.apellidos if c else None,
