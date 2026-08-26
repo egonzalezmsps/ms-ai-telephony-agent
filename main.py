@@ -521,6 +521,7 @@ def campaign_migrate_orden(
 def campaign_import_clientes(
     file: UploadFile = File(...),
     campana_id: Optional[int] = Form(default=None),
+    reemplazar: bool = Form(default=False),
     x_api_key: Optional[str] = Header(default=None),
 ):
     """
@@ -528,6 +529,9 @@ def campaign_import_clientes(
     (mismo formato que docs/Masivo_backup.csv).
     Si se manda 'campana_id', además vincula las líneas importadas a esa campaña
     en 'campana_clientes' (estado_envio='pendiente'), listas para /campaign/dispatch/lote.
+    Si 'reemplazar' es true, borra TODOS los clientes y vínculos de campaña
+    existentes antes de importar — el CSV subido pasa a ser el único contenido
+    de la tabla (en vez de mezclarse con lo que ya había).
     """
     expected_key = os.getenv("API_KEY", "")
     if expected_key and x_api_key != expected_key:
@@ -542,7 +546,17 @@ def campaign_import_clientes(
     if not rows or "linea" not in rows[0]:
         raise HTTPException(status_code=400, detail="El CSV no tiene la columna 'linea'.")
 
+    borrado = None
+    if reemplazar:
+        borrado = campaign_crud.delete_all_clientes()
+        logger.warning(
+            f"IMPORT_CLIENTES | reemplazar=true | borrados antes de importar: "
+            f"{borrado['clientes_borrados']} clientes, {borrado['campana_clientes_borrados']} vínculos"
+        )
+
     result = campaign_crud.import_clientes_csv(rows)
+    if borrado is not None:
+        result["reemplazados"] = borrado
 
     if campana_id is not None and result["imported"]:
         campaign_crud.add_clientes_to_campana(campana_id, result["imported"])
