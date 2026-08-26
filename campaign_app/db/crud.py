@@ -475,20 +475,26 @@ def bulk_upsert_clientes(rows: list) -> int:
         return len(rows)
 
 
+def _ensure_column(db, column_name: str, ddl_type: str) -> bool:
+    """Agrega una columna a 'clientes' si todavía no existe. Retorna True si la agregó."""
+    existe = db.execute(text(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_name = 'clientes' AND column_name = :col"
+    ), {"col": column_name}).scalar()
+    if not existe:
+        db.execute(text(f"ALTER TABLE clientes ADD COLUMN {column_name} {ddl_type}"))
+        return True
+    return False
+
+
 def ensure_orden_column() -> dict:
-    """Agrega la columna 'orden' a 'clientes' si todavía no existe (para BDs que
-    fueron creadas antes de que existiera el modelo con esa columna), y hace
-    backfill asignando orden secuencial (por creado_en) solo a las filas que
-    aún no tengan valor. Idempotente — seguro de correr varias veces."""
+    """Agrega las columnas 'orden' y 'estado' a 'clientes' si todavía no existen
+    (para BDs que fueron creadas antes de que existieran en el modelo), y hace
+    backfill: 'orden' secuencial (por creado_en) y 'estado' = 'Pendiente' para
+    las filas que aún no tengan valor. Idempotente — seguro de correr varias veces."""
     with get_db() as db:
-        existe = db.execute(text(
-            "SELECT 1 FROM information_schema.columns "
-            "WHERE table_name = 'clientes' AND column_name = 'orden'"
-        )).scalar()
-        columna_agregada = False
-        if not existe:
-            db.execute(text("ALTER TABLE clientes ADD COLUMN orden INTEGER"))
-            columna_agregada = True
+        orden_agregada = _ensure_column(db, "orden", "INTEGER")
+        estado_agregada = _ensure_column(db, "estado", "VARCHAR(20)")
 
     with get_db() as db:
         siguiente_orden = (db.query(func.max(Cliente.orden)).scalar() or 0) + 1
@@ -502,7 +508,24 @@ def ensure_orden_column() -> dict:
             c.orden = siguiente_orden
             siguiente_orden += 1
 
-    return {"columna_agregada": columna_agregada, "filas_backfilled": len(sin_orden)}
+    with get_db() as db:
+        sin_estado = db.query(Cliente).filter(Cliente.estado.is_(None)).all()
+        for c in sin_estado:
+            c.estado = "Pendiente"
+
+    return {
+        "columna_agregada": orden_agregada,
+        "filas_backfilled": len(sin_orden),
+        "estado_columna_agregada": estado_agregada,
+        "estado_filas_backfilled": len(sin_estado),
+    }
+
+
+def marcar_estado_cliente(linea: str, estado: str) -> None:
+    with get_db() as db:
+        obj = db.query(Cliente).filter_by(linea=linea).first()
+        if obj:
+            obj.estado = estado
 
 
 def delete_all_clientes() -> dict:

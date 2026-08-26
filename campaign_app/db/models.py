@@ -140,6 +140,7 @@ class Cliente(Base):
     ingresos_exc_nac_prom = Column(Float, nullable=True)
     ingresos_exc_int_prom = Column(Float, nullable=True)
     orden = Column(Integer, nullable=True)
+    estado = Column(String(20), nullable=True, default="Pendiente")
     creado_en = Column(DateTime, default=datetime.utcnow)
     campanas = relationship("CampanaCliente", back_populates="cliente")
 

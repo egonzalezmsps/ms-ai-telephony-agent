@@ -332,6 +332,8 @@ def campaign(
                 results["failed"].append({"phone_number": phone_number, "reason": "envío de WhatsApp falló (template y texto plano)"})
                 continue
 
+            campaign_crud.marcar_estado_cliente(phone_number, "Enviada")
+
             # Guardar sesión bajo wa_id para que el webhook la encuentre al recibir la respuesta
             save_session(
                 phone_number=wa_id,
@@ -614,6 +616,7 @@ def campaign_get_all_clientes(
         "tipo_suscripcion": c.tipo_suscripcion,
         "renta_plan": c.renta_plan,
         "facturacion_promedio": c.facturacion_promedio,
+        "estado": c.estado,
         "creado_en": c.creado_en.isoformat() if c.creado_en else None,
     } for i, c in enumerate(clientes, start=1)]
 
@@ -650,6 +653,7 @@ def campaign_get_clientes(
             "familia_plan": c.familia_plan if c else None,
             "tipo_suscripcion": c.tipo_suscripcion if c else None,
             "renta_plan": c.renta_plan if c else None,
+            "estado": c.estado if c else None,
             "estado_envio": cc.estado_envio,
             "estado_interaccion": cc.estado_interaccion,
             "fecha_envio": cc.fecha_envio.isoformat() if cc.fecha_envio else None,
