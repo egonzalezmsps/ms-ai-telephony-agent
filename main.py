@@ -17,7 +17,7 @@ load_dotenv()  # Debe ejecutarse antes de importar módulos que lean os.environ 
 from app.config.logging_config import setup_logging, LOGS_DIR
 setup_logging()  # Debe correr antes de importar módulos que loguean al cargarse (p.ej. oci_model)
 
-from fastapi import FastAPI, File, UploadFile, Header, HTTPException, Query, BackgroundTasks, Request
+from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional, Union
@@ -485,11 +485,14 @@ def campaign_dispatch_lote(
 @app.post("/campaign/import-clientes")
 def campaign_import_clientes(
     file: UploadFile = File(...),
+    campana_id: Optional[int] = Form(default=None),
     x_api_key: Optional[str] = Header(default=None),
 ):
     """
     Importa/actualiza clientes en la tabla 'clientes' a partir de un CSV subido
-    (mismo formato que docs/Masivo_backup.csv). No toca 'campanas' ni 'campana_clientes'.
+    (mismo formato que docs/Masivo_backup.csv).
+    Si se manda 'campana_id', además vincula las líneas importadas a esa campaña
+    en 'campana_clientes' (estado_envio='pendiente'), listas para /campaign/dispatch/lote.
     """
     expected_key = os.getenv("API_KEY", "")
     if expected_key and x_api_key != expected_key:
@@ -505,9 +508,15 @@ def campaign_import_clientes(
         raise HTTPException(status_code=400, detail="El CSV no tiene la columna 'linea'.")
 
     result = campaign_crud.import_clientes_csv(rows)
+
+    if campana_id is not None and result["imported"]:
+        campaign_crud.add_clientes_to_campana(campana_id, result["imported"])
+        result["campana_id"] = campana_id
+
     logger.info(
         f"IMPORT_CLIENTES | {result['total']} filas | "
         f"{len(result['imported'])} importados | {len(result['skipped'])} omitidos"
+        + (f" | vinculados a campana_id={campana_id}" if campana_id is not None else "")
     )
     return result
 
