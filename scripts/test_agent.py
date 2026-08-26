@@ -29,11 +29,11 @@ from app.config.logging_config import setup_logging
 setup_logging()
 
 from app.agent.reni_agent import run_turn
-from app.tools.prospect_loader import get_prospect_list_text, select_prospect
+from app.tools.prospect_loader import get_prospect_list_text, select_prospect, mark_as_changed
 from app.state.session import SessionState
 from app.state.persistence import delete_session
 from app.prompts.campaign_template import build_campaign_message
-from app.catalog.plans import eligible_plans, recommend_plan, get_price
+from app.catalog.plans import eligible_plans, recommend_plan, get_price, find_plan
 
 from app.router.semantic_router import load_reference_embeddings
 load_reference_embeddings()
@@ -151,10 +151,18 @@ def main():
                 print("Carga un perfil primero con /select N\n")
                 continue
 
+            folio_antes = session.contract_folio
             print("Agente: ", end="", flush=True)
             response, history = run_turn(session, user_input, history)
             print(response)
             print()
+
+            # Cambio de plan recién confirmado en este turno (folio nuevo) —
+            # marcar el CSV como 'CAMBIADO' con el plan_code activado.
+            if session.contract_folio and session.contract_folio != folio_antes:
+                plan_nuevo = find_plan(session.plan_selected)
+                if plan_nuevo:
+                    mark_as_changed(session.phone_number, plan_nuevo.plan_code)
 
 
 if __name__ == "__main__":

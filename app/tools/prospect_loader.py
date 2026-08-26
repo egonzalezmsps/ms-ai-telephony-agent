@@ -94,6 +94,44 @@ def build_session_from_row(row: dict) -> SessionState:
     )
 
 
+def _update_fields(linea: str, **campos) -> None:
+    """Actualiza una o más columnas del cliente con esa línea en el CSV.
+    Agrega la columna al encabezado si todavía no existe."""
+    path = os.path.abspath(CSV_PATH)
+    if not os.path.exists(path):
+        return
+
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+
+    for campo in campos:
+        if campo not in fieldnames:
+            fieldnames.append(campo)
+
+    for row in rows:
+        if row.get("linea") == linea:
+            row.update(campos)
+
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _update_estado(linea: str, nuevo_estado: str) -> None:
+    """Actualiza la columna 'estado' del cliente con esa línea en el CSV."""
+    _update_fields(linea, estado=nuevo_estado)
+
+
+def mark_as_changed(linea: str, plan_code: str) -> None:
+    """Marca al cliente como 'CAMBIADO' y registra el plan_code activado
+    en la columna 'nuevoplan' — se llama cuando el cambio de plan se
+    confirma exitosamente (API de create_product respondió OK)."""
+    _update_fields(linea, estado="CAMBIADO", nuevoplan=plan_code)
+
+
 def get_prospect_list_text() -> str:
     """Genera el texto del listado de prospectos para el comando /list."""
     prospects = load_prospects()
@@ -116,8 +154,13 @@ def select_prospect(n: int) -> Optional[SessionState]:
     """
     Carga el prospecto número N (base 1) del CSV.
     Retorna None si el índice está fuera de rango.
+
+    Simula el envío de la invitación: marca la fila del cliente como
+    'ENVIADO' en la columna 'estado' del CSV.
     """
     prospects = load_prospects()
     if not prospects or n < 1 or n > len(prospects):
         return None
-    return build_session_from_row(prospects[n - 1])
+    row = prospects[n - 1]
+    _update_estado(row.get("linea", ""), "ENVIADO")
+    return build_session_from_row(row)
