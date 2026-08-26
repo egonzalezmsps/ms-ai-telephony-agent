@@ -30,7 +30,6 @@ from app.prompts.campaign_template import build_campaign_message, build_template
 from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template, send_whatsapp_interactive_buttons
 from app.whatsapp.command_handler import handle_command
 from app.router.semantic_router import load_reference_embeddings
-from app.tools.prospect_loader import load_prospects, build_session_from_row
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +157,8 @@ class ChatResponse(BaseModel):
 
 
 class CampaignRequest(BaseModel):
-    phone_numbers: list[str]
+    fila_inicio: int
+    fila_fin: int
 
 
 class SessionDeleteRequest(BaseModel):
@@ -259,27 +259,38 @@ def campaign(
     x_api_key: Optional[str] = Header(default=None),
 ):
     """
-    Busca cada número en docs/Masivo_clientes.csv, determina con esos datos
-    (plan actual, renta, modalidad) qué plan/plantilla corresponde, y envía
-    el template de WhatsApp — igual que hacía antes para un solo número,
-    pero repetido por cada uno de la lista.
+    Envía el template de campaña a los clientes de la tabla 'clientes' (Postgres)
+    cuya 'fila' (mismo orden de carga que /campaign/clientes, por creado_en) esté
+    entre fila_inicio y fila_fin, ambos inclusive.
     """
     expected_key = os.getenv("API_KEY", "")
     if expected_key and x_api_key != expected_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    prospects_by_linea = {str(row.get("linea", "")).strip(): row for row in load_prospects()}
+    if not _CAMPAIGN_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
+
+    todos_clientes = campaign_crud.get_all_clientes()
+    seleccionados = [
+        c for i, c in enumerate(todos_clientes, start=1)
+        if request.fila_inicio <= i <= request.fila_fin
+    ]
 
     results = {"sent": [], "failed": []}
 
-    for phone_number in request.phone_numbers:
-        row = prospects_by_linea.get(phone_number.strip())
-        if not row:
-            results["failed"].append({"phone_number": phone_number, "reason": "no encontrado en CSV de prospectos"})
-            continue
+    for cliente in seleccionados:
+        phone_number = cliente.linea
 
         try:
-            session = build_session_from_row(row)
+            session = SessionState(
+                first_name=(cliente.nombre or "Cliente").split()[0].title(),
+                full_name=f"{cliente.nombre or ''} {cliente.apellidos or ''}".strip(),
+                phone_number=phone_number,
+                current_plan_name=cliente.plan_actual_nombre or "Plan Legado",
+                current_cost=cliente.renta_plan or 0.0,
+                subscription_type=cliente.tipo_suscripcion or "Abierto",
+                is_titular=True,
+            )
             template_result = build_template_params(session)
             campaign_msg = build_campaign_message(session)
 
