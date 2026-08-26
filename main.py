@@ -434,6 +434,52 @@ def campaign_dispatch(
     return results
 
 
+class DispatchLoteRequest(BaseModel):
+    campana_id: int
+    limite: int = 100
+
+
+@app.post("/campaign/dispatch/lote")
+def campaign_dispatch_lote(
+    request: DispatchLoteRequest,
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Envía a los próximos N clientes pendientes (estado_envio='pendiente') de
+    una campaña — evita tener que armar la lista de líneas a mano en cada
+    lote. Internamente resuelve las líneas y reusa campaign_dispatch().
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if not _CAMPAIGN_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
+
+    from campaign_app.db.database import get_db
+    from campaign_app.db.models import CampanaCliente, Cliente as ClienteModel
+
+    with get_db() as db:
+        pendientes = (
+            db.query(CampanaCliente)
+            .join(ClienteModel, CampanaCliente.linea == ClienteModel.linea)
+            .filter(
+                CampanaCliente.campana_id == request.campana_id,
+                CampanaCliente.estado_envio == "pendiente",
+            )
+            .order_by(ClienteModel.creado_en.asc())
+            .limit(request.limite)
+            .all()
+        )
+        lineas = [cc.linea for cc in pendientes]
+
+    if not lineas:
+        return {"sent": [], "failed": [], "detail": "No hay clientes pendientes para esta campaña"}
+
+    logger.info(f"DISPATCH_LOTE | campana_id={request.campana_id} resueltos={len(lineas)} de limite={request.limite}")
+    return campaign_dispatch(DispatchRequest(campana_id=request.campana_id, lineas=lineas), x_api_key)
+
+
 @app.get("/webhook")
 def verify_webhook(
     hub_mode: str = Query(default=None, alias="hub.mode"),
