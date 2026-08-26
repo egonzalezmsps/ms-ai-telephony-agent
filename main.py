@@ -521,6 +521,79 @@ def campaign_import_clientes(
     return result
 
 
+@app.get("/campaign/clientes")
+def campaign_get_all_clientes(
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Lista TODOS los clientes de la tabla 'clientes', sin filtrar por campaña
+    (a diferencia de /campaign/{campana_id}/clientes, que solo trae los vinculados
+    a esa campaña en 'campana_clientes').
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if not _CAMPAIGN_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
+
+    clientes = campaign_crud.get_all_clientes()
+    result = [{
+        "fila": i,
+        "linea": c.linea,
+        "nombre": c.nombre,
+        "apellidos": c.apellidos,
+        "plan_actual_nombre": c.plan_actual_nombre,
+        "familia_plan": c.familia_plan,
+        "tipo_suscripcion": c.tipo_suscripcion,
+        "renta_plan": c.renta_plan,
+        "facturacion_promedio": c.facturacion_promedio,
+        "creado_en": c.creado_en.isoformat() if c.creado_en else None,
+    } for i, c in enumerate(clientes, start=1)]
+
+    return {"total": len(result), "clientes": result}
+
+
+@app.get("/campaign/{campana_id}/clientes")
+def campaign_get_clientes(
+    campana_id: int,
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Lista los clientes de una campaña tal como quedaron guardados en BD
+    (join de 'clientes' + 'campana_clientes'), para verificar una importación.
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if not _CAMPAIGN_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
+
+    campana_clientes = campaign_crud.get_campana_clientes(campana_id)
+    clientes = []
+    for i, cc in enumerate(campana_clientes, start=1):
+        c = cc.cliente
+        clientes.append({
+            "fila": i,
+            "linea": cc.linea,
+            "nombre": c.nombre if c else None,
+            "apellidos": c.apellidos if c else None,
+            "plan_actual_nombre": c.plan_actual_nombre if c else None,
+            "familia_plan": c.familia_plan if c else None,
+            "tipo_suscripcion": c.tipo_suscripcion if c else None,
+            "renta_plan": c.renta_plan if c else None,
+            "estado_envio": cc.estado_envio,
+            "estado_interaccion": cc.estado_interaccion,
+            "fecha_envio": cc.fecha_envio.isoformat() if cc.fecha_envio else None,
+            "plan_seleccionado": cc.plan_seleccionado,
+            "folio_contrato": cc.folio_contrato,
+            "num_turnos": cc.num_turnos,
+        })
+
+    return {"campana_id": campana_id, "total": len(clientes), "clientes": clientes}
+
+
 @app.get("/webhook")
 def verify_webhook(
     hub_mode: str = Query(default=None, alias="hub.mode"),

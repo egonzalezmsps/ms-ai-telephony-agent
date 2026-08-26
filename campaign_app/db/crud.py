@@ -426,7 +426,7 @@ def import_clientes_csv(rows: list) -> dict:
 
 def get_all_clientes():
     with get_db() as db:
-        return db.query(Cliente).order_by(Cliente.linea).all()
+        return db.query(Cliente).order_by(Cliente.creado_en).all()
 
 
 def upsert_cliente(data: dict) -> Cliente:
@@ -461,8 +461,10 @@ def get_campana_clientes(campana_id: int):
     with get_db() as db:
         return (
             db.query(CampanaCliente)
+            .join(Cliente, CampanaCliente.linea == Cliente.linea)
             .options(selectinload(CampanaCliente.cliente))
-            .filter_by(campana_id=campana_id)
+            .filter(CampanaCliente.campana_id == campana_id)
+            .order_by(Cliente.creado_en)
             .all()
         )
 
