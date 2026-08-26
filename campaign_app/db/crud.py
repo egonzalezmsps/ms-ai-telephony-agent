@@ -6,7 +6,7 @@ from .models import (
     Promocion, Campana, CampanaPlan, Cliente, CampanaCliente,
 )
 from sqlalchemy.orm import selectinload
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 
 # ── Familia ───────────────────────────────────────────────────────────────────
@@ -473,6 +473,48 @@ def bulk_upsert_clientes(rows: list) -> int:
             else:
                 db.add(Cliente(**data))
         return len(rows)
+
+
+def ensure_orden_column() -> dict:
+    """Agrega la columna 'orden' a 'clientes' si todavía no existe (para BDs que
+    fueron creadas antes de que existiera el modelo con esa columna), y hace
+    backfill asignando orden secuencial (por creado_en) solo a las filas que
+    aún no tengan valor. Idempotente — seguro de correr varias veces."""
+    with get_db() as db:
+        existe = db.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'clientes' AND column_name = 'orden'"
+        )).scalar()
+        columna_agregada = False
+        if not existe:
+            db.execute(text("ALTER TABLE clientes ADD COLUMN orden INTEGER"))
+            columna_agregada = True
+
+    with get_db() as db:
+        siguiente_orden = (db.query(func.max(Cliente.orden)).scalar() or 0) + 1
+        sin_orden = (
+            db.query(Cliente)
+            .filter(Cliente.orden.is_(None))
+            .order_by(Cliente.creado_en)
+            .all()
+        )
+        for c in sin_orden:
+            c.orden = siguiente_orden
+            siguiente_orden += 1
+
+    return {"columna_agregada": columna_agregada, "filas_backfilled": len(sin_orden)}
+
+
+def delete_all_clientes() -> dict:
+    """Borra TODOS los registros de 'clientes' y sus vínculos en 'campana_clientes'.
+    Irreversible. No toca 'campanas'."""
+    with get_db() as db:
+        campana_clientes_borrados = db.query(CampanaCliente).delete()
+        clientes_borrados = db.query(Cliente).delete()
+    return {
+        "clientes_borrados": clientes_borrados,
+        "campana_clientes_borrados": campana_clientes_borrados,
+    }
 
 
 # ── CampanaCliente ────────────────────────────────────────────────────────────

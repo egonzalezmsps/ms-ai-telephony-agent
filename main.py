@@ -493,6 +493,30 @@ def campaign_dispatch_lote(
     return campaign_dispatch(DispatchRequest(campana_id=request.campana_id, lineas=lineas), x_api_key)
 
 
+@app.post("/campaign/migrate-orden")
+def campaign_migrate_orden(
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Agrega la columna 'orden' a 'clientes' si aún no existe en esta BD, y le
+    asigna un valor secuencial (por creado_en) a los clientes que no lo tengan.
+    Idempotente — se puede llamar varias veces sin efectos raros.
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if not _CAMPAIGN_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
+
+    result = campaign_crud.ensure_orden_column()
+    logger.info(
+        f"MIGRATE_ORDEN | columna_agregada={result['columna_agregada']} "
+        f"filas_backfilled={result['filas_backfilled']}"
+    )
+    return result
+
+
 @app.post("/campaign/import-clientes")
 def campaign_import_clientes(
     file: UploadFile = File(...),
@@ -605,6 +629,33 @@ def campaign_get_clientes(
         })
 
     return {"campana_id": campana_id, "total": len(clientes), "clientes": clientes}
+
+
+@app.delete("/campaign/clientes")
+def campaign_delete_all_clientes(
+    confirm: bool = Query(default=False),
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Borra TODOS los registros de 'clientes' y sus vínculos en 'campana_clientes'.
+    Irreversible. Requiere ?confirm=true para evitar disparos accidentales.
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if not _CAMPAIGN_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
+
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Falta ?confirm=true — esta acción borra TODOS los clientes.")
+
+    result = campaign_crud.delete_all_clientes()
+    logger.warning(
+        f"DELETE_ALL_CLIENTES | {result['clientes_borrados']} clientes, "
+        f"{result['campana_clientes_borrados']} vínculos de campaña borrados"
+    )
+    return result
 
 
 @app.get("/webhook")
