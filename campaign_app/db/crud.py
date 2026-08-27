@@ -554,6 +554,17 @@ def get_campana_clientes(campana_id: int):
         )
 
 
+def get_all_campana_clientes():
+    with get_db() as db:
+        return (
+            db.query(CampanaCliente)
+            .join(Cliente, CampanaCliente.linea == Cliente.linea)
+            .options(selectinload(CampanaCliente.cliente))
+            .order_by(CampanaCliente.campana_id, Cliente.orden, Cliente.creado_en)
+            .all()
+        )
+
+
 def get_campana_clientes_pendientes(campana_id: int):
     with get_db() as db:
         return (

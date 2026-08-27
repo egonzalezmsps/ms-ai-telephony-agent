@@ -356,6 +356,58 @@ def campaign(
     return results
 
 
+@app.get("/reportes/campana-clientes")
+def get_campana_clientes(
+    campana_id: Optional[int] = Query(default=None, description="Si se omite, trae todas las campañas"),
+    full: bool = Query(default=False, description="Incluir historial_conversacion y session_data_snapshot"),
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """
+    Devuelve el contenido de la tabla 'campana_clientes', con los datos del
+    cliente asociado (join con 'clientes'). Si 'campana_id' se omite, trae
+    las filas de todas las campañas.
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    if not _CAMPAIGN_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
+
+    if campana_id is None:
+        rows = campaign_crud.get_all_campana_clientes()
+    else:
+        rows = campaign_crud.get_campana_clientes(campana_id)
+
+    resultado = []
+    for r in rows:
+        item = {
+            "campana_id": r.campana_id,
+            "linea": r.linea,
+            "estado_envio": r.estado_envio,
+            "fecha_envio": r.fecha_envio.isoformat() if r.fecha_envio else None,
+            "estado_interaccion": r.estado_interaccion,
+            "plan_seleccionado": r.plan_seleccionado,
+            "fecha_seleccion": r.fecha_seleccion.isoformat() if r.fecha_seleccion else None,
+            "num_turnos": r.num_turnos,
+            "folio_contrato": r.folio_contrato,
+            "cliente": {
+                "nombre": r.cliente.nombre,
+                "apellidos": r.cliente.apellidos,
+                "plan_actual_nombre": r.cliente.plan_actual_nombre,
+                "tipo_suscripcion": r.cliente.tipo_suscripcion,
+                "renta_plan": r.cliente.renta_plan,
+                "estado": r.cliente.estado,
+            } if r.cliente else None,
+        }
+        if full:
+            item["historial_conversacion"] = r.historial_conversacion
+            item["session_data_snapshot"] = r.session_data_snapshot
+        resultado.append(item)
+
+    return resultado
+
+
 class DispatchRequest(BaseModel):
     campana_id: int
     lineas: list[str]
