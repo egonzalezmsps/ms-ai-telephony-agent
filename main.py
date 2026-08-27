@@ -93,6 +93,7 @@ def _maybe_persist_plan_change(session):
         campaign_crud.actualizar_plan_cliente(
             linea=linea,
             plan_nuevo=session.current_plan_name,
+            renta_nueva=session.current_cost,
         )
     except Exception as e:
         logger.warning(f"actualizar_plan_cliente error: {e}")
@@ -589,26 +590,6 @@ def campaign_migrate_orden(
     return result
 
 
-@app.post("/campaign/migrate-plan-seleccionado")
-def campaign_migrate_plan_seleccionado(
-    x_api_key: Optional[str] = Header(default=None),
-):
-    """
-    Agrega la columna 'plan_seleccionado' a 'clientes' si aún no existe en esta BD.
-    Idempotente — se puede llamar varias veces sin efectos raros.
-    """
-    expected_key = os.getenv("API_KEY", "")
-    if expected_key and x_api_key != expected_key:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-    if not _CAMPAIGN_DB_AVAILABLE:
-        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
-
-    result = campaign_crud.ensure_plan_seleccionado_column()
-    logger.info(f"MIGRATE_PLAN_SELECCIONADO | columna_agregada={result['columna_agregada']}")
-    return result
-
-
 @app.post("/campaign/import-clientes")
 def campaign_import_clientes(
     file: UploadFile = File(...),
@@ -695,21 +676,26 @@ def campaign_get_all_clientes(
         raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
 
     clientes = campaign_crud.get_all_clientes()
-    result = [{
-        "fila": i,
-        "orden": c.orden,
-        "linea": c.linea,
-        "nombre": c.nombre,
-        "apellidos": c.apellidos,
-        "plan_actual_nombre": c.plan_actual_nombre,
-        "plan_seleccionado": c.plan_seleccionado,
-        "familia_plan": c.familia_plan,
-        "tipo_suscripcion": c.tipo_suscripcion,
-        "renta_plan": c.renta_plan,
-        "facturacion_promedio": c.facturacion_promedio,
-        "estado": c.estado,
-        "creado_en": c.creado_en.isoformat() if c.creado_en else None,
-    } for i, c in enumerate(clientes, start=1)]
+    result = []
+    for i, c in enumerate(clientes, start=1):
+        plan_seleccionado = next(
+            (cc.plan_seleccionado for cc in c.campanas if cc.plan_seleccionado), None
+        )
+        result.append({
+            "fila": i,
+            "orden": c.orden,
+            "linea": c.linea,
+            "nombre": c.nombre,
+            "apellidos": c.apellidos,
+            "plan_actual_nombre": c.plan_actual_nombre,
+            "plan_seleccionado": plan_seleccionado,
+            "familia_plan": c.familia_plan,
+            "tipo_suscripcion": c.tipo_suscripcion,
+            "renta_plan": c.renta_plan,
+            "facturacion_promedio": c.facturacion_promedio,
+            "estado": c.estado,
+            "creado_en": c.creado_en.isoformat() if c.creado_en else None,
+        })
 
     return {"total": len(result), "clientes": result}
 
