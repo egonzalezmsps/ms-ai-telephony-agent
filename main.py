@@ -157,8 +157,7 @@ class ChatResponse(BaseModel):
 
 
 class CampaignRequest(BaseModel):
-    fila_inicio: int
-    fila_fin: int
+    lineas: list[str]
 
 
 class SessionDeleteRequest(BaseModel):
@@ -260,8 +259,7 @@ def campaign(
 ):
     """
     Envía el template de campaña a los clientes de la tabla 'clientes' (Postgres)
-    cuya 'fila' (mismo orden de carga que /campaign/clientes, por creado_en) esté
-    entre fila_inicio y fila_fin, ambos inclusive.
+    cuya línea (número de teléfono) esté en la lista 'lineas' recibida (uno o varios).
     """
     expected_key = os.getenv("API_KEY", "")
     if expected_key and x_api_key != expected_key:
@@ -271,12 +269,16 @@ def campaign(
         raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
 
     todos_clientes = campaign_crud.get_all_clientes()
-    seleccionados = [
-        c for i, c in enumerate(todos_clientes, start=1)
-        if request.fila_inicio <= i <= request.fila_fin
-    ]
+    por_linea = {c.linea: c for c in todos_clientes}
 
     results = {"sent": [], "failed": []}
+    seleccionados = []
+    for linea in request.lineas:
+        cliente = por_linea.get(linea)
+        if cliente is None:
+            results["failed"].append({"phone_number": linea, "reason": "cliente no encontrado"})
+        else:
+            seleccionados.append(cliente)
 
     for cliente in seleccionados:
         phone_number = cliente.linea
