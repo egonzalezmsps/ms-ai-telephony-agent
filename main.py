@@ -82,6 +82,23 @@ def _stage_to_interaccion(session) -> str:
     return "en_conversacion"
 
 
+def _maybe_persist_plan_change(session):
+    """Tras un cambio de plan exitoso, guarda el plan nuevo en la tabla 'clientes'. Silencioso ante cualquier error."""
+    if not _CAMPAIGN_DB_AVAILABLE:
+        return
+    if session.end_reason != "success":
+        return
+    try:
+        linea = _to_linea(session.phone_number)
+        campaign_crud.actualizar_plan_cliente(
+            linea=linea,
+            plan_nuevo=session.current_plan_name,
+            renta_nueva=session.current_cost,
+        )
+    except Exception as e:
+        logger.warning(f"actualizar_plan_cliente error: {e}")
+
+
 def _maybe_update_campana_cliente(session, history: list):
     """Update CampanaCliente traceability after each turn. Silently skips on any error."""
     if not _CAMPAIGN_DB_AVAILABLE:
@@ -659,20 +676,26 @@ def campaign_get_all_clientes(
         raise HTTPException(status_code=503, detail=f"Campaign DB not available: {_CAMPAIGN_DB_ERROR}")
 
     clientes = campaign_crud.get_all_clientes()
-    result = [{
-        "fila": i,
-        "orden": c.orden,
-        "linea": c.linea,
-        "nombre": c.nombre,
-        "apellidos": c.apellidos,
-        "plan_actual_nombre": c.plan_actual_nombre,
-        "familia_plan": c.familia_plan,
-        "tipo_suscripcion": c.tipo_suscripcion,
-        "renta_plan": c.renta_plan,
-        "facturacion_promedio": c.facturacion_promedio,
-        "estado": c.estado,
-        "creado_en": c.creado_en.isoformat() if c.creado_en else None,
-    } for i, c in enumerate(clientes, start=1)]
+    result = []
+    for i, c in enumerate(clientes, start=1):
+        plan_seleccionado = next(
+            (cc.plan_seleccionado for cc in c.campanas if cc.plan_seleccionado), None
+        )
+        result.append({
+            "fila": i,
+            "orden": c.orden,
+            "linea": c.linea,
+            "nombre": c.nombre,
+            "apellidos": c.apellidos,
+            "plan_actual_nombre": c.plan_actual_nombre,
+            "plan_seleccionado": plan_seleccionado,
+            "familia_plan": c.familia_plan,
+            "tipo_suscripcion": c.tipo_suscripcion,
+            "renta_plan": c.renta_plan,
+            "facturacion_promedio": c.facturacion_promedio,
+            "estado": c.estado,
+            "creado_en": c.creado_en.isoformat() if c.creado_en else None,
+        })
 
     return {"total": len(result), "clientes": result}
 
@@ -814,6 +837,7 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                 )
             else:
                 send_whatsapp_message(phone_number, response_text)
+                _maybe_persist_plan_change(session)
             logger.info(f"WA OUT | {phone_number} [stage={session.stage}]: {response_text[:80]}")
         else:
             session = SessionState(
