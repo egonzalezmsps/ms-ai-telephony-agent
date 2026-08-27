@@ -446,12 +446,7 @@ def import_clientes_csv(rows: list) -> dict:
 
 def get_all_clientes():
     with get_db() as db:
-        return (
-            db.query(Cliente)
-            .options(selectinload(Cliente.campanas))
-            .order_by(Cliente.orden, Cliente.creado_en)
-            .all()
-        )
+        return db.query(Cliente).order_by(Cliente.orden, Cliente.creado_en).all()
 
 
 def upsert_cliente(data: dict) -> Cliente:
@@ -526,14 +521,21 @@ def ensure_orden_column() -> dict:
     }
 
 
-def actualizar_plan_cliente(linea: str, plan_nuevo: str, renta_nueva: Optional[float] = None) -> None:
-    """Actualiza el plan (y opcionalmente la renta) del cliente en 'clientes' tras un cambio de plan exitoso."""
+def ensure_plan_seleccionado_column() -> dict:
+    """Agrega la columna 'plan_seleccionado' a 'clientes' si todavía no existe
+    (para BDs creadas antes de que existiera en el modelo). Idempotente."""
+    with get_db() as db:
+        columna_agregada = _ensure_column(db, "plan_seleccionado", "VARCHAR(200)")
+    return {"columna_agregada": columna_agregada}
+
+
+def actualizar_plan_cliente(linea: str, plan_nuevo: str) -> None:
+    """Guarda el plan nuevo en 'clientes.plan_seleccionado' tras un cambio de plan exitoso.
+    No toca 'plan_actual_nombre', que conserva el plan original con el que se importó el cliente."""
     with get_db() as db:
         cliente = db.query(Cliente).filter_by(linea=linea).first()
         if cliente:
-            cliente.plan_actual_nombre = plan_nuevo
-            if renta_nueva is not None:
-                cliente.renta_plan = renta_nueva
+            cliente.plan_seleccionado = plan_nuevo
 
 
 def marcar_estado_cliente(linea: str, estado: str) -> None:
