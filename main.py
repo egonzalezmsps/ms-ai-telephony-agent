@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import threading
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()  # Debe ejecutarse antes de importar módulos que lean os.environ al cargarse
@@ -178,6 +179,12 @@ class CampaignRequest(BaseModel):
 
 class SessionDeleteRequest(BaseModel):
     phone_number: str
+
+
+class ProvisioningStatusRequest(BaseModel):
+    processId: str
+    msisdn: str
+    statusProvisioning: str
 
 
 @app.get("/actuator/health", include_in_schema=False)
@@ -961,6 +968,38 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         logger.error(f"WhatsApp webhook error: {e}", exc_info=True)
 
     return {"status": "ok"}
+
+
+@app.post("/webhook/provisioning-status")
+def provisioning_status_webhook(
+    payload: ProvisioningStatusRequest,
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """Recibe la notificación de Telcel del estatus de provisioning de un cambio de plan."""
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    logger.info(
+        "PROVISIONING | processId=%s msisdn=%s statusProvisioning=%s",
+        payload.processId, payload.msisdn, payload.statusProvisioning,
+    )
+
+    now = datetime.now()
+    token_operation = f"ORCL-{now.strftime('%Y%m%d%H%M%S')}.{now.microsecond // 1000:03d}"
+
+    return {
+        "detailResponse": {
+            "code": 200,
+            "severityLevel": "0",
+            "description": "Petición exitosa",
+            "actor": "BOTWHSAP-ORACLE",
+            "businessMeaning": "Success",
+        },
+        "found": True,
+        "success": True,
+        "tokenOperation": token_operation,
+    }
 
 
 @app.delete("/session")
