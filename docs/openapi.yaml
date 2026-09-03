@@ -1,0 +1,1296 @@
+openapi: 3.0.3
+info:
+  title: ReniAgent — Telcel Sales Agent API
+  description: >
+    API del agente de ventas Telcel (ReniAgent). Atiende conversaciones de
+    migración de plan por WhatsApp o por integración directa (`/chat`),
+    administra campañas de contacto masivo, recibe el webhook de WhatsApp
+    (Meta Cloud API) y el webhook de estatus de provisioning de Telcel.
+
+
+    La mayoría de los endpoints requieren el header `x-api-key` (ver
+    `ApiKeyHeader` en `securitySchemes`). Las excepciones están marcadas
+    explícitamente en cada operación (`security: []`).
+  version: "2.0.0"
+servers:
+  - url: https://o43h25qtjz656v3eohaj4mubua.apigateway.mx-monterrey-1.oci.customer-oci.com/telcel
+    description: OCI API Gateway — ambiente productivo
+  - url: http://localhost:8000
+    description: Entorno local de desarrollo
+
+tags:
+  - name: Salud
+    description: Health checks — sin autenticación.
+  - name: Chat
+    description: Turno de conversación y borrado de sesión.
+  - name: Campañas
+    description: Envío y administración de campañas de contacto masivo (requiere PostgreSQL + tablas de `campaign_app`).
+  - name: Webhook WhatsApp
+    description: Recepción de mensajes de Meta Cloud API y del estatus de provisioning de Telcel.
+  - name: Diagnóstico (interno)
+    description: >
+      Endpoints de soporte/depuración, ocultos del schema público de FastAPI
+      (`include_in_schema=False`). No están pensados para integración externa.
+
+paths:
+  # ── Salud ───────────────────────────────────────────────────────────────
+  /actuator/health:
+    get:
+      tags: [Salud]
+      summary: Health check (formato Spring Actuator)
+      operationId: healthActuator
+      security: []
+      responses:
+        "200":
+          description: El servicio está en línea.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "UP"
+
+  /health:
+    get:
+      tags: [Salud]
+      summary: Health check simple
+      operationId: healthSimple
+      security: []
+      responses:
+        "200":
+          description: El servicio está en línea.
+          content:
+            application/json:
+              schema:
+                type: string
+                example: "ok"
+
+  # ── Chat ────────────────────────────────────────────────────────────────
+  /chat:
+    post:
+      tags: [Chat]
+      summary: Ejecuta un turno de conversación con el agente
+      description: >
+        Si `phone_number` no tiene sesión previa en PostgreSQL, crea una
+        sesión nueva con los datos del cliente enviados en el body y
+        responde con el mensaje de campaña determinístico (sin invocar al
+        LLM) — en ese primer turno, `message` se ignora.
+
+
+        Si ya existe una sesión, ejecuta `run_turn()` (router semántico +
+        flujo de contratación + LLM + safety nets) y persiste el historial
+        actualizado.
+      operationId: chat
+      security:
+        - ApiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+            examples:
+              primerTurno:
+                summary: Primer turno — crea sesión nueva
+                value:
+                  message: ""
+                  phone_number: "5215555555555"
+                  first_name: "Juan"
+                  full_name: "Juan Pérez"
+                  current_plan_name: "Telcel Plus 150"
+                  current_cost: 299.0
+                  subscription_type: "Controlado"
+                  has_promotion: true
+                  is_titular: true
+              turnoExistente:
+                summary: Turno sobre sesión existente
+                value:
+                  message: "¿qué beneficios tiene el plan?"
+                  phone_number: "5215555555555"
+      responses:
+        "200":
+          description: Respuesta del agente para este turno.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+              example:
+                response: "Con el Telcel Libre 4 Controlado gana 10 GB y $82.35 de cashback. ¿Le gustaría activarlo?"
+                stage: "PERSUASION"
+                plan_selected: null
+                turn: 2
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "422":
+          $ref: '#/components/responses/ValidationError'
+        "500":
+          description: Error inesperado al procesar el turno (excepción capturada de `run_turn`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              example:
+                detail: "Error procesando el mensaje"
+
+  /session:
+    delete:
+      tags: [Chat]
+      summary: Elimina la sesión de un cliente
+      description: Borra el estado y el historial de conversación de PostgreSQL. Uso principal — pruebas y reset manual.
+      operationId: deleteSession
+      security:
+        - ApiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionDeleteRequest'
+            example:
+              phone_number: "5215555555555"
+      responses:
+        "200":
+          description: Sesión eliminada (idempotente — responde 200 aunque no existiera).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: string
+                    example: "5215555555555"
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "422":
+          $ref: '#/components/responses/ValidationError'
+
+  # ── Campañas ────────────────────────────────────────────────────────────
+  /campaign:
+    post:
+      tags: [Campañas]
+      summary: Envía el template de campaña a una lista de líneas
+      description: >
+        Busca cada línea en la tabla `clientes`, arma la sesión inicial y
+        envía el template de WhatsApp correspondiente al plan elegible del
+        cliente (o texto plano si no hay plan elegible). Guarda la sesión
+        bajo el `wa_id` canónico devuelto por Meta para que el webhook la
+        encuentre al recibir la respuesta.
+      operationId: sendCampaign
+      security:
+        - ApiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignRequest'
+            example:
+              lineas: ["5555555555", "5555555556"]
+      responses:
+        "200":
+          description: Resultado por línea — enviadas y fallidas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchResult'
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "422":
+          $ref: '#/components/responses/ValidationError'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  /campaign/dispatch:
+    post:
+      tags: [Campañas]
+      summary: Batch-dispatch de campaña (usado por la UI Streamlit)
+      description: >
+        Para cada `linea`, busca el cliente en la BD, envía el template de
+        WhatsApp y actualiza el registro `campana_clientes` correspondiente
+        (`mark_enviado`/`mark_fallido`).
+      operationId: campaignDispatch
+      security:
+        - ApiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchRequest'
+            example:
+              campana_id: 1
+              lineas: ["5555555555", "5555555556"]
+      responses:
+        "200":
+          description: Resultado por línea.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchResultSimple'
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "422":
+          $ref: '#/components/responses/ValidationError'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  /campaign/dispatch/lote:
+    post:
+      tags: [Campañas]
+      summary: Envía al siguiente lote de clientes pendientes de una campaña
+      description: >
+        Resuelve automáticamente hasta `limite` líneas con
+        `estado_envio='pendiente'` para la campaña, ordenadas por fecha de
+        alta, y reusa la misma lógica de `/campaign/dispatch`.
+      operationId: campaignDispatchLote
+      security:
+        - ApiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DispatchLoteRequest'
+            example:
+              campana_id: 1
+              limite: 100
+      responses:
+        "200":
+          description: Resultado por línea, o `detail` si no había pendientes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DispatchResultSimple'
+              examples:
+                sinPendientes:
+                  summary: No hay clientes pendientes
+                  value:
+                    sent: []
+                    failed: []
+                    detail: "No hay clientes pendientes para esta campaña"
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "422":
+          $ref: '#/components/responses/ValidationError'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  /campaign/migrate-orden:
+    post:
+      tags: [Campañas]
+      summary: Agrega/backfillea las columnas 'orden' y 'estado' en 'clientes'
+      description: Migración idempotente — segura de correr varias veces. Pensada para bases de datos creadas antes de que existieran estas columnas.
+      operationId: campaignMigrateOrden
+      security:
+        - ApiKeyHeader: []
+      responses:
+        "200":
+          description: Resultado de la migración.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrateOrdenResult'
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  /campaign/migrate-plan-seleccionado:
+    post:
+      tags: [Campañas]
+      summary: Agrega la columna 'plan_seleccionado' en 'clientes'
+      description: Migración idempotente.
+      operationId: campaignMigratePlanSeleccionado
+      security:
+        - ApiKeyHeader: []
+      responses:
+        "200":
+          description: Resultado de la migración.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  columna_agregada:
+                    type: boolean
+                    example: false
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  /campaign/import-clientes:
+    post:
+      tags: [Campañas]
+      summary: Importa/actualiza clientes desde un CSV
+      description: >
+        Formato de CSV igual al de `docs/Masivo_backup.csv`. Si se manda
+        `campana_id`, vincula las líneas importadas a esa campaña
+        (`estado_envio='pendiente'`). Si `reemplazar=true`, borra TODOS los
+        clientes y vínculos existentes antes de importar.
+      operationId: campaignImportClientes
+      security:
+        - ApiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo CSV con, mínimo, la columna `linea`.
+                campana_id:
+                  type: integer
+                  nullable: true
+                  description: Si se manda, vincula las líneas importadas a esta campaña.
+                reemplazar:
+                  type: boolean
+                  default: false
+                  description: Si es true, borra todos los clientes existentes antes de importar.
+      responses:
+        "200":
+          description: Resultado de la importación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportClientesResult'
+        "400":
+          description: El CSV está vacío o no tiene la columna `linea`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              example:
+                detail: "El CSV no tiene la columna 'linea'."
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "500":
+          description: Error inesperado importando el CSV.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  /campaign/clientes:
+    get:
+      tags: [Campañas]
+      summary: Lista TODOS los clientes (sin filtrar por campaña)
+      operationId: campaignGetAllClientes
+      security:
+        - ApiKeyHeader: []
+      responses:
+        "200":
+          description: Lista completa de clientes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientesListResponse'
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+    delete:
+      tags: [Campañas]
+      summary: Borra TODOS los clientes y sus vínculos de campaña
+      description: Irreversible. Requiere `?confirm=true` para evitar disparos accidentales.
+      operationId: campaignDeleteAllClientes
+      security:
+        - ApiKeyHeader: []
+      parameters:
+        - name: confirm
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Conteo de registros borrados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientes_borrados:
+                    type: integer
+                  campana_clientes_borrados:
+                    type: integer
+                example:
+                  clientes_borrados: 120
+                  campana_clientes_borrados: 45
+        "400":
+          description: Falta `?confirm=true`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              example:
+                detail: "Falta ?confirm=true — esta acción borra TODOS los clientes."
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  /campaign/{campana_id}/clientes:
+    get:
+      tags: [Campañas]
+      summary: Lista los clientes vinculados a una campaña
+      description: Join de `clientes` + `campana_clientes`, útil para verificar una importación.
+      operationId: campaignGetClientes
+      security:
+        - ApiKeyHeader: []
+      parameters:
+        - name: campana_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Clientes vinculados a la campaña.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampanaClientesListResponse'
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "422":
+          $ref: '#/components/responses/ValidationError'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  /reportes/campana-clientes:
+    get:
+      tags: [Campañas]
+      summary: Reporte de trazabilidad de campaña(s)
+      description: >
+        Devuelve el contenido de `campana_clientes` con los datos del cliente
+        asociado. Si `campana_id` se omite, trae las filas de todas las
+        campañas.
+      operationId: reportesCampanaClientes
+      security:
+        - ApiKeyHeader: []
+      parameters:
+        - name: campana_id
+          in: query
+          required: false
+          description: Si se omite, trae todas las campañas.
+          schema:
+            type: integer
+        - name: full
+          in: query
+          required: false
+          description: Incluir `historial_conversacion` y `session_data_snapshot`.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Filas de trazabilidad.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampanaClienteReporte'
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "503":
+          $ref: '#/components/responses/CampaignDbUnavailable'
+
+  # ── Webhook WhatsApp ────────────────────────────────────────────────────
+  /webhook:
+    get:
+      tags: [Webhook WhatsApp]
+      summary: Verificación del webhook (challenge de Meta)
+      description: >
+        Meta llama a este endpoint al configurar/verificar el webhook.
+        Responde el `hub.challenge` recibido solo si `hub.verify_token`
+        coincide con `VERIFY_TOKEN` (variable de entorno) — no usa `x-api-key`.
+      operationId: verifyWebhook
+      security: []
+      parameters:
+        - name: hub.mode
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "subscribe"
+        - name: hub.verify_token
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: hub.challenge
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Verificación exitosa — se devuelve el challenge tal cual.
+          content:
+            text/plain:
+              schema:
+                type: string
+        "403":
+          description: Token de verificación inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              example:
+                detail: "Verification failed"
+
+    post:
+      tags: [Webhook WhatsApp]
+      summary: Recibe mensajes de WhatsApp (Meta Cloud API)
+      description: >
+        Responde `200 {"status": "ok"}` de inmediato y procesa el mensaje en
+        segundo plano (`BackgroundTasks`) para no bloquear a Meta. Soporta
+        mensajes de tipo `text`, `button` (quick_reply de template) e
+        `interactive` (botones ACEPTO/NO); otros tipos se ignoran
+        silenciosamente. Deduplica reintentos de Meta por `id` de mensaje.
+
+
+        No usa `x-api-key`. Si `WHATSAPP_APP_SECRET` está configurado, valida
+        la firma HMAC-SHA256 en el header `X-Hub-Signature-256`.
+      operationId: whatsappWebhook
+      security: []
+      parameters:
+        - name: X-Hub-Signature-256
+          in: header
+          required: false
+          description: Firma HMAC-SHA256 del body (`sha256=<hex>`), solo si `WHATSAPP_APP_SECRET` está configurado.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Payload estándar de Meta Cloud API (`entry[0].changes[0].value.messages[0]`).
+            example:
+              entry:
+                - changes:
+                    - value:
+                        contacts:
+                          - profile:
+                              name: "Juan Pérez"
+                        messages:
+                          - id: "wamid.ABC123"
+                            from: "5215555555555"
+                            type: "text"
+                            text:
+                              body: "quiero cambiar de plan"
+      responses:
+        "200":
+          description: Payload recibido (siempre 200, incluso si se descarta por duplicado o tipo no soportado).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+        "403":
+          description: Firma HMAC inválida (solo si `WHATSAPP_APP_SECRET` está configurado).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              example:
+                detail: "Invalid signature"
+
+  /webhook/provisioning-status:
+    post:
+      tags: [Webhook WhatsApp]
+      summary: Notifica el estatus de provisioning de un proceso de activación
+      description: >
+        Webhook que recibe la notificación de Telcel del estatus de
+        provisioning de un cambio de plan (activación) una vez que el
+        proceso asíncrono termina en su lado.
+      operationId: provisioningStatusWebhook
+      security:
+        - ApiKeyHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisioningStatusRequest'
+            example:
+              processId: "4F24C84688F46F6CE063020011AC7F01"
+              msisdn: "5540599044"
+              statusProvisioning: "COMPLETE"
+      responses:
+        "200":
+          description: Notificación recibida y procesada correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisioningStatusResponse'
+              example:
+                detailResponse:
+                  code: 200
+                  severityLevel: "0"
+                  description: "Petición exitosa"
+                  actor: "BOTWHSAP-ORACLE"
+                  businessMeaning: "Success"
+                found: true
+                success: true
+                tokenOperation: "ORCL-20260824220957.918"
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "422":
+          description: >
+            Cuerpo de la petición inválido — falta alguno de los campos
+            requeridos, el tipo de dato no corresponde, o `msisdn` no cumple
+            el formato de 10 dígitos numéricos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+              examples:
+                campoFaltante:
+                  summary: Falta un campo requerido
+                  value:
+                    detail:
+                      - type: "missing"
+                        loc: ["body", "msisdn"]
+                        msg: "Field required"
+                        input: {"processId": "4F24C84688F46F6CE063020011AC7F01", "statusProvisioning": "COMPLETE"}
+                msisdnFormatoInvalido:
+                  summary: msisdn no tiene 10 dígitos numéricos
+                  value:
+                    detail:
+                      - type: "string_pattern_mismatch"
+                        loc: ["body", "msisdn"]
+                        msg: "String should match pattern '^\\d{10}$'"
+                        input: "55A0599044"
+                        ctx: {"pattern": "^\\d{10}$"}
+        "500":
+          description: Error interno inesperado del lado de ReniAgent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              example:
+                detail: "Internal Server Error"
+
+  # ── Diagnóstico (interno) ──────────────────────────────────────────────
+  /logs:
+    get:
+      tags: [Diagnóstico (interno)]
+      summary: Descarga el archivo de log activo (app.log)
+      description: >
+        Endpoint interno, oculto del schema público de FastAPI. A diferencia
+        del resto de la API, la key se manda como **query param** `api_key`,
+        no como header `x-api-key`.
+      operationId: getLogs
+      security:
+        - ApiKeyQuery: []
+      parameters:
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Archivo `app.log` en texto plano.
+          content:
+            text/plain:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+        "404":
+          description: El archivo de log no existe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+              example:
+                detail: "Log file not found"
+
+  /test/limits:
+    get:
+      tags: [Diagnóstico (interno)]
+      summary: Prueba el límite de contexto del modelo OCI (texto de relleno sintético)
+      description: >
+        Endpoint interno, oculto del schema público. Envía prompts de tamaño
+        creciente al modelo OCI y reporta en qué tamaño empieza a fallar.
+        Réplica de `scripts/test_context_limit.py`.
+      operationId: testContextLimits
+      security:
+        - ApiKeyHeader: []
+      responses:
+        "200":
+          description: Resultado por cada tamaño de prompt probado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContextLimitResult'
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+
+  /test/limits/conversation:
+    get:
+      tags: [Diagnóstico (interno)]
+      summary: Prueba el límite de contexto con una conversación de ventas realista
+      description: >
+        Endpoint interno, oculto del schema público. Usa el system prompt y
+        las herramientas reales del agente, replay de una conversación de
+        ejemplo de tamaño creciente (a diferencia de `/test/limits`, que usa
+        relleno sintético).
+      operationId: testContextLimitsConversation
+      security:
+        - ApiKeyHeader: []
+      responses:
+        "200":
+          description: Resultado por cada longitud de conversación probada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConversationLimitResult'
+        "401":
+          $ref: '#/components/responses/InvalidApiKey'
+
+components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: API key compartida (variable de entorno `API_KEY`). Si `API_KEY` no está configurada del lado del servidor, no se exige.
+    ApiKeyQuery:
+      type: apiKey
+      in: query
+      name: api_key
+      description: Misma API key que `ApiKeyHeader`, pero enviada como query param — solo la usa `/logs`.
+
+  responses:
+    InvalidApiKey:
+      description: API key ausente o inválida.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDetail'
+          example:
+            detail: "Invalid API key"
+    ValidationError:
+      description: Cuerpo de la petición inválido (validación automática de FastAPI/Pydantic).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+    CampaignDbUnavailable:
+      description: >
+        La base de datos de `campaign_app` no está disponible en este
+        despliegue (import opcional fallido) — el agente conversacional
+        sigue funcionando igual, pero los endpoints de campañas responden 503.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorDetail'
+          example:
+            detail: "Campaign DB not available: <traceback>"
+
+  schemas:
+    ErrorDetail:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Invalid API key"
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                example: "missing"
+              loc:
+                type: array
+                items:
+                  type: string
+                example: ["body", "phone_number"]
+              msg:
+                type: string
+                example: "Field required"
+              input:
+                type: object
+
+    # ── Chat ──────────────────────────────────────────────────────────────
+    ChatRequest:
+      type: object
+      required: [message, phone_number]
+      properties:
+        message:
+          type: string
+          description: Mensaje del cliente. Se ignora en el primer turno (sesión nueva).
+        phone_number:
+          type: string
+          description: Identificador de sesión (MSISDN, con o sin prefijo de país según el canal).
+        first_name:
+          type: string
+          default: "Cliente"
+        full_name:
+          type: string
+          default: ""
+        current_plan_name:
+          type: string
+          default: "Telcel Plus 150"
+        current_cost:
+          type: number
+          default: 150.0
+        current_plan_gb:
+          type: number
+          nullable: true
+        current_plan_cashback:
+          type: number
+          nullable: true
+        subscription_type:
+          type: string
+          enum: ["Abierto", "Controlado"]
+          default: "Abierto"
+        has_promotion:
+          type: boolean
+          default: true
+        usage_summary:
+          type: string
+          nullable: true
+        is_titular:
+          type: boolean
+          default: true
+
+    ChatResponse:
+      type: object
+      properties:
+        response:
+          type: string
+        stage:
+          type: string
+          enum: ["PERSUASION", "CONTRACT", "POST_SALE", "END"]
+        plan_selected:
+          type: string
+          nullable: true
+        turn:
+          type: integer
+
+    SessionDeleteRequest:
+      type: object
+      required: [phone_number]
+      properties:
+        phone_number:
+          type: string
+
+    # ── Campañas ──────────────────────────────────────────────────────────
+    CampaignRequest:
+      type: object
+      required: [lineas]
+      properties:
+        lineas:
+          type: array
+          items:
+            type: string
+
+    DispatchRequest:
+      type: object
+      required: [campana_id, lineas]
+      properties:
+        campana_id:
+          type: integer
+        lineas:
+          type: array
+          items:
+            type: string
+
+    DispatchLoteRequest:
+      type: object
+      required: [campana_id]
+      properties:
+        campana_id:
+          type: integer
+        limite:
+          type: integer
+          default: 100
+
+    DispatchResult:
+      type: object
+      description: Resultado de `/campaign` — un elemento por línea enviada o fallida.
+      properties:
+        sent:
+          type: array
+          items:
+            type: object
+            properties:
+              phone_number:
+                type: string
+              wa_id:
+                type: string
+                description: Número canónico devuelto por Meta — clave usada por el webhook.
+              sent_template:
+                type: boolean
+              template_name:
+                type: string
+                nullable: true
+        failed:
+          type: array
+          items:
+            type: object
+            properties:
+              phone_number:
+                type: string
+              reason:
+                type: string
+
+    DispatchResultSimple:
+      type: object
+      description: Resultado de `/campaign/dispatch` y `/campaign/dispatch/lote`.
+      properties:
+        sent:
+          type: array
+          items:
+            type: string
+          description: Líneas enviadas exitosamente.
+        failed:
+          type: array
+          items:
+            type: object
+            properties:
+              linea:
+                type: string
+              reason:
+                type: string
+        detail:
+          type: string
+          nullable: true
+          description: Presente solo cuando no había clientes pendientes (`/campaign/dispatch/lote`).
+
+    MigrateOrdenResult:
+      type: object
+      properties:
+        columna_agregada:
+          type: boolean
+        filas_backfilled:
+          type: integer
+        estado_columna_agregada:
+          type: boolean
+        estado_filas_backfilled:
+          type: integer
+
+    ImportClientesResult:
+      type: object
+      properties:
+        imported:
+          type: array
+          items:
+            type: string
+          description: Líneas importadas/actualizadas exitosamente.
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              reason:
+                type: string
+        total:
+          type: integer
+        campana_id:
+          type: integer
+          nullable: true
+          description: Presente solo si se mandó `campana_id` en el request.
+        reemplazados:
+          type: object
+          nullable: true
+          description: Presente solo si `reemplazar=true`.
+          properties:
+            clientes_borrados:
+              type: integer
+            campana_clientes_borrados:
+              type: integer
+
+    ClienteItem:
+      type: object
+      properties:
+        fila:
+          type: integer
+        orden:
+          type: integer
+          nullable: true
+        linea:
+          type: string
+        nombre:
+          type: string
+          nullable: true
+        apellidos:
+          type: string
+          nullable: true
+        plan_actual_nombre:
+          type: string
+          nullable: true
+        plan_seleccionado:
+          type: string
+          nullable: true
+        familia_plan:
+          type: string
+          nullable: true
+        tipo_suscripcion:
+          type: string
+          nullable: true
+        renta_plan:
+          type: number
+          nullable: true
+        facturacion_promedio:
+          type: number
+          nullable: true
+        estado:
+          type: string
+          nullable: true
+        creado_en:
+          type: string
+          format: date-time
+          nullable: true
+
+    ClientesListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        clientes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClienteItem'
+
+    CampanaClientesListResponse:
+      type: object
+      properties:
+        campana_id:
+          type: integer
+        total:
+          type: integer
+        clientes:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/ClienteItem'
+              - type: object
+                properties:
+                  estado_envio:
+                    type: string
+                    nullable: true
+                  estado_interaccion:
+                    type: string
+                    nullable: true
+                  fecha_envio:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  folio_contrato:
+                    type: string
+                    nullable: true
+                  num_turnos:
+                    type: integer
+                    nullable: true
+
+    CampanaClienteReporte:
+      type: object
+      properties:
+        campana_id:
+          type: integer
+        linea:
+          type: string
+        estado_envio:
+          type: string
+          nullable: true
+        fecha_envio:
+          type: string
+          format: date-time
+          nullable: true
+        estado_interaccion:
+          type: string
+          enum: ["en_conversacion", "contratado", "rechazado"]
+          nullable: true
+        plan_seleccionado:
+          type: string
+          nullable: true
+        fecha_seleccion:
+          type: string
+          format: date-time
+          nullable: true
+        num_turnos:
+          type: integer
+          nullable: true
+        folio_contrato:
+          type: string
+          nullable: true
+        cliente:
+          type: object
+          nullable: true
+          properties:
+            nombre:
+              type: string
+              nullable: true
+            apellidos:
+              type: string
+              nullable: true
+            plan_actual_nombre:
+              type: string
+              nullable: true
+            tipo_suscripcion:
+              type: string
+              nullable: true
+            renta_plan:
+              type: number
+              nullable: true
+            estado:
+              type: string
+              nullable: true
+        historial_conversacion:
+          type: array
+          nullable: true
+          description: Presente solo si `?full=true`.
+          items:
+            type: object
+        session_data_snapshot:
+          type: object
+          nullable: true
+          description: Presente solo si `?full=true`.
+
+    # ── Webhook / provisioning ────────────────────────────────────────────
+    ProvisioningStatusRequest:
+      type: object
+      required: [processId, msisdn, statusProvisioning]
+      properties:
+        processId:
+          type: string
+          description: Identificador del proceso de provisioning generado por Telcel.
+          example: "4F24C84688F46F6CE063020011AC7F01"
+        msisdn:
+          type: string
+          description: Número de línea (MSISDN) del cliente, sin código de país.
+          pattern: '^\d{10}$'
+          minLength: 10
+          maxLength: 10
+          example: "5540599044"
+        statusProvisioning:
+          type: string
+          description: Estatus final del proceso de provisioning.
+          example: "COMPLETE"
+
+    ProvisioningStatusResponse:
+      type: object
+      properties:
+        detailResponse:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: 200
+            severityLevel:
+              type: string
+              example: "0"
+            description:
+              type: string
+              example: "Petición exitosa"
+            actor:
+              type: string
+              description: Identificador fijo del sistema que responde.
+              example: "BOTWHSAP-ORACLE"
+            businessMeaning:
+              type: string
+              example: "Success"
+        found:
+          type: boolean
+          example: true
+        success:
+          type: boolean
+          example: true
+        tokenOperation:
+          type: string
+          description: >
+            Identificador único por petición, formato `ORCL-%Y%m%d%H%M%S.mmm`
+            (milisegundos), generado en el momento de responder.
+          example: "ORCL-20260824220957.918"
+
+    # ── Diagnóstico ───────────────────────────────────────────────────────
+    ContextLimitResult:
+      type: object
+      properties:
+        target_tokens:
+          type: integer
+        input_tokens:
+          oneOf: [{type: integer}, {type: string}]
+          nullable: true
+        output_tokens:
+          oneOf: [{type: integer}, {type: string}]
+          nullable: true
+        latency_ms:
+          oneOf: [{type: integer}, {type: string}]
+          nullable: true
+        response_preview:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: ["ok", "fallo", "error"]
+        error:
+          type: string
+          nullable: true
+
+    ConversationLimitResult:
+      type: object
+      properties:
+        n_msgs:
+          type: integer
+        input_tokens:
+          oneOf: [{type: integer}, {type: string}]
+          nullable: true
+        output_tokens:
+          oneOf: [{type: integer}, {type: string}]
+          nullable: true
+        latency_ms:
+          oneOf: [{type: integer}, {type: string}]
+          nullable: true
+        response_preview:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: ["ok", "fallo", "error"]
+        error:
+          type: string
+          nullable: true
+
+security:
+  - ApiKeyHeader: []
