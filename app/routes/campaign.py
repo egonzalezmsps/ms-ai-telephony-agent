@@ -11,7 +11,7 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.state.session import SessionState
 from app.state.persistence import save_session
@@ -32,7 +32,24 @@ def _require_campaign_db():
 
 
 class CampaignRequest(BaseModel):
-    lineas: list[str]
+    """
+    Acepta 'lineas' (contrato interno original) o 'phone_numbers' (contrato real
+    del API Gateway de OCI en producción, ej. {"phone_numbers": ["2721140994"]}).
+    """
+    lineas: list[str] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_phone_numbers(cls, data):
+        if isinstance(data, dict) and not data.get("lineas") and data.get("phone_numbers"):
+            data = {**data, "lineas": data["phone_numbers"]}
+        return data
+
+    @model_validator(mode="after")
+    def _require_at_least_one_linea(self):
+        if not self.lineas:
+            raise ValueError("Debe enviar 'lineas' o 'phone_numbers' con al menos un número.")
+        return self
 
 
 class DispatchRequest(BaseModel):

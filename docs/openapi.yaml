@@ -186,8 +186,15 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CampaignRequest'
-            example:
-              lineas: ["5555555555", "5555555556"]
+            examples:
+              phone_numbers:
+                summary: Contrato real del API Gateway en producción
+                value:
+                  phone_numbers: ["2721140994"]
+              lineas:
+                summary: Contrato interno original (alias equivalente)
+                value:
+                  lineas: ["5555555555", "5555555556"]
       responses:
         "200":
           description: Resultado por línea — enviadas y fallidas.
@@ -915,9 +922,16 @@ components:
     # ── Campañas ──────────────────────────────────────────────────────────
     CampaignRequest:
       type: object
-      required: [lineas]
+      description: >
+        Acepta 'lineas' o 'phone_numbers' (alias equivalente, es el nombre
+        real que usa el contrato del API Gateway en producción). Al menos
+        uno de los dos debe traer valores.
       properties:
         lineas:
+          type: array
+          items:
+            type: string
+        phone_numbers:
           type: array
           items:
             type: string
