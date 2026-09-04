@@ -185,6 +185,15 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         messages = value.get("messages", [])
 
         if not messages:
+            # Callback de estatus de entrega (sent/delivered/read/failed) —
+            # aquí llega la razón real cuando un template no le llega al cliente.
+            for status in value.get("statuses", []):
+                errors = status.get("errors", [])
+                error_detail = f" | errors={errors}" if errors else ""
+                logger.info(
+                    f"WA STATUS | {status.get('recipient_id')} | "
+                    f"status={status.get('status')}{error_detail}"
+                )
             return {"status": "ok"}
 
         msg = messages[0]
