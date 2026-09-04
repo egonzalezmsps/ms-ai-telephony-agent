@@ -18,7 +18,7 @@ from app.state.persistence import save_session
 from app.state.serializer import session_to_dict
 from app.prompts.campaign_template import build_campaign_message, build_template_params
 from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template
-from app.state.campaign_traceability import campaign_crud, CAMPAIGN_DB_AVAILABLE, CAMPAIGN_DB_ERROR
+from app.state.campaign_traceability import campaign_crud, CAMPAIGN_DB_AVAILABLE, CAMPAIGN_DB_ERROR, _to_linea
 from app.routes.deps import require_api_key
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,9 @@ def campaign(request: CampaignRequest):
     results = {"sent": [], "failed": []}
     seleccionados = []
     for linea in request.lineas:
-        cliente = por_linea.get(linea)
+        # El número puede llegar con o sin código de país (521.../52...) según
+        # el llamador — se normaliza al mismo formato de 10 dígitos que 'clientes.linea'.
+        cliente = por_linea.get(linea) or por_linea.get(_to_linea(linea))
         if cliente is None:
             results["failed"].append({"phone_number": linea, "reason": "cliente no encontrado"})
         else:
@@ -113,6 +115,11 @@ def campaign(request: CampaignRequest):
                 logger.info(f"CAMPAIGN | {phone_number} — sin plan elegible, texto plano enviado")
             else:
                 template_name = template_result["template_name"]
+                logger.info(
+                    f"CAMPAIGN | {phone_number} | enviando template='{template_name}' "
+                    f"idioma={os.environ.get('TEMPLATE_LANGUAGE', 'es_MX')} "
+                    f"params={template_result['params']}"
+                )
                 try:
                     wa_resp = send_whatsapp_template(
                         to=phone_number,
