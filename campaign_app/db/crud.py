@@ -352,8 +352,8 @@ def remove_plan_from_campana(campana_id: int, plan_id: int):
 
 # El CSV de Telcel usa nombres de columna distintos al modelo de BD.
 CSV_COL_MAP = {
-    "plan":                              "plan_actual_nombre",
     "lineaapi":                          "linea_api",
+    "plan":                              "plan_actual_nombre",
     "tiposuscripcion":                   "tipo_suscripcion",
     "rentaplan":                         "renta_plan",
     "facturacion_promedio_3meses":       "facturacion_promedio",
@@ -405,7 +405,10 @@ def import_clientes_csv(rows: list) -> dict:
     existentes). Si no la trae, a los clientes NUEVOS se les asigna el siguiente
     orden disponible; los existentes conservan el suyo sin tocarlo.
     Retorna {"imported": [lineas...], "skipped": [{"row": i, "reason": "..."}], "total": N}."""
-    valid_cols = {c.name for c in Cliente.__table__.columns}
+    # Cliente.__mapper__.columns está keyed por el nombre de atributo Python
+    # (ej. "linea_api"), no por el nombre real en la BD (Cliente.__table__.columns
+    # usa "lineaApi" para esa columna) — Cliente(**data) requiere el nombre de atributo.
+    valid_cols = set(Cliente.__mapper__.columns.keys())
     cleaned = []
     skipped = []
     for i, row in enumerate(rows):
