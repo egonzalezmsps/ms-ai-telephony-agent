@@ -223,7 +223,8 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 return _technical_failure(session)
 
             ok, process_result = _run_telcel_call(
-                session, "create_process", call_create_process, session.phone_number,
+                session, "create_process", call_create_process,
+                session.api_phone_number or session.phone_number,
             )
             if not ok:
                 return _technical_failure(session)

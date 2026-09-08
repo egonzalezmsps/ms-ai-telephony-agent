@@ -405,7 +405,10 @@ def import_clientes_csv(rows: list) -> dict:
     existentes). Si no la trae, a los clientes NUEVOS se les asigna el siguiente
     orden disponible; los existentes conservan el suyo sin tocarlo.
     Retorna {"imported": [lineas...], "skipped": [{"row": i, "reason": "..."}], "total": N}."""
-    valid_cols = {c.name for c in Cliente.__table__.columns}
+    # Cliente.__mapper__.columns está keyed por el nombre de atributo Python
+    # (ej. "linea_api"), no por el nombre real en la BD (Cliente.__table__.columns
+    # usa "lineaApi" para esa columna) — Cliente(**data) requiere el nombre de atributo.
+    valid_cols = set(Cliente.__mapper__.columns.keys())
     cleaned = []
     skipped = []
     for i, row in enumerate(rows):
@@ -476,14 +479,19 @@ def bulk_upsert_clientes(rows: list) -> int:
         return len(rows)
 
 
-def _ensure_column(db, column_name: str, ddl_type: str) -> bool:
-    """Agrega una columna a 'clientes' si todavía no existe. Retorna True si la agregó."""
+def _ensure_column(db, column_name: str, ddl_type: str, quoted: bool = False) -> bool:
+    """Agrega una columna a 'clientes' si todavía no existe. Retorna True si la agregó.
+
+    quoted=True preserva mayúsculas/minúsculas exactas del nombre (columnas creadas
+    con comillas, ej. "lineaApi") — sin comillas, Postgres pliega el identificador
+    a minúsculas y quedaría desalineado con el nombre real de la BD productiva."""
     existe = db.execute(text(
         "SELECT 1 FROM information_schema.columns "
         "WHERE table_name = 'clientes' AND column_name = :col"
     ), {"col": column_name}).scalar()
     if not existe:
-        db.execute(text(f"ALTER TABLE clientes ADD COLUMN {column_name} {ddl_type}"))
+        ddl_name = f'"{column_name}"' if quoted else column_name
+        db.execute(text(f"ALTER TABLE clientes ADD COLUMN {ddl_name} {ddl_type}"))
         return True
     return False
 
