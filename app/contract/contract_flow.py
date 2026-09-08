@@ -38,18 +38,6 @@ _VAGUE_CONFIRMATIONS = {
 }
 
 
-def _to_msisdn(phone_number: str) -> str:
-    """Normaliza a MSISDN completo con código de país (52 + 10 dígitos) para las APIs Telcel."""
-    n = (phone_number or "").lstrip("+")
-    if n.startswith("521") and len(n) == 13:
-        return "52" + n[3:]
-    if n.startswith("52") and len(n) == 12:
-        return n
-    if len(n) == 10:
-        return "52" + n
-    return n
-
-
 def _technical_failure(session) -> str:
     session.stage = "END"
     session.end_reason = "blocked"
@@ -235,7 +223,7 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 return _technical_failure(session)
 
             ok, process_result = _run_telcel_call(
-                session, "create_process", call_create_process, _to_msisdn(session.phone_number),
+                session, "create_process", call_create_process, session.phone_number,
             )
             if not ok:
                 return _technical_failure(session)

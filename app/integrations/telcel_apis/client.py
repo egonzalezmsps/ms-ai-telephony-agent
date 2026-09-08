@@ -124,11 +124,33 @@ def _raise_for_error(response: requests.Response) -> dict:
     return body
 
 
-def call_create_process(msisdn: str) -> dict:
+def _to_msisdn(phone_number: str) -> str:
+    """Normaliza a MSISDN completo con código de país (52 + 10 dígitos) para las APIs Telcel.
+
+    Entradas soportadas:
+      - "521XXXXXXXXXX" (formato WhatsApp, 13 dígitos con el "1" de celular MX) -> se quita el "1"
+      - "52XXXXXXXXXX"  (12 dígitos, ya en formato MSISDN) -> se deja igual
+      - "XXXXXXXXXX"    (10 dígitos, sin lada país) -> se antepone "52"
+    """
+    n = (phone_number or "").lstrip("+")
+    if n.startswith("521") and len(n) == 13:
+        return "52" + n[3:]
+    if n.startswith("52") and len(n) == 12:
+        return n
+    if len(n) == 10:
+        return "52" + n
+    return n
+
+
+def call_create_process(phone_number: str) -> dict:
     if _is_mock_enabled("TELCEL_CREATE_PROCESS"):
         return _mock_create_process_response()
 
     config = _config_from_env("TELCEL_CREATE_PROCESS")
+
+    # Mapeo del número: crudo (tal como llega de la sesión/WhatsApp) -> MSISDN normalizado
+    # -> payload -> cifrado. Todo el tratamiento del teléfono para esta API vive aquí.
+    msisdn = _to_msisdn(phone_number)
     inner_payload = {"msisdn": msisdn}
     encrypted = encrypt_aes256cbc(json.dumps(inner_payload), config.enc_key, config.enc_iv)
     body = {"createProcessRequest": encrypted}
