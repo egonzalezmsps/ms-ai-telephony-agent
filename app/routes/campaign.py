@@ -92,6 +92,7 @@ def campaign(request: CampaignRequest):
                 first_name=(cliente.nombre or "Cliente").split()[0].title(),
                 full_name=f"{cliente.nombre or ''} {cliente.apellidos or ''}".strip(),
                 phone_number=phone_number,
+                api_phone_number=cliente.linea_api,
                 current_plan_name=cliente.plan_actual_nombre or "Plan Legado",
                 current_cost=cliente.renta_plan or 0.0,
                 subscription_type=cliente.tipo_suscripcion or "Abierto",
@@ -237,6 +238,7 @@ def campaign_dispatch(request: DispatchRequest):
                 first_name=(cliente.nombre or "Cliente").split()[0].title(),
                 full_name=f"{cliente.nombre or ''} {cliente.apellidos or ''}".strip(),
                 phone_number=linea,
+                api_phone_number=cliente.linea_api,
                 current_plan_name=cliente.plan_actual_nombre or "Plan Legado",
                 current_cost=cliente.renta_plan or 0.0,
                 subscription_type=cliente.tipo_suscripcion or "Abierto",
@@ -353,6 +355,19 @@ def campaign_migrate_plan_seleccionado():
 
     result = campaign_crud.ensure_plan_seleccionado_column()
     logger.info(f"MIGRATE_PLAN_SELECCIONADO | columna_agregada={result['columna_agregada']}")
+    return result
+
+
+@router.post("/campaign/migrate-linea-api")
+def campaign_migrate_linea_api():
+    """
+    Agrega la columna 'lineaApi' a 'clientes' si aún no existe en esta BD.
+    Idempotente — se puede llamar varias veces sin efectos raros.
+    """
+    _require_campaign_db()
+
+    result = campaign_crud.ensure_linea_api_column()
+    logger.info(f"MIGRATE_LINEA_API | columna_agregada={result['columna_agregada']}")
     return result
 
 

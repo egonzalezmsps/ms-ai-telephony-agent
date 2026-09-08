@@ -22,6 +22,7 @@ class SessionState:
     first_name: str = ""
     full_name: str = ""
     phone_number: str = ""
+    api_phone_number: Optional[str] = None  # teléfono para call_create_process (Cliente.linea_api); si no hay, se usa phone_number
 
     # ── Plan actual ───────────────────────────────────────────────
     current_plan_name: str = ""

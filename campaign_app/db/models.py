@@ -121,6 +121,7 @@ class CampanaPlan(Base):
 class Cliente(Base):
     __tablename__ = "clientes"
     linea = Column(String(20), primary_key=True)
+    linea_api = Column("lineaApi", String(20), nullable=True)
     nombre = Column(String(100), nullable=True)
     apellidos = Column(String(200), nullable=True)
     plan_actual_nombre = Column(String(200), nullable=True)

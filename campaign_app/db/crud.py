@@ -353,6 +353,7 @@ def remove_plan_from_campana(campana_id: int, plan_id: int):
 # El CSV de Telcel usa nombres de columna distintos al modelo de BD.
 CSV_COL_MAP = {
     "plan":                              "plan_actual_nombre",
+    "lineaapi":                          "linea_api",
     "tiposuscripcion":                   "tipo_suscripcion",
     "rentaplan":                         "renta_plan",
     "facturacion_promedio_3meses":       "facturacion_promedio",
@@ -475,14 +476,19 @@ def bulk_upsert_clientes(rows: list) -> int:
         return len(rows)
 
 
-def _ensure_column(db, column_name: str, ddl_type: str) -> bool:
-    """Agrega una columna a 'clientes' si todavía no existe. Retorna True si la agregó."""
+def _ensure_column(db, column_name: str, ddl_type: str, quoted: bool = False) -> bool:
+    """Agrega una columna a 'clientes' si todavía no existe. Retorna True si la agregó.
+
+    quoted=True preserva mayúsculas/minúsculas exactas del nombre (columnas creadas
+    con comillas, ej. "lineaApi") — sin comillas, Postgres pliega el identificador
+    a minúsculas y quedaría desalineado con el nombre real de la BD productiva."""
     existe = db.execute(text(
         "SELECT 1 FROM information_schema.columns "
         "WHERE table_name = 'clientes' AND column_name = :col"
     ), {"col": column_name}).scalar()
     if not existe:
-        db.execute(text(f"ALTER TABLE clientes ADD COLUMN {column_name} {ddl_type}"))
+        ddl_name = f'"{column_name}"' if quoted else column_name
+        db.execute(text(f"ALTER TABLE clientes ADD COLUMN {ddl_name} {ddl_type}"))
         return True
     return False
 
@@ -526,6 +532,17 @@ def ensure_plan_seleccionado_column() -> dict:
     (para BDs creadas antes de que existiera en el modelo). Idempotente."""
     with get_db() as db:
         columna_agregada = _ensure_column(db, "plan_seleccionado", "VARCHAR(200)")
+    return {"columna_agregada": columna_agregada}
+
+
+def ensure_linea_api_column() -> dict:
+    """Agrega la columna 'lineaApi' a 'clientes' si todavía no existe (para BDs
+    creadas antes de que existiera en el modelo) — guarda el teléfono que debe
+    usarse al llamar a call_create_process, distinto de 'linea'. Nombre
+    preservado tal cual la BD productiva (quoted, mayúscula intermedia).
+    Idempotente."""
+    with get_db() as db:
+        columna_agregada = _ensure_column(db, "lineaApi", "VARCHAR(20)", quoted=True)
     return {"columna_agregada": columna_agregada}
 
 
