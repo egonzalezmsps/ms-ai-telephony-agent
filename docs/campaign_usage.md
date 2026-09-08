@@ -106,12 +106,19 @@ El seed es idempotente — se puede ejecutar varias veces sin duplicar datos.
 
 ## Notas sobre templates de WhatsApp
 
-Los nombres de variable en `.env` están cruzados con los nombres reales en Meta (así llegaron):
+A partir de las plantillas reaprobadas en Meta (`template_telcel_libre` / `template_telcel_ultra`),
+los nombres ya NO están cruzados — cada variable de entorno apunta al template del mismo nombre:
 
 ```env
-TEMPLATE_LIBRE=template_ultra   # nombre real del template Libre en Meta
-TEMPLATE_ULTRA=template_libre   # nombre real del template Ultra en Meta
+TEMPLATE_LIBRE=template_telcel_libre
+TEMPLATE_ULTRA=template_telcel_ultra
 ```
+
+Estas plantillas nuevas tienen menos variables que las anteriores — "Abierto" y la frase de
+introducción ("Con este plan obtendrá...") quedaron fijas en el cuerpo aprobado, ya no son `{{N}}`:
+
+- `template_telcel_libre` — 5 variables: nombre, plan (sin modalidad), precio, GB, cashback
+- `template_telcel_ultra` — 4 variables: nombre, plan (sin modalidad), precio, GB
 
 El payload enviado a Meta incluye siempre `header` (estático) + `body` (con variables `{{1}}`, `{{2}}`...).
 No incluir componente `button` si el template aprobado no tiene botones — Meta devuelve error 132018.

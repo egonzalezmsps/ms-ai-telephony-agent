@@ -85,8 +85,9 @@ def main():
 
     try:
         import main as bot_main
-        bot_main.send_whatsapp_template = fake_send_whatsapp_template
-        bot_main.send_whatsapp_message = fake_send_whatsapp_message
+        from app.routes import campaign as campaign_routes
+        campaign_routes.send_whatsapp_template = fake_send_whatsapp_template
+        campaign_routes.send_whatsapp_message = fake_send_whatsapp_message
 
         from fastapi.testclient import TestClient
         client = TestClient(bot_main.app)

@@ -10,45 +10,6 @@ from dotenv import load_dotenv
 
 from db import crud
 
-# ── Mapeos CSV → modelo ───────────────────────────────────────────────────────
-# El CSV de Telcel usa nombres de columna distintos al modelo de BD.
-_CSV_COL_MAP = {
-    "plan":                              "plan_actual_nombre",
-    "tiposuscripcion":                   "tipo_suscripcion",
-    "rentaplan":                         "renta_plan",
-    "facturacion_promedio_3meses":       "facturacion_promedio",
-    "conmbtotal_promedio_3meses":        "consumo_mb_total_prom",
-    "conmbwhatsapp_prom3meses":          "consumo_mb_whatsapp_prom",
-    "conmbredsoc_prom3meses":            "consumo_mb_redes_prom",
-    "conmbyoutube_prom3meses":           "consumo_mb_youtube_prom",
-    "conmbuber_prom3meses":              "consumo_mb_uber_prom",
-    "conmbinstagr_prom3meses":           "consumo_mb_instagram_prom",
-    "conmbotros_prom3meses":             "consumo_mb_otros_prom",
-    "totalmb_nacexcedentes_prom3meses":  "excedentes_nac_mb_prom",
-    "totalmb_intexcedentes_prom3meses":  "excedentes_int_mb_prom",
-    "total_ingresos_nacexce_prom3meses": "ingresos_exc_nac_prom",
-    "total_ingresos_intcexce_prom3meses":"ingresos_exc_int_prom",
-}
-
-_SUSCRIPCION_MAP = {
-    "POSTPAGO": "Abierto",
-    "MIXTO":    "Controlado",
-}
-
-
-def _normalize_csv_row(row: dict, valid_cols: set) -> dict:
-    """Rename CSV columns to model names, map subscription values, keep only valid cols."""
-    renamed = {}
-    for k, v in row.items():
-        model_key = _CSV_COL_MAP.get(k.lower(), k)
-        renamed[model_key] = v
-    # Map subscription type value
-    if "tipo_suscripcion" in renamed:
-        renamed["tipo_suscripcion"] = _SUSCRIPCION_MAP.get(
-            renamed["tipo_suscripcion"].upper(), renamed["tipo_suscripcion"]
-        )
-    return {k: v for k, v in renamed.items() if k in valid_cols and v != ""}
-
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
 st.set_page_config(page_title="Campañas", page_icon="📢", layout="wide")
@@ -298,31 +259,11 @@ with tab_clientes:
                 st.write(f"{len(rows)} filas leídas · {len(nuevas)} líneas nuevas a agregar.")
 
                 if st.button("Importar clientes"):
-                    _numeric = {
-                        "renta_plan", "facturacion_promedio",
-                        "consumo_mb_total_prom", "consumo_mb_whatsapp_prom",
-                        "consumo_mb_redes_prom", "consumo_mb_youtube_prom",
-                        "consumo_mb_uber_prom", "consumo_mb_instagram_prom",
-                        "consumo_mb_otros_prom", "excedentes_nac_mb_prom",
-                        "excedentes_int_mb_prom", "ingresos_exc_nac_prom",
-                        "ingresos_exc_int_prom",
-                    }
-                    from db.models import Cliente as ClienteModel
-                    valid_cols = {c.name for c in ClienteModel.__table__.columns}
-                    cleaned = []
-                    for row in rows:
-                        data = _normalize_csv_row(row, valid_cols)
-                        for f in _numeric:
-                            if f in data:
-                                try:
-                                    data[f] = float(str(data[f]).replace(",", "."))
-                                except ValueError:
-                                    del data[f]
-                        cleaned.append(data)
-                    crud.bulk_upsert_clientes(cleaned)
-                    crud.add_clientes_to_campana(campana_id,
-                                                  [r["linea"] for r in cleaned])
-                    st.success(f"{len(cleaned)} clientes importados.")
+                    result = crud.import_clientes_csv(rows)
+                    crud.add_clientes_to_campana(campana_id, result["imported"])
+                    if result["skipped"]:
+                        st.warning(f"{len(result['skipped'])} filas omitidas (sin línea válida).")
+                    st.success(f"{len(result['imported'])} clientes importados.")
                     st.rerun()
 
     # ── Agregar individual ────────────────────────────────────────────────────

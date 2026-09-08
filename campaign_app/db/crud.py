@@ -6,6 +6,7 @@ from .models import (
     Promocion, Campana, CampanaPlan, Cliente, CampanaCliente,
 )
 from sqlalchemy.orm import selectinload
+from sqlalchemy import func, text
 
 
 # ── Familia ───────────────────────────────────────────────────────────────────
@@ -349,9 +350,103 @@ def remove_plan_from_campana(campana_id: int, plan_id: int):
 
 # ── Cliente ───────────────────────────────────────────────────────────────────
 
+# El CSV de Telcel usa nombres de columna distintos al modelo de BD.
+CSV_COL_MAP = {
+    "plan":                              "plan_actual_nombre",
+    "tiposuscripcion":                   "tipo_suscripcion",
+    "rentaplan":                         "renta_plan",
+    "facturacion_promedio_3meses":       "facturacion_promedio",
+    "conmbtotal_promedio_3meses":        "consumo_mb_total_prom",
+    "conmbwhatsapp_prom3meses":          "consumo_mb_whatsapp_prom",
+    "conmbredsoc_prom3meses":            "consumo_mb_redes_prom",
+    "conmbyoutube_prom3meses":           "consumo_mb_youtube_prom",
+    "conmbuber_prom3meses":              "consumo_mb_uber_prom",
+    "conmbinstagr_prom3meses":           "consumo_mb_instagram_prom",
+    "conmbotros_prom3meses":             "consumo_mb_otros_prom",
+    "totalmb_nacexcedentes_prom3meses":  "excedentes_nac_mb_prom",
+    "totalmb_intexcedentes_prom3meses":  "excedentes_int_mb_prom",
+    "total_ingresos_nacexce_prom3meses": "ingresos_exc_nac_prom",
+    "total_ingresos_intcexce_prom3meses":"ingresos_exc_int_prom",
+}
+
+SUSCRIPCION_MAP = {
+    "POSTPAGO": "Abierto",
+    "MIXTO":    "Controlado",
+}
+
+_NUMERIC_CLIENTE_FIELDS = {
+    "renta_plan", "facturacion_promedio",
+    "consumo_mb_total_prom", "consumo_mb_whatsapp_prom",
+    "consumo_mb_redes_prom", "consumo_mb_youtube_prom",
+    "consumo_mb_uber_prom", "consumo_mb_instagram_prom",
+    "consumo_mb_otros_prom", "excedentes_nac_mb_prom",
+    "excedentes_int_mb_prom", "ingresos_exc_nac_prom",
+    "ingresos_exc_int_prom",
+}
+
+
+def normalize_cliente_csv_row(row: dict, valid_cols: set) -> dict:
+    """Rename CSV columns to model names, map subscription values, keep only valid cols."""
+    renamed = {}
+    for k, v in row.items():
+        model_key = CSV_COL_MAP.get(k.lower(), k)
+        renamed[model_key] = v
+    if "tipo_suscripcion" in renamed:
+        renamed["tipo_suscripcion"] = SUSCRIPCION_MAP.get(
+            renamed["tipo_suscripcion"].upper(), renamed["tipo_suscripcion"]
+        )
+    return {k: v for k, v in renamed.items() if k in valid_cols and v != ""}
+
+
+def import_clientes_csv(rows: list) -> dict:
+    """Normaliza filas crudas de CSV (formato Telcel) y hace upsert en 'clientes'.
+    Si el CSV trae columna 'orden', se respeta tal cual (permite reordenar clientes
+    existentes). Si no la trae, a los clientes NUEVOS se les asigna el siguiente
+    orden disponible; los existentes conservan el suyo sin tocarlo.
+    Retorna {"imported": [lineas...], "skipped": [{"row": i, "reason": "..."}], "total": N}."""
+    valid_cols = {c.name for c in Cliente.__table__.columns}
+    cleaned = []
+    skipped = []
+    for i, row in enumerate(rows):
+        data = normalize_cliente_csv_row(row, valid_cols)
+        for f in _NUMERIC_CLIENTE_FIELDS:
+            if f in data:
+                try:
+                    data[f] = float(str(data[f]).replace(",", "."))
+                except ValueError:
+                    del data[f]
+        if "orden" in data:
+            try:
+                data["orden"] = int(float(str(data["orden"])))
+            except ValueError:
+                del data["orden"]
+        if not data.get("linea"):
+            skipped.append({"row": i, "reason": "sin 'linea' válida"})
+            continue
+        cleaned.append(data)
+
+    with get_db() as db:
+        lineas = [d["linea"] for d in cleaned]
+        existentes = {
+            r[0] for r in db.query(Cliente.linea).filter(Cliente.linea.in_(lineas)).all()
+        } if lineas else set()
+        siguiente_orden = (db.query(func.max(Cliente.orden)).scalar() or 0) + 1
+        for data in cleaned:
+            if "orden" not in data and data["linea"] not in existentes:
+                data["orden"] = siguiente_orden
+                siguiente_orden += 1
+
+    bulk_upsert_clientes(cleaned)
+    return {
+        "imported": [d["linea"] for d in cleaned],
+        "skipped": skipped,
+        "total": len(rows),
+    }
+
+
 def get_all_clientes():
     with get_db() as db:
-        return db.query(Cliente).order_by(Cliente.linea).all()
+        return db.query(Cliente).order_by(Cliente.orden, Cliente.creado_en).all()
 
 
 def upsert_cliente(data: dict) -> Cliente:
@@ -380,14 +475,109 @@ def bulk_upsert_clientes(rows: list) -> int:
         return len(rows)
 
 
+def _ensure_column(db, column_name: str, ddl_type: str) -> bool:
+    """Agrega una columna a 'clientes' si todavía no existe. Retorna True si la agregó."""
+    existe = db.execute(text(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_name = 'clientes' AND column_name = :col"
+    ), {"col": column_name}).scalar()
+    if not existe:
+        db.execute(text(f"ALTER TABLE clientes ADD COLUMN {column_name} {ddl_type}"))
+        return True
+    return False
+
+
+def ensure_orden_column() -> dict:
+    """Agrega las columnas 'orden' y 'estado' a 'clientes' si todavía no existen
+    (para BDs que fueron creadas antes de que existieran en el modelo), y hace
+    backfill: 'orden' secuencial (por creado_en) y 'estado' = 'Pendiente' para
+    las filas que aún no tengan valor. Idempotente — seguro de correr varias veces."""
+    with get_db() as db:
+        orden_agregada = _ensure_column(db, "orden", "INTEGER")
+        estado_agregada = _ensure_column(db, "estado", "VARCHAR(20)")
+
+    with get_db() as db:
+        siguiente_orden = (db.query(func.max(Cliente.orden)).scalar() or 0) + 1
+        sin_orden = (
+            db.query(Cliente)
+            .filter(Cliente.orden.is_(None))
+            .order_by(Cliente.creado_en)
+            .all()
+        )
+        for c in sin_orden:
+            c.orden = siguiente_orden
+            siguiente_orden += 1
+
+    with get_db() as db:
+        sin_estado = db.query(Cliente).filter(Cliente.estado.is_(None)).all()
+        for c in sin_estado:
+            c.estado = "Pendiente"
+
+    return {
+        "columna_agregada": orden_agregada,
+        "filas_backfilled": len(sin_orden),
+        "estado_columna_agregada": estado_agregada,
+        "estado_filas_backfilled": len(sin_estado),
+    }
+
+
+def ensure_plan_seleccionado_column() -> dict:
+    """Agrega la columna 'plan_seleccionado' a 'clientes' si todavía no existe
+    (para BDs creadas antes de que existiera en el modelo). Idempotente."""
+    with get_db() as db:
+        columna_agregada = _ensure_column(db, "plan_seleccionado", "VARCHAR(200)")
+    return {"columna_agregada": columna_agregada}
+
+
+def actualizar_plan_cliente(linea: str, plan_nuevo: str) -> None:
+    """Guarda el plan nuevo en 'clientes.plan_seleccionado' tras un cambio de plan exitoso.
+    No toca 'plan_actual_nombre', que conserva el plan original con el que se importó el cliente."""
+    with get_db() as db:
+        cliente = db.query(Cliente).filter_by(linea=linea).first()
+        if cliente:
+            cliente.plan_seleccionado = plan_nuevo
+
+
+def marcar_estado_cliente(linea: str, estado: str) -> None:
+    with get_db() as db:
+        obj = db.query(Cliente).filter_by(linea=linea).first()
+        if obj:
+            obj.estado = estado
+
+
+def delete_all_clientes() -> dict:
+    """Borra TODOS los registros de 'clientes' y sus vínculos en 'campana_clientes'.
+    Irreversible. No toca 'campanas'."""
+    with get_db() as db:
+        campana_clientes_borrados = db.query(CampanaCliente).delete()
+        clientes_borrados = db.query(Cliente).delete()
+    return {
+        "clientes_borrados": clientes_borrados,
+        "campana_clientes_borrados": campana_clientes_borrados,
+    }
+
+
 # ── CampanaCliente ────────────────────────────────────────────────────────────
 
 def get_campana_clientes(campana_id: int):
     with get_db() as db:
         return (
             db.query(CampanaCliente)
+            .join(Cliente, CampanaCliente.linea == Cliente.linea)
             .options(selectinload(CampanaCliente.cliente))
-            .filter_by(campana_id=campana_id)
+            .filter(CampanaCliente.campana_id == campana_id)
+            .order_by(Cliente.orden, Cliente.creado_en)
+            .all()
+        )
+
+
+def get_all_campana_clientes():
+    with get_db() as db:
+        return (
+            db.query(CampanaCliente)
+            .join(Cliente, CampanaCliente.linea == Cliente.linea)
+            .options(selectinload(CampanaCliente.cliente))
+            .order_by(CampanaCliente.campana_id, Cliente.orden, Cliente.creado_en)
             .all()
         )
 

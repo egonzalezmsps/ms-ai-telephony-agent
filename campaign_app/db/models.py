@@ -124,6 +124,7 @@ class Cliente(Base):
     nombre = Column(String(100), nullable=True)
     apellidos = Column(String(200), nullable=True)
     plan_actual_nombre = Column(String(200), nullable=True)
+    plan_seleccionado = Column(String(200), nullable=True)
     familia_plan = Column(String(100), nullable=True)
     tipo_suscripcion = Column(String(20), nullable=True)
     renta_plan = Column(Float, nullable=True)
@@ -139,6 +140,8 @@ class Cliente(Base):
     excedentes_int_mb_prom = Column(Float, nullable=True)
     ingresos_exc_nac_prom = Column(Float, nullable=True)
     ingresos_exc_int_prom = Column(Float, nullable=True)
+    orden = Column(Integer, nullable=True)
+    estado = Column(String(20), nullable=True, default="Pendiente")
     creado_en = Column(DateTime, default=datetime.utcnow)
     campanas = relationship("CampanaCliente", back_populates="cliente")
 
