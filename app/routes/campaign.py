@@ -448,6 +448,7 @@ def campaign_get_all_clientes():
         "fila": i,
         "orden": c.orden,
         "linea": c.linea,
+        "lineaApi": c.lineaApi,
         "nombre": c.nombre,
         "apellidos": c.apellidos,
         "plan_actual_nombre": c.plan_actual_nombre,
