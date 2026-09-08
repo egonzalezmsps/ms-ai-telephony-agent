@@ -121,7 +121,9 @@ class CampanaPlan(Base):
 class Cliente(Base):
     __tablename__ = "clientes"
     linea = Column(String(20), primary_key=True)
-    linea_api = Column(String(20), nullable=True)
+    # quote=False: nunca citar "lineaApi" en el SQL generado (aunque tenga mayúsculas),
+    # para que coincida con la columna física creada sin comillas (Postgres la pliega a "lineaapi").
+    lineaApi = Column("lineaApi", String(20), nullable=True, quote=False)
     nombre = Column(String(100), nullable=True)
     apellidos = Column(String(200), nullable=True)
     plan_actual_nombre = Column(String(200), nullable=True)

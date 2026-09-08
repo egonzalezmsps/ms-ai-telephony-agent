@@ -352,7 +352,7 @@ def remove_plan_from_campana(campana_id: int, plan_id: int):
 
 # El CSV de Telcel usa nombres de columna distintos al modelo de BD.
 CSV_COL_MAP = {
-    "lineaapi":                          "linea_api",
+    "lineaapi":                          "lineaApi",
     "plan":                              "plan_actual_nombre",
     "tiposuscripcion":                   "tipo_suscripcion",
     "rentaplan":                         "renta_plan",
@@ -531,10 +531,17 @@ def ensure_plan_seleccionado_column() -> dict:
 
 
 def ensure_linea_api_column() -> dict:
-    """Agrega la columna 'linea_api' a 'clientes' si todavía no existe
-    (para BDs creadas antes de que existiera en el modelo). Idempotente."""
+    """Agrega la columna 'lineaApi' a 'clientes' si todavía no existe
+    (para BDs creadas antes de que existiera en el modelo). Idempotente.
+
+    Se crea/consulta como 'lineaapi' (minúsculas): el DDL sin comillas hace que
+    Postgres pliegue el nombre a minúsculas al crearla, y 'information_schema'
+    siempre la reporta así — por eso se usa esa forma también para el chequeo
+    de existencia. El modelo ORM la expone como 'lineaApi' con quote=False,
+    que en el SQL generado coincide exactamente con esta misma columna física.
+    """
     with get_db() as db:
-        columna_agregada = _ensure_column(db, "linea_api", "VARCHAR(20)")
+        columna_agregada = _ensure_column(db, "lineaapi", "VARCHAR(20)")
     return {"columna_agregada": columna_agregada}
 
 
