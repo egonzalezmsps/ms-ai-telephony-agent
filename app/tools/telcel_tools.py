@@ -991,11 +991,74 @@ def make_tools(state):
         current_count = state.rejection_count
         state.rejection_count += 1
 
+        _MOTIVOS_PRECIO = {"precio", "caro", "costoso", "cuesta"}
+
+        def _objecion_precio(motivo_lower: str) -> str:
+            """Si la objeción es de precio, responde con el argumento más fuerte
+            disponible en vez de la respuesta genérica: si el plan anclado no
+            incrementa la renta actual, refuta con ese hecho; si sí incrementa,
+            resalta los beneficios concretos que gana (más GB, más cashback).
+            Retorna "" si no aplica (no es objeción de precio, no hay plan
+            anclado resuelto, o no hay ningún beneficio concreto que resaltar)."""
+            if not any(w in motivo_lower for w in _MOTIVOS_PRECIO):
+                return ""
+            plan_obj = next(
+                (p for p in CATALOG if f"{p.plan_id} {state.subscription_type}" == state.plan_anclado),
+                None,
+            )
+            if not plan_obj:
+                return ""
+            precio_anclado = get_price(plan_obj, state.subscription_type)
+
+            if abs(precio_anclado - state.current_cost) <= 1.0:
+                return (
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                    f"Entendemos, {state.first_name}. Este cambio no representa ningún "
+                    f"incremento en su renta — seguiría pagando ${state.current_cost:.0f}/mes, "
+                    f"solo que con más beneficios incluidos.\n\n"
+                    f"¿Le gustaría activar el *{state.plan_anclado}*?"
+                )
+
+            # Hay incremento de precio — resaltar beneficios concretos (GB, cashback)
+            has_promo_plan = (
+                bool(state.has_promotion) and plan_obj.gb_promo > plan_obj.gb_base
+                and plan_obj.family == "Telcel Libre" and precio_anclado > state.current_cost + 1.0
+            )
+            new_gb = plan_obj.gb_promo if has_promo_plan else plan_obj.gb_base
+            current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
+            new_cashback = get_cashback(plan_obj, state.subscription_type)
+            current_cashback = state.current_plan_cashback or 0.0
+
+            beneficios = []
+            if current_gb and new_gb > current_gb:
+                beneficios.append(f"{new_gb - current_gb:g} GB más de datos")
+            elif new_gb:
+                beneficios.append(f"{new_gb:g} GB de datos")
+            if new_cashback > current_cashback:
+                if current_cashback > 0:
+                    beneficios.append(f"cashback que sube de ${current_cashback:.2f} a ${new_cashback:.2f}/mes")
+                else:
+                    beneficios.append(f"${new_cashback:.2f}/mes de cashback")
+
+            if not beneficios:
+                return ""
+
+            beneficios_texto = " y ".join(beneficios)
+            return (
+                "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+                f"Entendemos, {state.first_name}. Aunque hay un ajuste en la renta, con el "
+                f"*{state.plan_anclado}* obtiene {beneficios_texto} comparado con su plan actual.\n\n"
+                f"¿Le gustaría activar el *{state.plan_anclado}*?"
+            )
+
         if current_count == 0:
             if motivo:
+                motivo_lower = motivo.lower()
+                refutacion_precio = _objecion_precio(motivo_lower)
+                if refutacion_precio:
+                    return refutacion_precio
                 _MOTIVOS_SERVICIO = {"servicio", "cobertura", "señal", "lento",
                                      "malo", "mal", "falla", "problema"}
-                motivo_lower = motivo.lower()
                 es_servicio = any(w in motivo_lower for w in _MOTIVOS_SERVICIO)
                 soporte = (
                     "\nPara reportar el problema puede comunicarse con "
@@ -1015,6 +1078,10 @@ def make_tools(state):
 
         elif current_count == 1:
             if motivo:
+                motivo_lower = motivo.lower()
+                refutacion_precio = _objecion_precio(motivo_lower)
+                if refutacion_precio:
+                    return refutacion_precio
                 _MOTIVOS_SERVICIO = {"servicio", "cobertura", "señal",
                                      "lento", "malo", "mal", "falla", "problema"}
                 es_servicio = any(w in motivo.lower() for w in _MOTIVOS_SERVICIO)

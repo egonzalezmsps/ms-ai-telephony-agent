@@ -550,11 +550,46 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                 send_whatsapp_message(phone_number, response_text)
             logger.info(f"WA OUT | {phone_number} [stage={session.stage}]: {response_text[:80]}")
         else:
-            session = SessionState(
-                first_name=first_name,
-                full_name=sender_name,
-                phone_number=phone_number,
-            )
+            # Restricción de acceso: solo números registrados en Cliente
+            # (campaign_app) pueden iniciar conversación. Si campaign_app.db
+            # no está disponible, la restricción se desactiva (fail-open) en
+            # vez de tumbar el bot completo por una dependencia opcional.
+            linea = _to_linea(phone_number)
+            cliente = None
+            if _CAMPAIGN_DB_AVAILABLE:
+                try:
+                    from campaign_app.db.database import get_db
+                    from campaign_app.db.models import Cliente as ClienteModel
+                    with get_db() as db:
+                        cliente = db.query(ClienteModel).filter_by(linea=linea).first()
+                except Exception as e:
+                    logger.warning(f"WA | No se pudo verificar registro de {phone_number} en Cliente: {e}")
+
+            if _CAMPAIGN_DB_AVAILABLE and not cliente:
+                logger.info(f"WA BLOQUEADO | {phone_number} — no está registrado en Cliente")
+                send_whatsapp_message(
+                    phone_number,
+                    "En este momento no cuenta con promociones activas. "
+                    "Le invitamos a esperar nuestros próximos mensajes con futuras ofertas.",
+                )
+                return
+
+            if cliente:
+                session = SessionState(
+                    first_name=(cliente.nombre or first_name).split()[0].title(),
+                    full_name=f"{cliente.nombre or ''} {cliente.apellidos or ''}".strip() or sender_name,
+                    phone_number=phone_number,
+                    current_plan_name=cliente.plan_actual_nombre or "Plan Legado",
+                    current_cost=cliente.renta_plan or 0.0,
+                    subscription_type=cliente.tipo_suscripcion or "Abierto",
+                    is_titular=True,
+                )
+            else:
+                session = SessionState(
+                    first_name=first_name,
+                    full_name=sender_name,
+                    phone_number=phone_number,
+                )
             campaign_msg = build_campaign_message(session)
             initial_history = [{"role": "assistant", "content": campaign_msg}]
             save_session(

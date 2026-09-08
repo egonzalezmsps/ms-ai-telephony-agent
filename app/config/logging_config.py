@@ -4,6 +4,7 @@ config/logging_config.py — Configuración de logs a archivo con rotación.
 import io
 import logging
 import os
+import re
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -11,6 +12,34 @@ from pathlib import Path
 # Ruta absoluta anclada al repo (no al cwd del proceso), para que siempre
 # sea el mismo archivo sin importar desde dónde se lance el servicio.
 LOGS_DIR = str(Path(__file__).resolve().parents[2] / "logs")
+
+_SECRET_MARKERS = ("PRIVATE KEY", "BEGIN CERTIFICATE")
+
+
+class _RedactSecretsFilter(logging.Filter):
+    """
+    Evita que credenciales sensibles (llaves privadas PEM, certificados)
+    lleguen a cualquier handler — sin esto, dependencias como strands/litellm
+    en modo DEBUG pueden volcar su config interna completa (incluida la
+    llave privada de OCI) al inicializar el modelo.
+
+    Se aplica a nivel de Handler (no de Logger) para que atrape la fuga sin
+    importar de qué logger/módulo venga — un filtro en un Logger padre NO
+    se vuelve a evaluar cuando el record llega por propagación.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            message = record.getMessage()
+        except Exception:
+            return True
+        if any(marker in message for marker in _SECRET_MARKERS):
+            record.msg = (
+                "[REDACTADO] El mensaje original de '%s' contenía una llave/certificado "
+                "y fue suprimido por seguridad."
+            )
+            record.args = (record.name,)
+        return True
 
 
 def setup_logging():
@@ -30,6 +59,7 @@ def setup_logging():
         encoding="utf-8",
     )
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(_RedactSecretsFilter())
 
     # Handler → consola. En Windows, stdout/stderr suelen usar el codepage
     # legado (cp1252/cp850), que no puede codificar emojis (✅, ❌, 👋, etc.
@@ -40,6 +70,7 @@ def setup_logging():
     ) if hasattr(sys.stdout, "buffer") else sys.stdout
     console_handler = logging.StreamHandler(console_stream)
     console_handler.setFormatter(formatter)
+    console_handler.addFilter(_RedactSecretsFilter())
 
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
