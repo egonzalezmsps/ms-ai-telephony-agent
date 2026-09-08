@@ -154,7 +154,7 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                     first_name=(cliente.nombre or first_name).split()[0].title(),
                     full_name=f"{cliente.nombre or ''} {cliente.apellidos or ''}".strip() or sender_name,
                     phone_number=phone_number,
-                    api_phone_number=cliente.linea_api,
+                    api_phone_number=cliente.lineaApi,
                     current_plan_name=cliente.plan_actual_nombre or "Plan Legado",
                     current_cost=cliente.renta_plan or 0.0,
                     subscription_type=cliente.tipo_suscripcion or "Abierto",
