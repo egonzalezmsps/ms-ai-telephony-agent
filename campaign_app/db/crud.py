@@ -352,6 +352,7 @@ def remove_plan_from_campana(campana_id: int, plan_id: int):
 
 # El CSV de Telcel usa nombres de columna distintos al modelo de BD.
 CSV_COL_MAP = {
+    "lineaapi":                          "linea_api",
     "plan":                              "plan_actual_nombre",
     "tiposuscripcion":                   "tipo_suscripcion",
     "rentaplan":                         "renta_plan",
@@ -526,6 +527,14 @@ def ensure_plan_seleccionado_column() -> dict:
     (para BDs creadas antes de que existiera en el modelo). Idempotente."""
     with get_db() as db:
         columna_agregada = _ensure_column(db, "plan_seleccionado", "VARCHAR(200)")
+    return {"columna_agregada": columna_agregada}
+
+
+def ensure_linea_api_column() -> dict:
+    """Agrega la columna 'linea_api' a 'clientes' si todavía no existe
+    (para BDs creadas antes de que existiera en el modelo). Idempotente."""
+    with get_db() as db:
+        columna_agregada = _ensure_column(db, "linea_api", "VARCHAR(20)")
     return {"columna_agregada": columna_agregada}
 
 

@@ -356,6 +356,19 @@ def campaign_migrate_plan_seleccionado():
     return result
 
 
+@router.post("/campaign/migrate-linea-api")
+def campaign_migrate_linea_api():
+    """
+    Agrega la columna 'linea_api' a 'clientes' si aún no existe en esta BD.
+    Idempotente — se puede llamar varias veces sin efectos raros.
+    """
+    _require_campaign_db()
+
+    result = campaign_crud.ensure_linea_api_column()
+    logger.info(f"MIGRATE_LINEA_API | columna_agregada={result['columna_agregada']}")
+    return result
+
+
 @router.post("/campaign/import-clientes")
 def campaign_import_clientes(
     file: UploadFile = File(...),
