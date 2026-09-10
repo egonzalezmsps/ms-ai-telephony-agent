@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from pydantic import BaseModel, model_validator
 
 from app.state.session import SessionState
-from app.state.persistence import save_session
+from app.state.persistence import save_session, delete_session
 from app.state.serializer import session_to_dict
 from app.prompts.campaign_template import build_campaign_message, build_template_params
 from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template
@@ -29,6 +29,19 @@ router = APIRouter(dependencies=[Depends(require_api_key)])
 def _require_campaign_db():
     if not CAMPAIGN_DB_AVAILABLE:
         raise HTTPException(status_code=503, detail=f"Campaign DB not available: {CAMPAIGN_DB_ERROR}")
+
+
+def _delete_sessions_for_lineas(lineas: list[str]) -> None:
+    """
+    Borra la sesión de conversación (conversation_sessions) de cada línea importada,
+    para que la siguiente campaña arranque un flujo nuevo en vez de reanudar una
+    conversación vieja. Una sesión puede haber quedado guardada bajo distintos
+    formatos de clave (linea de 10 dígitos, o con prefijo 52/521 — ver _to_linea),
+    así que se intentan borrar los tres.
+    """
+    for linea in lineas:
+        for candidate in {linea, f"52{linea}", f"521{linea}"}:
+            delete_session(candidate)
 
 
 class CampaignRequest(BaseModel):
@@ -412,6 +425,13 @@ def campaign_import_clientes(
         result = campaign_crud.import_clientes_csv(rows)
         if borrado is not None:
             result["reemplazados"] = borrado
+
+        if result["imported"]:
+            _delete_sessions_for_lineas(result["imported"])
+            logger.info(
+                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | sesiones de conversación "
+                f"eliminadas para {len(result['imported'])} líneas importadas"
+            )
 
         if result["skipped"]:
             logger.warning(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | {len(result['skipped'])} filas omitidas: {result['skipped']}")
