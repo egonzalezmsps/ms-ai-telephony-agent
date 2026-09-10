@@ -42,8 +42,6 @@ class ProvisioningStatusRequest(BaseModel):
     msisdn: str = Field(pattern=r"^\d{10}$")
     statusProvisioning: str
 
-PROVISIONING_SUCCESS_MESSAGE = "Su cambio de plan ha sido aplicado correctamente. ¡Gracias!"
-
 # IDs de mensajes ya procesados — evita duplicados por reintentos de Meta
 _processed_msg_ids: set = set()
 _processed_lock = threading.Lock()
@@ -281,9 +279,51 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     return {"status": "ok"}
 
 
+def _build_provisioning_success_message(nombre: str, plan_nuevo: str) -> str:
+    return (
+        f"🎉 ¡Buenas noticias, {nombre}!\n\n"
+        f"✅ Su cambio de plan ha sido activado exitosamente.\n\n"
+        f"📱 Nuevo plan: {plan_nuevo}\n\n"
+        f"💚 Gracias por su preferencia, {nombre}.\n"
+        f"¡Es un placer servirle!\n\n"
+        f"📶 Telcel, siempre conectándote."
+    )
+
+
+_PROVISIONING_SUCCESS_MESSAGE_GENERIC = (
+    "🎉 ¡Buenas noticias!\n\n"
+    "✅ Su cambio de plan ha sido activado exitosamente.\n\n"
+    "💚 Gracias por su preferencia.\n"
+    "¡Es un placer servirle!\n\n"
+    "📶 Telcel, siempre conectándote."
+)
+
+
 def _notify_provisioning_success(msisdn: str) -> None:
+    nombre = None
+    plan_nuevo = None
+
+    if CAMPAIGN_DB_AVAILABLE:
+        try:
+            from campaign_app.db.database import get_db
+            from campaign_app.db.models import Cliente as ClienteModel
+            with get_db() as db:
+                cliente = db.query(ClienteModel).filter_by(linea=msisdn).first()
+                if cliente:
+                    if cliente.nombre:
+                        nombre = cliente.nombre.split()[0].title()
+                    if cliente.plan_seleccionado:
+                        plan_nuevo = cliente.plan_seleccionado
+        except Exception as e:
+            logger.warning(f"PROVISIONING | no se pudo consultar Cliente para {msisdn}: {e}")
+
+    if nombre and plan_nuevo:
+        message = _build_provisioning_success_message(nombre, plan_nuevo)
+    else:
+        message = _PROVISIONING_SUCCESS_MESSAGE_GENERIC
+
     try:
-        send_whatsapp_message(msisdn, PROVISIONING_SUCCESS_MESSAGE)
+        send_whatsapp_message(msisdn, message)
     except Exception as e:
         logger.error(f"PROVISIONING | envío WhatsApp a {msisdn} falló: {e}")
 
