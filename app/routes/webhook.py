@@ -42,6 +42,8 @@ class ProvisioningStatusRequest(BaseModel):
     msisdn: str = Field(pattern=r"^\d{10}$")
     statusProvisioning: str
 
+PROVISIONING_SUCCESS_MESSAGE = "Su cambio de plan ha sido aplicado correctamente. ¡Gracias!"
+
 # IDs de mensajes ya procesados — evita duplicados por reintentos de Meta
 _processed_msg_ids: set = set()
 _processed_lock = threading.Lock()
@@ -279,13 +281,23 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     return {"status": "ok"}
 
 
+def _notify_provisioning_success(msisdn: str) -> None:
+    try:
+        send_whatsapp_message(msisdn, PROVISIONING_SUCCESS_MESSAGE)
+    except Exception as e:
+        logger.error(f"PROVISIONING | envío WhatsApp a {msisdn} falló: {e}")
+
+
 @router.post("/webhook/provisioning-status", dependencies=[Depends(require_api_key)])
-def provisioning_status_webhook(payload: ProvisioningStatusRequest):
+def provisioning_status_webhook(payload: ProvisioningStatusRequest, background_tasks: BackgroundTasks):
     """Recibe la notificación de Telcel del estatus de provisioning de un cambio de plan."""
     logger.info(
         "PROVISIONING | processId=%s msisdn=%s statusProvisioning=%s",
         payload.processId, payload.msisdn, payload.statusProvisioning,
     )
+
+    if payload.statusProvisioning == "COMPLETE":
+        background_tasks.add_task(_notify_provisioning_success, payload.msisdn)
 
     now = datetime.now()
     token_operation = f"ORCL-{now.strftime('%Y%m%d%H%M%S')}.{now.microsecond // 1000:03d}"
