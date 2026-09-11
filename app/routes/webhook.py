@@ -263,7 +263,13 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
                 if len(_processed_msg_ids) > 500:
                     _processed_msg_ids.clear()
 
-        phone_number = msg["from"]
+        # Meta reporta el remitente en formato "521XXXXXXXXXX" (13 dígitos, con el
+        # "1" de celular MX) para mensajes ENTRANTES, pero al enviar un template
+        # confirma el envío en formato "52XXXXXXXXXX" (12 dígitos, sin el "1") —
+        # normalizar aquí a los 10 dígitos base evita que la sesión guardada tras
+        # /campaign (bajo ese wa_id de 12 dígitos) no se encuentre al procesar la
+        # primera respuesta del cliente (que llega en formato de 13 dígitos).
+        phone_number = _to_linea(msg["from"])
 
         contacts = value.get("contacts", [])
         sender_name = contacts[0]["profile"]["name"] if contacts else "Cliente"

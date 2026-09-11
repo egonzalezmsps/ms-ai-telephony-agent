@@ -8,7 +8,8 @@
       "Bash(tail -n 60 /tmp_out1.log)",
       "Bash(PYTHONIOENCODING=utf-8 python scripts/test_scenarios_2.py)",
       "Bash(tail -n 60 /tmp_out2.log)",
-      "Bash(PYTHONIOENCODING=utf-8 python \"C:/Users/parbi/AppData/Local/Temp/claude/c--Plinio-SPS-TELCEL-bot-ms-ai-telephony-agent/c1a718db-f905-436f-b86d-e69eeb2ce5fb/scratchpad/test_webhook_restriction.py\")"
+      "Bash(PYTHONIOENCODING=utf-8 python \"C:/Users/parbi/AppData/Local/Temp/claude/c--Plinio-SPS-TELCEL-bot-ms-ai-telephony-agent/c1a718db-f905-436f-b86d-e69eeb2ce5fb/scratchpad/test_webhook_restriction.py\")",
+      "Bash(python -c ' *)"
     ]
   }
 }

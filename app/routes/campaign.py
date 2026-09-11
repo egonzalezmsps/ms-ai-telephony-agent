@@ -140,7 +140,10 @@ def campaign(request: CampaignRequest):
                         template_name=template_name,
                         params=template_result["params"],
                     )
-                    # wa_id es el número en formato canónico de Meta — es la clave que llega en webhooks
+                    # wa_id es solo informativo (para logs) — Meta lo confirma en formato
+                    # "52XXXXXXXXXX" (12 dígitos), pero el remitente que llega en el webhook
+                    # de la respuesta usa "521XXXXXXXXXX" (13 dígitos) — NO usar wa_id como
+                    # clave de sesión, ver save_session() más abajo.
                     wa_id = wa_resp.get("contacts", [{}])[0].get("wa_id", phone_number)
                     logger.info(f"CAMPAIGN | {phone_number} → wa_id={wa_id} — template '{template_name}' enviado")
                     sent_template = True
@@ -159,9 +162,12 @@ def campaign(request: CampaignRequest):
 
             campaign_crud.marcar_estado_cliente(phone_number, "Enviada")
 
-            # Guardar sesión bajo wa_id para que el webhook la encuentre al recibir la respuesta
+            # Guardar sesión bajo 'phone_number' (linea de 10 dígitos) — no bajo 'wa_id':
+            # webhook.py normaliza el remitente entrante a este mismo formato de 10 dígitos
+            # antes de buscar la sesión (ver _to_linea() en app/routes/webhook.py), así que
+            # esta es la clave que sí va a encontrar.
             save_session(
-                phone_number=wa_id,
+                phone_number=phone_number,
                 session_data=session_to_dict(session),
                 history=[{"role": "assistant", "content": campaign_msg}],
             )
@@ -294,9 +300,11 @@ def campaign_dispatch(request: DispatchRequest):
                 campaign_crud.mark_fallido(request.campana_id, linea)
                 results["failed"].append({"linea": linea, "reason": str(e)})
 
-            # Guardar sesión bajo el wa_id canónico de Meta para que el webhook la encuentre
+            # Guardar sesión bajo 'linea' (10 dígitos) — no bajo 'wa_id': webhook.py
+            # normaliza el remitente entrante a este mismo formato antes de buscar la
+            # sesión (ver _to_linea() en app/routes/webhook.py). wa_id queda solo para logs.
             save_session(
-                phone_number=wa_id,
+                phone_number=linea,
                 session_data=session_to_dict(session),
                 history=[{"role": "assistant", "content": campaign_msg}],
             )
