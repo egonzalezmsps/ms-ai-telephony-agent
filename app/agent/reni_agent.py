@@ -16,7 +16,7 @@ from typing import List, Dict, Tuple
 
 from strands import Agent
 
-from app.catalog.plans import CATALOG, PRICE_TOLERANCE_MXN, find_plan, get_price, recommend_plan
+from app.catalog.plans import CATALOG, PRICE_EPSILON_MXN, find_plan, get_price, recommend_plan
 from app.config.oci_model import oci_model
 from app.prompts.system_prompt import build_system_prompt
 from app.tools.telcel_tools import make_tools
@@ -209,8 +209,8 @@ def _fix_tuteo(text: str) -> str:
 
 def _fix_incorrect_promo(text: str, session) -> str:
     """
-    Si el primer precio mencionado en la respuesta coincide con la renta actual
-    del cliente (±$1), elimina las menciones de promoción de GB — no aplica.
+    Si el primer precio mencionado en la respuesta coincide exactamente con la
+    renta actual del cliente, elimina las menciones de promoción de GB — no aplica.
     """
     # Buscar TODOS los precios y verificar que NINGUNO sea diferente
     # a la renta actual — si hay un precio diferente, la promoción sí aplica
@@ -218,7 +218,7 @@ def _fix_incorrect_promo(text: str, session) -> str:
     if not prices:
         return text
     # Si algún precio es diferente a la renta actual, no eliminar promoción
-    if any(abs(float(p) - session.current_cost) > 1.0 for p in prices):
+    if any(abs(float(p) - session.current_cost) > PRICE_EPSILON_MXN for p in prices):
         return text
     for pattern in _PROMO_PATTERNS:
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
@@ -274,7 +274,7 @@ def _filter_ineligible_plans(text: str, user_message: str, session) -> str:
                 # Quitar separadores de miles (coma o punto antes de 3 dígitos)
                 raw = re.sub(r'[,.](?=\d{3}(?:\D|$))', '', prices[0])
                 plan_price = float(raw.replace(',', ''))
-                if plan_price < current_cost - 1.0:
+                if plan_price < current_cost - PRICE_EPSILON_MXN:
                     continue  # omitir línea no elegible
         result.append(line)
 
@@ -397,7 +397,7 @@ def _strip_incorrect_cac(
 
     # Verificar activabilidad: precio >= renta actual en la modalidad del cliente
     plan_price = get_price(mentioned_plan, session.subscription_type)
-    if plan_price < session.current_cost - 1.0:
+    if plan_price < session.current_cost - PRICE_EPSILON_MXN:
         return text  # plan genuinamente más barato → CAC es correcto
 
     # Verificar si el cliente pide explícitamente modalidad diferente a la suya
@@ -609,7 +609,7 @@ def run_turn(
             tiene_promo_gb = (
                 session.has_promotion
                 and target.family == "Telcel Libre"
-                and plan_price > session.current_cost + 1.0
+                and plan_price > session.current_cost + PRICE_EPSILON_MXN
             )
         else:
             tiene_promo_gb = False

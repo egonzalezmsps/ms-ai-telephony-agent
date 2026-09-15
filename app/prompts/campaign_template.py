@@ -6,7 +6,7 @@ Replica el comportamiento del proyecto LangGraph original.
 """
 
 from typing import Optional
-from app.catalog.plans import recommend_plan, get_price, get_cashback
+from app.catalog.plans import recommend_plan, get_price, get_cashback, PRICE_EPSILON_MXN
 from app.state.session import SessionState
 
 
@@ -80,7 +80,7 @@ def build_template_params(session: SessionState) -> Optional[dict]:
     cashback = get_cashback(target, session.subscription_type)
     has_promo = bool(session.has_promotion)
 
-    if has_promo and target.gb_promo > target.gb_base and price > session.current_cost + 1.0:
+    if has_promo and target.gb_promo > target.gb_base and price > session.current_cost + PRICE_EPSILON_MXN:
         gb_value = target.gb_promo
     else:
         gb_value = target.gb_base

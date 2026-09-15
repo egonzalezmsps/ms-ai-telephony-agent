@@ -9,7 +9,7 @@ import logging
 import uuid
 from typing import Optional
 
-from app.catalog.plans import find_plan, get_price, get_cashback
+from app.catalog.plans import find_plan, get_price, get_cashback, PRICE_EPSILON_MXN
 from app.integrations.telcel_apis.client import (
     TelcelAPIError,
     call_communication_message,
@@ -79,7 +79,7 @@ def build_summary_template(session) -> str:
         cashback = get_cashback(plan, modality)
         if plan.is_unlimited:
             gb_str = "Ilimitados (PUJ)"
-        elif has_promo and price > session.current_cost + 1.0 and plan.gb_promo > plan.gb_base and plan.family == "Telcel Libre":
+        elif has_promo and price > session.current_cost + PRICE_EPSILON_MXN and plan.gb_promo > plan.gb_base and plan.family == "Telcel Libre":
             extra = plan.gb_promo - plan.gb_base
             gb_str = f"{plan.gb_base:g} GB base + {extra:g} GB de promoción = {plan.gb_promo:g} GB totales"
         else:
@@ -209,7 +209,7 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             plan = find_plan(session.plan_selected)
             if plan:
                 new_price = get_price(plan, session.subscription_type)
-                is_same_price = abs(new_price - session.current_cost) <= 1.0
+                is_same_price = abs(new_price - session.current_cost) <= PRICE_EPSILON_MXN
             else:
                 is_same_price = False
 

@@ -17,6 +17,7 @@ import unicodedata
 from strands import tool
 from app.catalog.plans import (
     CATALOG, find_plan, get_price, get_cashback, recommend_plan, eligible_plans, get_legacy_gb,
+    PRICE_EPSILON_MXN,
 )
 
 
@@ -75,7 +76,7 @@ def make_tools(state):
         modality = state.subscription_type
         price = get_price(plan, modality)
 
-        if price < state.current_cost - 1.0:
+        if price < state.current_cost - PRICE_EPSILON_MXN:
             logger.warning("[TOOL] precio_bajo plan_id='%s' precio=%.0f renta_actual=%.0f phone=%s",
                            plan_id, price, state.current_cost, state.phone_number)
             return (
@@ -146,7 +147,7 @@ def make_tools(state):
             state.has_promotion
             and plan_obj
             and not es_ultra
-            and plan_price > state.current_cost + 1.0
+            and plan_price > state.current_cost + PRICE_EPSILON_MXN
         )
         if tiene_promo_gb:
             msg_promocion = (
@@ -355,7 +356,7 @@ def make_tools(state):
             price = get_price(plan, modality)
             if plan.is_unlimited:
                 return "Datos ilimitados (PUJ)"
-            if (has_promo and price > current_cost + 1.0
+            if (has_promo and price > current_cost + PRICE_EPSILON_MXN
                     and plan.gb_promo > plan.gb_base
                     and plan.family == "Telcel Libre"):
                 extra = plan.gb_promo - plan.gb_base
@@ -468,7 +469,7 @@ def make_tools(state):
             }, ensure_ascii=False)
 
         elif tipo == "mas_barato":
-            cheaper = [p for p in CATALOG if get_price(p, modality) < current_cost - 1.0]
+            cheaper = [p for p in CATALOG if get_price(p, modality) < current_cost - PRICE_EPSILON_MXN]
             if not cheaper:
                 return (
                     f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
@@ -491,7 +492,7 @@ def make_tools(state):
                 rec_price = get_price(anclado_obj, modality)
                 rec_gb = (
                     anclado_obj.gb_promo
-                    if (has_promo and anclado_obj.gb_promo > anclado_obj.gb_base and rec_price > current_cost + 1.0)
+                    if (has_promo and anclado_obj.gb_promo > anclado_obj.gb_base and rec_price > current_cost + PRICE_EPSILON_MXN)
                     else anclado_obj.gb_base
                 )
                 diferencia_precio = rec_price - current_cost
@@ -501,7 +502,7 @@ def make_tools(state):
                     diferencia_vs_actual = rec_gb - current_gb
                     if diferencia_vs_actual <= 0:
                         cierre = f"¿Le gustaría activar el *{plan_rec}*?"
-                    elif abs(rec_price - current_cost) <= 1.0:
+                    elif abs(rec_price - current_cost) <= PRICE_EPSILON_MXN:
                         cierre = (
                             f"Pagando su renta actual de ${current_cost:.0f}/mes, "
                             f"con el *{plan_rec}* que le estamos ofreciendo obtendría {rec_gb:g} GB — "
@@ -691,7 +692,7 @@ def make_tools(state):
                 # Búsqueda por datos ilimitados
                 if any(w in criterio.lower() for w in ["ilimitado", "ilimitados", "sin limite", "sin límite"]):
                     planes_ilimitados = [p for p in CATALOG if p.is_unlimited and
-                                         get_price(p, modality) >= current_cost - 1.0]
+                                         get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN]
                     if planes_ilimitados:
                         plan = planes_ilimitados[0]
                         price = get_price(plan, modality)
@@ -716,7 +717,7 @@ def make_tools(state):
                 return no_plans_found()
 
             price = get_price(plan, modality)
-            es_activable = price >= current_cost - 1.0
+            es_activable = price >= current_cost - PRICE_EPSILON_MXN
 
             if es_activable:
                 state.plan_anclado = f"{plan.plan_id} {modality}"
@@ -748,7 +749,7 @@ def make_tools(state):
             )
 
         elif tipo == "mismo_precio":
-            planes = [p for p in eligible if abs(get_price(p, modality) - current_cost) <= 1.0]
+            planes = [p for p in eligible if abs(get_price(p, modality) - current_cost) <= PRICE_EPSILON_MXN]
             if not planes:
                 plan_rec = state.plan_anclado
                 if plan_rec:
@@ -761,7 +762,7 @@ def make_tools(state):
                     rec_price = get_price(anclado_obj, modality)
                     rec_gb = (
                         anclado_obj.gb_promo
-                        if (has_promo and anclado_obj.gb_promo > anclado_obj.gb_base and rec_price > current_cost + 1.0)
+                        if (has_promo and anclado_obj.gb_promo > anclado_obj.gb_base and rec_price > current_cost + PRICE_EPSILON_MXN)
                         else anclado_obj.gb_base
                     )
                     rec_cashback = get_cashback(anclado_obj, modality)
@@ -925,12 +926,12 @@ def make_tools(state):
         price = get_price(target, modality)
         cashback = get_cashback(target, modality)
 
-        if has_promo and target.gb_promo > target.gb_base and price > current_cost + 1.0:
+        if has_promo and target.gb_promo > target.gb_base and price > current_cost + PRICE_EPSILON_MXN:
             gb_nuevo_str = f"{target.gb_promo:g} GB"
         else:
             gb_nuevo_str = f"{target.gb_base:g} GB"
 
-        if abs(price - current_cost) <= 1.0:
+        if abs(price - current_cost) <= PRICE_EPSILON_MXN:
             precio_contexto = f"manteniendo su renta de ${current_cost:.0f}/mes"
         else:
             precio_contexto = f"a ${price:.0f}/mes"
@@ -1010,7 +1011,7 @@ def make_tools(state):
                 return ""
             precio_anclado = get_price(plan_obj, state.subscription_type)
 
-            if abs(precio_anclado - state.current_cost) <= 1.0:
+            if abs(precio_anclado - state.current_cost) <= PRICE_EPSILON_MXN:
                 return (
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
                     f"Entendemos, {state.first_name}. Este cambio no representa ningún "
@@ -1022,7 +1023,7 @@ def make_tools(state):
             # Hay incremento de precio — resaltar beneficios concretos (GB, cashback)
             has_promo_plan = (
                 bool(state.has_promotion) and plan_obj.gb_promo > plan_obj.gb_base
-                and plan_obj.family == "Telcel Libre" and precio_anclado > state.current_cost + 1.0
+                and plan_obj.family == "Telcel Libre" and precio_anclado > state.current_cost + PRICE_EPSILON_MXN
             )
             new_gb = plan_obj.gb_promo if has_promo_plan else plan_obj.gb_base
             current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
@@ -1175,9 +1176,9 @@ def make_tools(state):
             )
 
         new_price = get_price(plan, modality)
-        es_activable = new_price >= current_cost - 1.0
+        es_activable = new_price >= current_cost - PRICE_EPSILON_MXN
         new_cashback = get_cashback(plan, modality)
-        has_promo_plan = has_promo and plan.gb_promo > plan.gb_base and new_price > current_cost + 1.0
+        has_promo_plan = has_promo and plan.gb_promo > plan.gb_base and new_price > current_cost + PRICE_EPSILON_MXN
         new_gb = plan.gb_promo if has_promo_plan else plan.gb_base
 
         current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
@@ -1198,7 +1199,7 @@ def make_tools(state):
             lineas.append(f"📶 Datos: {new_gb:g} GB incluidos.")
 
         diferencia_precio = new_price - current_cost
-        if abs(diferencia_precio) <= 1.0:
+        if abs(diferencia_precio) <= PRICE_EPSILON_MXN:
             lineas.append(f"💰 Precio: mantiene su renta de ${current_cost:.0f}/mes.")
 
         if new_cashback > 0 and current_cashback == 0:

@@ -8,7 +8,7 @@ Espejo de docs/catalog/plans.md.
 from dataclasses import dataclass
 from typing import List, Optional
 
-PRICE_TOLERANCE_MXN = 1.0
+PRICE_EPSILON_MXN = 0.005  # margen puramente técnico (medio centavo) para errores de precisión float — NO es tolerancia de negocio
 PROMO_VIGENCIA = "30/05/2026"
 PROMO_TERM_MONTHS = 24
 
@@ -79,15 +79,15 @@ def get_cashback(plan: Plan, modality: str) -> float:
 
 
 def eligible_plans(current_cost: float, modality: str) -> List[Plan]:
-    """Planes con precio >= renta actual (tolerancia $1)."""
-    return [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_TOLERANCE_MXN]
+    """Planes con precio >= renta actual (sin tolerancia de negocio)."""
+    return [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN]
 
 
 def recommend_plan(current_cost: float, modality: str) -> Optional[Plan]:
     """Plan con precio más cercano por encima de la renta actual.
     En empate de precio, Telcel Libre tiene prioridad sobre Telcel Ultra.
     """
-    eligible = [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_TOLERANCE_MXN]
+    eligible = [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN]
     if not eligible:
         return None
     return min(eligible, key=lambda p: (get_price(p, modality), 0 if p.family == "Telcel Libre" else 1))

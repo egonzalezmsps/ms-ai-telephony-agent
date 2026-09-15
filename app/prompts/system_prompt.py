@@ -8,14 +8,14 @@ Combina las reglas generales + contexto del cliente + catálogo de planes.
 from app.prompts.general_rules import GENERAL_RULES
 from app.catalog.plans import (
     CATALOG, recommend_plan,
-    get_price, get_cashback, get_legacy_gb,
+    get_price, get_cashback, get_legacy_gb, PRICE_EPSILON_MXN,
 )
 
 
 def _gb_str(plan, has_promo: bool, price: float, current_cost: float) -> str:
     if plan.is_unlimited:
         return "Ilimitados (PUJ)"
-    plan_has_promo = has_promo and price > current_cost + 1.0
+    plan_has_promo = has_promo and price > current_cost + PRICE_EPSILON_MXN
     if plan_has_promo and plan.gb_promo > plan.gb_base and plan.family == "Telcel Libre":
         extra = plan.gb_promo - plan.gb_base
         return f"{plan.gb_base:g}+{extra:g} promo={plan.gb_promo:g} GB"
@@ -54,8 +54,8 @@ def build_catalog_block(session) -> str:
     table_header_canal = "Plan | Precio | GB | Cashback | Canal\n-----|--------|----|---------|---------"
     table_header_plain = "Plan | Precio | GB | Cashback\n-----|--------|----|---------"
 
-    activable = [p for p in CATALOG if get_price(p, modality) >= current_cost - 1.0]
-    informative = [p for p in CATALOG if get_price(p, modality) < current_cost - 1.0]
+    activable = [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN]
+    informative = [p for p in CATALOG if get_price(p, modality) < current_cost - PRICE_EPSILON_MXN]
 
     lines = [header, ""]
 
@@ -89,7 +89,7 @@ def build_catalog_block(session) -> str:
         )
 
     if has_promo and any(
-        p.family == "Telcel Libre" and get_price(p, modality) > current_cost + 1.0
+        p.family == "Telcel Libre" and get_price(p, modality) > current_cost + PRICE_EPSILON_MXN
         for p in activable
     ):
         lines.append(f"\nNota: GB de promoción por 24 meses desde la activación.")
@@ -98,7 +98,7 @@ def build_catalog_block(session) -> str:
     alt_activable = [
         (plan, get_price(plan, alt_modality))
         for plan in CATALOG
-        if get_price(plan, alt_modality) >= current_cost - 1.0
+        if get_price(plan, alt_modality) >= current_cost - PRICE_EPSILON_MXN
     ]
 
     lines.append("")
@@ -132,7 +132,7 @@ def build_system_prompt(session) -> str:
         cashback = get_cashback(target, session.subscription_type)
         has_promo = session.has_promotion
 
-        if has_promo and target.gb_promo > target.gb_base and price > session.current_cost + 1.0:
+        if has_promo and target.gb_promo > target.gb_base and price > session.current_cost + PRICE_EPSILON_MXN:
             gb_label = f"{target.gb_promo:g} GB totales"
         else:
             gb_label = f"{target.gb_base:g} GB"
@@ -144,7 +144,7 @@ Precio: ${price:.0f}/mes
 GB: {gb_label}
 Cashback: ${cashback:.2f}/mes
 {"[INSTRUCCIÓN INTERNA: Este plan NO tiene promoción de GB adicionales. NO menciones promoción, GB extra ni +50%. Solo menciona los GB base del plan.]"
- if abs(price - session.current_cost) <= 1.0 or target.family != "Telcel Libre"
+ if abs(price - session.current_cost) <= PRICE_EPSILON_MXN or target.family != "Telcel Libre"
  else "Promoción activa: +50% GB durante 24 meses desde la activación."}
 
 Este es el plan base de tu recomendación.
@@ -198,7 +198,7 @@ Estas son las razones exactas por las que se le ofrece este plan a este cliente.
      + f"{session.current_cost:.0f}"
      + "/mes). La promoción aplica en planes de migración hacia arriba. Si el plan tuviera "
      + "el mismo precio que su renta actual, no tendría GB adicionales de promoción.")
-    if target and get_price(target, session.subscription_type) > session.current_cost + 1.0
+    if target and get_price(target, session.subscription_type) > session.current_cost + PRICE_EPSILON_MXN
     else "El plan recomendado no tiene promoción de GB porque su precio es igual a su renta actual."}
 """
 
