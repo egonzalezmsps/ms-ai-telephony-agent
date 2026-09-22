@@ -7,7 +7,6 @@ import hmac
 import hashlib
 import json
 import logging
-import threading
 from dotenv import load_dotenv
 
 load_dotenv()  # Debe ejecutarse antes de importar módulos que lean os.environ al cargarse
@@ -28,6 +27,7 @@ from app.prompts.campaign_template import build_campaign_message, build_template
 from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template, send_whatsapp_interactive_buttons
 from app.whatsapp.command_handler import handle_command
 from app.router.semantic_router import load_reference_embeddings
+from app.state.redis_client import acquire_phone_lock, release_phone_lock, is_duplicate_message
 
 logger = logging.getLogger(__name__)
 
@@ -45,22 +45,6 @@ except Exception as _e:
     _CAMPAIGN_DB_AVAILABLE = False
 else:
     _CAMPAIGN_DB_ERROR = None
-
-# IDs de mensajes ya procesados — evita duplicados por reintentos de Meta
-_processed_msg_ids: set = set()
-_processed_lock = threading.Lock()
-
-# Un lock por número de teléfono — evita turnos simultáneos del mismo cliente
-_phone_locks: dict = {}
-_phone_locks_mutex = threading.Lock()
-
-
-def _get_phone_lock(phone_number: str) -> threading.Lock:
-    with _phone_locks_mutex:
-        if phone_number not in _phone_locks:
-            _phone_locks[phone_number] = threading.Lock()
-        return _phone_locks[phone_number]
-
 
 def _to_linea(phone_number: str) -> str:
     """Strip country/mobile prefix to get 10-digit Mexican linea as stored in DB."""
@@ -447,8 +431,8 @@ def verify_webhook(
 
 def _process_whatsapp_message(phone_number: str, message_text: str, sender_name: str):
     """Procesa el mensaje en segundo plano para no bloquear el webhook."""
-    lock = _get_phone_lock(phone_number)
-    if not lock.acquire(blocking=False):
+    token = acquire_phone_lock(phone_number)
+    if token is None:
         logger.warning(f"WA SKIP | {phone_number} — turno en proceso, mensaje descartado")
         return
     try:
@@ -530,7 +514,7 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
     except Exception as e:
         logger.error(f"Error procesando mensaje de {phone_number}: {e}", exc_info=True)
     finally:
-        lock.release()
+        release_phone_lock(phone_number, token)
 
 
 @app.post("/webhook")
@@ -586,14 +570,8 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
 
         # Deduplicación: ignorar reintentos de Meta con el mismo ID de mensaje
         msg_id = msg.get("id", "")
-        if msg_id:
-            with _processed_lock:
-                if msg_id in _processed_msg_ids:
-                    return {"status": "ok"}
-                _processed_msg_ids.add(msg_id)
-                # Limitar el tamaño del cache en memoria
-                if len(_processed_msg_ids) > 500:
-                    _processed_msg_ids.clear()
+        if msg_id and is_duplicate_message(msg_id):
+            return {"status": "ok"}
 
         phone_number = msg["from"]
 
