@@ -19,19 +19,24 @@ Comandos:
     /exit          — salir
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from app.tools.prospect_loader import load_prospects, build_session_from_row, get_prospect_list_text
-from app.whatsapp.sender import send_whatsapp_template
+from app.prompts.campaign_template import build_campaign_message, build_template_params
 from app.state.persistence import save_session
 from app.state.serializer import session_to_dict
-from app.prompts.campaign_template import build_template_params, build_campaign_message
+from app.tools.prospect_loader import (
+    build_session_from_row,
+    get_prospect_list_text,
+    load_prospects,
+)
+from app.whatsapp.sender import send_whatsapp_template
 
 
 def _send(session) -> dict:
@@ -54,6 +59,7 @@ def _send(session) -> dict:
         sent_template = True
     else:
         from app.whatsapp.sender import send_whatsapp_message
+
         send_whatsapp_message(session.phone_number, campaign_msg)
 
     # Guardar sesión bajo wa_id canónico para que el webhook del pod la encuentre
@@ -74,7 +80,10 @@ def _send(session) -> dict:
 def _print_profile(session, idx: int):
     print(f"\n  #{idx}  {session.full_name}")
     print(f"  Línea:  {session.phone_number}")
-    print(f"  Plan:   {session.current_plan_name}  ${session.current_cost:.0f}/mes  ({session.subscription_type})")
+    print(
+        f"  Plan:   {session.current_plan_name}  ${session.current_cost:.0f}/mes  "
+        f"({session.subscription_type})"
+    )
     print(f"  Uso:    {session.usage_summary}")
 
 
@@ -84,9 +93,9 @@ def _send_and_report(session, idx: int):
     print(f"\n→ Enviando a {name} ({phone})...", end=" ", flush=True)
     try:
         result = _send(session)
-        wa_id    = result.get("wa_id", "?")
+        wa_id = result.get("wa_id", "?")
         template = result.get("template_name") or "texto plano"
-        status   = "✅ template" if result.get("sent_template") else "📄 texto plano"
+        status = "✅ template" if result.get("sent_template") else "📄 texto plano"
         print(f"{status} | wa_id={wa_id} | plantilla={template}")
     except Exception as e:
         print(f"❌ Error — {e}")
@@ -94,7 +103,7 @@ def _send_and_report(session, idx: int):
 
 def main():
     prospects = load_prospects()
-    print(f"\nReniAgent — Envío de campaña (directo)")
+    print("\nReniAgent — Envío de campaña (directo)")
     print(f"BD: {os.environ.get('DATABASE_URL', 'no configurada')[:50]}...")
     print(f"Clientes en CSV: {len(prospects)}")
     print("Escribe /help para ver los comandos.\n")
@@ -138,7 +147,11 @@ def main():
             arg = cmd.split(maxsplit=1)[1].strip()
 
             if arg == "all":
-                confirm = input(f"¿Enviar a los {len(prospects)} clientes? (s/N): ").strip().lower()
+                confirm = (
+                    input(f"¿Enviar a los {len(prospects)} clientes? (s/N): ")
+                    .strip()
+                    .lower()
+                )
                 if confirm != "s":
                     print("Cancelado.")
                     continue

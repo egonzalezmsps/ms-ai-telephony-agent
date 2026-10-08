@@ -1,8 +1,10 @@
 """
 whatsapp/sender.py — Envío de mensajes via Meta Cloud API.
 """
-import os
+
 import logging
+import os
+
 import requests
 
 logger = logging.getLogger(__name__)
@@ -39,12 +41,15 @@ def send_whatsapp_message(to: str, message: str) -> dict:
         "type": "text",
         "text": {"body": message},
     }
-    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT)
+    resp = requests.post(
+        _build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT
+    )
     resp.raise_for_status()
     return resp.json()
 
 
 _TEMPLATE_LANGUAGE = os.environ.get("TEMPLATE_LANGUAGE", "es_MX")
+
 
 def send_whatsapp_template(
     to: str,
@@ -75,7 +80,9 @@ def send_whatsapp_template(
         },
     }
 
-    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT)
+    resp = requests.post(
+        _build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT
+    )
     if not resp.ok:
         logger.error(f"WhatsApp template error {resp.status_code}: {resp.text}")
         raise requests.HTTPError(f"{resp.status_code} — {resp.text}", response=resp)
@@ -87,7 +94,8 @@ def send_whatsapp_interactive_buttons(to: str, body_text: str, buttons: list) ->
     Envía un mensaje interactivo con botones de respuesta rápida.
 
     buttons: lista de dicts con keys 'id' y 'title'. Máximo 3 botones.
-    Ejemplo: [{"id": "ACEPTO", "title": "✅ Acepto"}, {"id": "NO", "title": "❌ Cancelar"}]
+    Ejemplo:
+        [{"id": "ACEPTO", "title": "✅ Acepto"}, {"id": "NO", "title": "❌ Cancelar"}]
     """
     payload = {
         "messaging_product": "whatsapp",
@@ -103,13 +111,15 @@ def send_whatsapp_interactive_buttons(to: str, body_text: str, buttons: list) ->
                         "reply": {
                             "id": btn["id"],
                             "title": btn["title"][:20],
-                        }
+                        },
                     }
                     for btn in buttons[:3]
                 ]
-            }
-        }
+            },
+        },
     }
-    resp = requests.post(_build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT)
+    resp = requests.post(
+        _build_url(), json=payload, headers=_build_headers(), timeout=_REQUEST_TIMEOUT
+    )
     resp.raise_for_status()
     return resp.json()

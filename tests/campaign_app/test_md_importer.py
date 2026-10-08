@@ -1,6 +1,5 @@
 from components.md_importer import parse_faq_md
 
-
 # ── Formato simple ────────────────────────────────────────────────────────────
 
 MD_SAMPLE = """
@@ -80,6 +79,7 @@ Solo mencionar esto si el cliente lo pregunta.
 
 # ── Tests: formato simple (regresión) ─────────────────────────────────────────
 
+
 def test_parse_basic_sections():
     items = parse_faq_md(MD_SAMPLE)
     assert len(items) == 3
@@ -135,6 +135,7 @@ def test_heading_only_no_questions_returns_empty():
 
 
 # ── Tests: formato FAQ ────────────────────────────────────────────────────────
+
 
 def test_faq_format_extracts_two_items():
     items = parse_faq_md(MD_FAQ_FORMAT)

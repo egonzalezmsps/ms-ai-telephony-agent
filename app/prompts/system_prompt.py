@@ -5,24 +5,34 @@ Construye el system prompt completo para cada turno.
 Combina las reglas generales + contexto del cliente + catálogo de planes.
 """
 
-from app.prompts.general_rules import GENERAL_RULES
 from app.catalog.plans import (
-    CATALOG, recommend_plan,
-    get_price, get_cashback, get_legacy_gb, PRICE_EPSILON_MXN,
+    CATALOG,
+    PRICE_EPSILON_MXN,
+    get_cashback,
+    get_legacy_gb,
+    get_price,
+    recommend_plan,
 )
+from app.prompts.general_rules import GENERAL_RULES
 
 
 def _gb_str(plan, has_promo: bool, price: float, current_cost: float) -> str:
     if plan.is_unlimited:
         return "Ilimitados (PUJ)"
     plan_has_promo = has_promo and price > current_cost + PRICE_EPSILON_MXN
-    if plan_has_promo and plan.gb_promo > plan.gb_base and plan.family == "Telcel Libre":
+    if (
+        plan_has_promo
+        and plan.gb_promo > plan.gb_base
+        and plan.family == "Telcel Libre"
+    ):
         extra = plan.gb_promo - plan.gb_base
         return f"{plan.gb_base:g}+{extra:g} promo={plan.gb_promo:g} GB"
     return f"{plan.gb_base:g} GB"
 
 
-def _table_row(plan_name: str, price: float, gb: str, cashback: float, canal: str = "") -> str:
+def _table_row(
+    plan_name: str, price: float, gb: str, cashback: float, canal: str = ""
+) -> str:
     cashback_str = f"${cashback:.2f}/mes" if cashback > 0 else "—"
     row = f"{plan_name} | ${price:.0f}/mes | {gb} | {cashback_str}"
     if canal:
@@ -51,18 +61,26 @@ def build_catalog_block(session) -> str:
         f"explícitamente lo contrario."
     )
 
-    table_header_canal = "Plan | Precio | GB | Cashback | Canal\n-----|--------|----|---------|---------"
+    table_header_canal = (
+        "Plan | Precio | GB | Cashback | Canal\n-----|--------|----|---------|---------"
+    )
     table_header_plain = "Plan | Precio | GB | Cashback\n-----|--------|----|---------"
 
-    activable = [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN]
-    informative = [p for p in CATALOG if get_price(p, modality) < current_cost - PRICE_EPSILON_MXN]
+    activable = [
+        p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN
+    ]
+    informative = [
+        p for p in CATALOG if get_price(p, modality) < current_cost - PRICE_EPSILON_MXN
+    ]
 
     lines = [header, ""]
 
     lines.append(
-        f"PLANES ACTIVABLES EN ESTE CANAL — MODALIDAD {modality} (precio >= ${current_cost:.0f}/mes):\n"
+        f"PLANES ACTIVABLES EN ESTE CANAL — MODALIDAD {modality} "
+        f"(precio >= ${current_cost:.0f}/mes):\n"
         f"Todos se activan directamente en esta conversación. NO requieren CAC.\n"
-        f"CAC solo aplica para cambio de modalidad ({alt_modality}) o planes más baratos."
+        f"CAC solo aplica para cambio de modalidad ({alt_modality}) "
+        f"o planes más baratos."
     )
     lines.append(table_header_canal)
 
@@ -70,7 +88,11 @@ def build_catalog_block(session) -> str:
         price = get_price(plan, modality)
         cashback = get_cashback(plan, modality)
         gb = _gb_str(plan, has_promo, price, current_cost)
-        lines.append(_table_row(f"{plan.plan_id} {modality}", price, gb, cashback, "✅ ESTE CANAL"))
+        lines.append(
+            _table_row(
+                f"{plan.plan_id} {modality}", price, gb, cashback, "✅ ESTE CANAL"
+            )
+        )
 
     if informative:
         cheapest = min(informative, key=lambda p: get_price(p, modality))
@@ -79,20 +101,25 @@ def build_catalog_block(session) -> str:
         cheapest_cashback = get_cashback(cheapest, modality)
         lines.append(
             f"\nPLAN INFORMATIVO MÁS ECONÓMICO "
-            f"(solo mostrar si el cliente pide explícitamente algo más barato):\n"
-            f"{cheapest.plan_id} {modality} | ${cheapest_price:.0f}/mes | {cheapest_gb} "
-            f"| {f'${cheapest_cashback:.2f}/mes' if cheapest_cashback > 0 else '—'} | ⛔ Soporte/CAC\n"
+            f"(solo mostrar si el cliente pide explícitamente algo más "
+            f"barato):\n"
+            f"{cheapest.plan_id} {modality} | ${cheapest_price:.0f}/mes "
+            f"| {cheapest_gb} "
+            f"| {f'${cheapest_cashback:.2f}/mes' if cheapest_cashback > 0 else '—'} "
+            f"| ⛔ Soporte/CAC\n"
             f"\n"
-            f"TODOS los demás planes más baratos que ${current_cost:.0f}/mes existen pero "
+            f"TODOS los demás planes más baratos que ${current_cost:.0f}/mes existen "
+            f"pero "
             f"NO los menciones — si el cliente los pide, indica que puede consultar en "
             f"Soporte 800 220 9518."
         )
 
     if has_promo and any(
-        p.family == "Telcel Libre" and get_price(p, modality) > current_cost + PRICE_EPSILON_MXN
+        p.family == "Telcel Libre"
+        and get_price(p, modality) > current_cost + PRICE_EPSILON_MXN
         for p in activable
     ):
-        lines.append(f"\nNota: GB de promoción por 24 meses desde la activación.")
+        lines.append("\nNota: GB de promoción por 24 meses desde la activación.")
 
     # Modalidad alternativa (todos requieren CAC — sin columna Canal)
     alt_activable = [
@@ -113,15 +140,21 @@ def build_catalog_block(session) -> str:
     for plan, alt_price in alt_activable:
         alt_cashback = get_cashback(plan, alt_modality)
         alt_gb = _gb_str(plan, has_promo, alt_price, current_cost)
-        lines.append(_table_row(f"{plan.plan_id} {alt_modality}", alt_price, alt_gb, alt_cashback))
+        lines.append(
+            _table_row(
+                f"{plan.plan_id} {alt_modality}", alt_price, alt_gb, alt_cashback
+            )
+        )
 
     return "\n".join(lines)
 
 
 def build_system_prompt(session) -> str:
     """
-    Construye el system prompt inyectando el contexto del cliente y el catálogo completo.
-    El catálogo va en el prompt — el agente ya no necesita herramientas para consultar planes.
+    Construye el system prompt inyectando el contexto del cliente y el catálogo \
+completo.
+    El catálogo va en el prompt — el agente ya no necesita herramientas para consultar \
+planes.
     """
 
     # Plan recomendado como contexto de apertura
@@ -132,7 +165,11 @@ def build_system_prompt(session) -> str:
         cashback = get_cashback(target, session.subscription_type)
         has_promo = session.has_promotion
 
-        if has_promo and target.gb_promo > target.gb_base and price > session.current_cost + PRICE_EPSILON_MXN:
+        if (
+            has_promo
+            and target.gb_promo > target.gb_base
+            and price > session.current_cost + PRICE_EPSILON_MXN
+        ):
             gb_label = f"{target.gb_promo:g} GB totales"
         else:
             gb_label = f"{target.gb_base:g} GB"
@@ -143,9 +180,14 @@ Plan: {target.plan_id} {session.subscription_type}
 Precio: ${price:.0f}/mes
 GB: {gb_label}
 Cashback: ${cashback:.2f}/mes
-{"[INSTRUCCIÓN INTERNA: Este plan NO tiene promoción de GB adicionales. NO menciones promoción, GB extra ni +50%. Solo menciona los GB base del plan.]"
- if abs(price - session.current_cost) <= PRICE_EPSILON_MXN or target.family != "Telcel Libre"
- else "Promoción activa: +50% GB durante 24 meses desde la activación."}
+{
+            "[INSTRUCCIÓN INTERNA: Este plan NO tiene promoción de GB adicionales. "
+            "NO menciones promoción, GB extra ni +50%. Solo menciona los GB base "
+            "del plan.]"
+            if abs(price - session.current_cost) <= PRICE_EPSILON_MXN
+            or target.family != "Telcel Libre"
+            else "Promoción activa: +50% GB durante 24 meses desde la activación."
+        }
 
 Este es el plan base de tu recomendación.
 """
@@ -170,9 +212,14 @@ La persona que escribe no es el titular de la línea.
     client_context = f"""
 # CONTEXTO DEL CLIENTE EN ESTA SESIÓN
 Nombre: {session.first_name}
-Plan actual: {session.current_plan_name} {session.subscription_type} — ${session.current_cost:.0f}/mes
+Plan actual: {session.current_plan_name} {session.subscription_type} — \
+${session.current_cost:.0f}/mes
 {gb_line}
-{f"Cashback actual: ${session.current_plan_cashback:.2f}/mes" if session.current_plan_cashback and session.current_plan_cashback > 0 else ""}
+{
+        f"Cashback actual: ${session.current_plan_cashback:.2f}/mes"
+        if session.current_plan_cashback and session.current_plan_cashback > 0
+        else ""
+    }
 Modalidad: {session.subscription_type}
 {f"Perfil de uso: {session.usage_summary}" if session.usage_summary else ""}
 """
@@ -194,12 +241,22 @@ Estas son las razones exactas por las que se le ofrece este plan a este cliente.
    ni apps ilimitadas.
 
 3. PROMOCIÓN DE GB:
-   {("El plan recomendado tiene GB de promoción porque su precio es mayor a su renta actual ($"
-     + f"{session.current_cost:.0f}"
-     + "/mes). La promoción aplica en planes de migración hacia arriba. Si el plan tuviera "
-     + "el mismo precio que su renta actual, no tendría GB adicionales de promoción.")
-    if target and get_price(target, session.subscription_type) > session.current_cost + PRICE_EPSILON_MXN
-    else "El plan recomendado no tiene promoción de GB porque su precio es igual a su renta actual."}
+   {
+        (
+            "El plan recomendado tiene GB de promoción porque su precio es mayor "
+            "a su renta actual ($"
+            + f"{session.current_cost:.0f}"
+            + "/mes). La promoción aplica en planes de migración hacia arriba. "
+            "Si el plan tuviera "
+            + "el mismo precio que su renta actual, no tendría GB adicionales "
+            "de promoción."
+        )
+        if target
+        and get_price(target, session.subscription_type)
+        > session.current_cost + PRICE_EPSILON_MXN
+        else "El plan recomendado no tiene promoción de GB porque su precio es "
+        "igual a su renta actual."
+    }
 """
 
     catalog_block = build_catalog_block(session)

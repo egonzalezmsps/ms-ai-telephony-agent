@@ -1,17 +1,18 @@
-import pytest
 from contextlib import contextmanager
+
+import db.crud as crud
+import pytest
+from db.models import Base, Campana, CampanaCliente, Cliente, Familia, Plan
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from db.models import Base, Familia, Plan, Campana, Cliente, CampanaCliente
-import db.crud as crud
 
 
 @pytest.fixture
 def db_session():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine, expire_on_commit=False)
-    session = Session()
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    session = session_factory()
     yield session
     session.close()
     Base.metadata.drop_all(engine)
@@ -22,6 +23,7 @@ def patch_get_db(db_session, monkeypatch):
     @contextmanager
     def mock_get_db():
         yield db_session
+
     monkeypatch.setattr(crud, "get_db", mock_get_db)
 
 
@@ -64,8 +66,12 @@ def test_link_and_unlink_beneficio_to_familia(db_session):
 
 
 def test_upsert_cliente_updates_on_duplicate(db_session):
-    crud.upsert_cliente({"linea": "5511111111", "nombre": "Roberto", "renta_plan": 229.0})
-    crud.upsert_cliente({"linea": "5511111111", "nombre": "Roberto Updated", "renta_plan": 249.0})
+    crud.upsert_cliente(
+        {"linea": "5511111111", "nombre": "Roberto", "renta_plan": 229.0}
+    )
+    crud.upsert_cliente(
+        {"linea": "5511111111", "nombre": "Roberto Updated", "renta_plan": 249.0}
+    )
     clientes = crud.get_all_clientes()
     assert len(clientes) == 1
     assert clientes[0].nombre == "Roberto Updated"
@@ -85,9 +91,13 @@ def test_create_campana_and_add_plan(db_session):
     db_session.add(familia)
     db_session.flush()
     plan = Plan(
-        familia_id=familia.id, nombre="Libre 1",
-        precio_abierto=249.0, precio_controlado=299.0,
-        gb_base=4.0, tiene_cashback=True, cashback_porcentaje=5.0,
+        familia_id=familia.id,
+        nombre="Libre 1",
+        precio_abierto=249.0,
+        precio_controlado=299.0,
+        gb_base=4.0,
+        tiene_cashback=True,
+        cashback_porcentaje=5.0,
     )
     db_session.add(plan)
     db_session.flush()
@@ -104,10 +114,24 @@ def test_get_campana_clientes_pendientes(db_session):
     c2 = Cliente(linea="222", nombre="B")
     db_session.add_all([campana, c1, c2])
     db_session.flush()
-    db_session.add(CampanaCliente(campana_id=campana.id, linea="111",
-                                   estado_envio="enviado", estado_interaccion="en_conversacion", num_turnos=1))
-    db_session.add(CampanaCliente(campana_id=campana.id, linea="222",
-                                   estado_envio="pendiente", estado_interaccion="pendiente", num_turnos=0))
+    db_session.add(
+        CampanaCliente(
+            campana_id=campana.id,
+            linea="111",
+            estado_envio="enviado",
+            estado_interaccion="en_conversacion",
+            num_turnos=1,
+        )
+    )
+    db_session.add(
+        CampanaCliente(
+            campana_id=campana.id,
+            linea="222",
+            estado_envio="pendiente",
+            estado_interaccion="pendiente",
+            num_turnos=0,
+        )
+    )
     db_session.commit()
     pendientes = crud.get_campana_clientes_pendientes(campana.id)
     assert len(pendientes) == 1

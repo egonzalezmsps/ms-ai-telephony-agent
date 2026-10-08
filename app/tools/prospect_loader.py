@@ -7,18 +7,20 @@ Soporta el comando /select N para pruebas locales.
 
 import csv
 import os
-from typing import List, Optional
+
 from app.state.session import SessionState
 
-
 # Ruta al CSV — relativa a la raíz del proyecto
-CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "Masivo_clientes.csv")
+CSV_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "docs", "Masivo_clientes.csv"
+)
 
 # Mapeo de tiposuscripcion del CSV → modalidad del agente
 MODALITY_MAP = {
     "POSTPAGO": "Abierto",
     "MIXTO": "Controlado",
 }
+
 
 # Mapeo de MB → GB para el consumo promedio
 def _mb_to_gb(mb: float) -> float:
@@ -59,7 +61,7 @@ def _build_usage_summary(row: dict) -> str:
     return ", ".join(parts)
 
 
-def load_prospects() -> List[dict]:
+def load_prospects() -> list[dict]:
     """Carga todos los prospectos del CSV."""
     path = os.path.abspath(CSV_PATH)
     if not os.path.exists(path):
@@ -146,11 +148,11 @@ def get_prospect_list_text() -> str:
         tipo = MODALITY_MAP.get(row.get("tiposuscripcion", ""), "?")
         lines.append(f"  {i:2}. {nombre} — {plan} — ${renta}/mes ({tipo})")
 
-    lines.append(f"\nUsa /select N para cargar el perfil N.")
+    lines.append("\nUsa /select N para cargar el perfil N.")
     return "\n".join(lines)
 
 
-def select_prospect(n: int) -> Optional[SessionState]:
+def select_prospect(n: int) -> SessionState | None:
     """
     Carga el prospecto número N (base 1) del CSV.
     Retorna None si el índice está fuera de rango.

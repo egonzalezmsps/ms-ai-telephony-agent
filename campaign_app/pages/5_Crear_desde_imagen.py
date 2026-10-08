@@ -1,4 +1,6 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import streamlit as st
@@ -8,8 +10,10 @@ st.title("🖼️ Crear campaña desde imagen")
 
 st.info(
     "**Próximamente.**\n\n"
-    "Esta sección permitirá subir una imagen (brief de campaña, flyer, tabla de precios) "
-    "y usar un modelo de visión para extraer automáticamente la información de la campaña: "
+    "Esta sección permitirá subir una imagen (brief de campaña, flyer, tabla de "
+    "precios) "
+    "y usar un modelo de visión para extraer automáticamente la información de la "
+    "campaña: "
     "nombre, planes, vigencia, condiciones y clientes objetivo.\n\n"
     "El resultado generado deberá ser revisado y validado antes de guardarse."
 )

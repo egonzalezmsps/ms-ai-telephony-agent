@@ -25,17 +25,18 @@ Uso:
 Al final imprime el campana_id y el body JSON listo para POST /campaign/dispatch.
 """
 
+import argparse
+import json
 import os
 import sys
-import json
-import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from app.tools.prospect_loader import load_prospects, MODALITY_MAP
+from app.tools.prospect_loader import MODALITY_MAP, load_prospects
 
 DEFAULT_CAMPANA_NOMBRE = "Migracion Telcel Libre"
 
@@ -43,18 +44,22 @@ DEFAULT_CAMPANA_NOMBRE = "Migracion Telcel Libre"
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("nombre_campana", nargs="?", default=DEFAULT_CAMPANA_NOMBRE)
-    parser.add_argument("--linea", help="Solo sembrar este cliente (en vez de todo el CSV)")
+    parser.add_argument(
+        "--linea", help="Solo sembrar este cliente (en vez de todo el CSV)"
+    )
     args = parser.parse_args()
     nombre_campana = args.nombre_campana
 
     from campaign_app.db.database import get_db, get_engine
-    from campaign_app.db.models import Base, Cliente, Campana, CampanaCliente
+    from campaign_app.db.models import Base, Campana, CampanaCliente, Cliente
 
     Base.metadata.create_all(get_engine())
 
     rows = load_prospects()
     if args.linea:
-        rows = [r for r in rows if str(r.get("linea", "")).strip() == args.linea.strip()]
+        rows = [
+            r for r in rows if str(r.get("linea", "")).strip() == args.linea.strip()
+        ]
         if not rows:
             print(f"No se encontró la línea '{args.linea}' en el CSV.")
             return
@@ -86,26 +91,40 @@ def main():
             if cliente:
                 clientes_existentes += 1
             else:
-                modalidad = MODALITY_MAP.get(row.get("tiposuscripcion", "POSTPAGO"), "Abierto")
-                db.add(Cliente(
-                    linea=linea,
-                    nombre=row.get("nombre", "").strip(),
-                    apellidos=row.get("apellidos", "").strip(),
-                    plan_actual_nombre=row.get("plan", "").strip().title(),
-                    tipo_suscripcion=modalidad,
-                    renta_plan=float(row.get("rentaplan") or 0),
-                ))
+                modalidad = MODALITY_MAP.get(
+                    row.get("tiposuscripcion", "POSTPAGO"), "Abierto"
+                )
+                db.add(
+                    Cliente(
+                        linea=linea,
+                        nombre=row.get("nombre", "").strip(),
+                        apellidos=row.get("apellidos", "").strip(),
+                        plan_actual_nombre=row.get("plan", "").strip().title(),
+                        tipo_suscripcion=modalidad,
+                        renta_plan=float(row.get("rentaplan") or 0),
+                    )
+                )
                 clientes_creados += 1
 
-            puente = db.query(CampanaCliente).filter_by(campana_id=campana_id, linea=linea).first()
+            puente = (
+                db.query(CampanaCliente)
+                .filter_by(campana_id=campana_id, linea=linea)
+                .first()
+            )
             if puente:
                 puentes_existentes += 1
             else:
-                db.add(CampanaCliente(campana_id=campana_id, linea=linea, estado_envio="pendiente"))
+                db.add(
+                    CampanaCliente(
+                        campana_id=campana_id, linea=linea, estado_envio="pendiente"
+                    )
+                )
                 puentes_creados += 1
 
     print(f"\nClientes: {clientes_creados} creados, {clientes_existentes} ya existían")
-    print(f"CampanaCliente: {puentes_creados} creados, {puentes_existentes} ya existían")
+    print(
+        f"CampanaCliente: {puentes_creados} creados, {puentes_existentes} ya existían"
+    )
 
     lineas = [str(r.get("linea", "")).strip() for r in rows if r.get("linea")]
     body = {"campana_id": campana_id, "lineas": lineas}

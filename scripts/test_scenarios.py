@@ -13,38 +13,43 @@ Uso:
     python scripts/test_scenarios.py
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.config.logging_config import setup_logging
+
 setup_logging()
 
 from app.router.semantic_router import load_reference_embeddings
+
 load_reference_embeddings()
 
 from app.agent.reni_agent import run_turn
-from app.state.session import SessionState
 from app.prompts.campaign_template import build_campaign_message
+from app.state.session import SessionState
 
 _CONTADOR_TELEFONO = [5000000000]
 
 
-def _nuevo_perfil(nombre: str, plan: str, costo: float, modalidad: str = "Abierto", **extra) -> SessionState:
+def _nuevo_perfil(
+    nombre: str, plan: str, costo: float, modalidad: str = "Abierto", **extra
+) -> SessionState:
     _CONTADOR_TELEFONO[0] += 1
-    kwargs = dict(
-        first_name=nombre,
-        full_name=f"{nombre} Prueba",
-        phone_number=str(_CONTADOR_TELEFONO[0]),
-        current_plan_name=plan,
-        current_cost=costo,
-        subscription_type=modalidad,
-        has_promotion=True,
-    )
+    kwargs = {
+        "first_name": nombre,
+        "full_name": f"{nombre} Prueba",
+        "phone_number": str(_CONTADOR_TELEFONO[0]),
+        "current_plan_name": plan,
+        "current_cost": costo,
+        "subscription_type": modalidad,
+        "has_promotion": True,
+    }
     kwargs.update(extra)
     return SessionState(**kwargs)
 
@@ -64,7 +69,10 @@ def _turno(session: SessionState, history: list, mensaje: str):
 
 
 def _aceptar_y_completar(session: SessionState, history: list):
-    """Envía ACEPTO y, si el flujo pide OTP, responde T12345. Retorna history actualizado."""
+    """Envía ACEPTO y, si el flujo pide OTP, responde T12345.
+
+    Retorna history actualizado.
+    """
     _, history = _turno(session, history, "ACEPTO")
     if session.awaiting_otp:
         _, history = _turno(session, history, "T12345")
@@ -72,6 +80,7 @@ def _aceptar_y_completar(session: SessionState, history: list):
 
 
 # ── Escenarios 1-8: flujo normal (router + LLM) ─────────────────────────────
+
 
 def escenario_1():
     print("\n" + "=" * 70)
@@ -91,7 +100,9 @@ def escenario_2():
     print("=" * 70)
     session = _nuevo_perfil("Beto", "Telcel Plus 8", 899.0)
     history = _iniciar_historial(session)
-    _, history = _turno(session, history, "¿Qué gano si cambio comparado con mi plan actual?")
+    _, history = _turno(
+        session, history, "¿Qué gano si cambio comparado con mi plan actual?"
+    )
     _, history = _turno(session, history, "Sí, actívalo")
     history = _aceptar_y_completar(session, history)
     exito = bool(session.contract_folio) and session.stage == "END"
@@ -108,7 +119,11 @@ def escenario_3():
     _, history = _turno(session, history, "Bueno, va, sí acepto, actívalo")
     history = _aceptar_y_completar(session, history)
     exito = bool(session.contract_folio) and session.stage == "END"
-    return exito, f"folio={session.contract_folio} stage={session.stage} rejection_count={session.rejection_count}"
+    return (
+        exito,
+        f"folio={session.contract_folio} stage={session.stage} "
+        f"rejection_count={session.rejection_count}",
+    )
 
 
 def escenario_4():
@@ -166,11 +181,19 @@ def escenario_7():
     session = _nuevo_perfil("Gaby", "Telcel Max Sin Limite 7000", 799.0)
     history = _iniciar_historial(session)
     respuestas = []
-    for m in ["¿incluye Amazon Prime?", "¿me dan un celular nuevo?", "¿cuál es mi correo registrado?"]:
+    for m in [
+        "¿incluye Amazon Prime?",
+        "¿me dan un celular nuevo?",
+        "¿cuál es mi correo registrado?",
+    ]:
         r, history = _turno(session, history, m)
         respuestas.append(r)
     exito = all(r.strip() for r in respuestas)
-    return exito, f"{len(respuestas)} respuestas, todas no vacías={exito} (revisar manualmente que no ofrezca lo que no aplica)"
+    return (
+        exito,
+        f"{len(respuestas)} respuestas, todas no vacías={exito} (revisar "
+        "manualmente que no ofrezca lo que no aplica)",
+    )
 
 
 def escenario_8():
@@ -185,14 +208,22 @@ def escenario_8():
     _, history = _turno(session, history, "bueno ya, sí acepto, actívalo")
     history = _aceptar_y_completar(session, history)
     exito = bool(session.contract_folio) and session.stage == "END"
-    return exito, f"folio={session.contract_folio} stage={session.stage} rejection_count={session.rejection_count}"
+    return (
+        exito,
+        f"folio={session.contract_folio} stage={session.stage} "
+        f"rejection_count={session.rejection_count}",
+    )
 
 
 # ── Escenarios 9-10: OTP determinista (sin LLM) ─────────────────────────────
 
+
 def _falla_otp_simulada():
-    """TelcelAPIError con el código de negocio que _is_otp_invalid() reconoce como OTP incorrecto."""
+    """TelcelAPIError con el código de negocio que _is_otp_invalid() reconoce
+    como OTP incorrecto.
+    """
     import app.contract.contract_flow as contract_flow
+
     return contract_flow.TelcelAPIError(
         400, {"detailResponse": {"code": "BE_MP_BPS_0040"}}, "OTP inválido (simulado)"
     )
@@ -205,13 +236,21 @@ def escenario_9():
     print("(TELCEL_CREATE_PRODUCT_ORDER_MOCK=true siempre simula éxito, así que")
     print(" se monkeypatchea call_create_product_order para forzar 2 fallas primero)")
     session = _nuevo_perfil(
-        "Irene", "Telcel Max Sin Limite 3000", 449.0,
-        stage="CONTRACT", awaiting_otp=True, otp_sent=True,
-        plan_selected="Telcel Libre 5", process_id_api="MOCK-PROC-9",
+        "Irene",
+        "Telcel Max Sin Limite 3000",
+        449.0,
+        stage="CONTRACT",
+        awaiting_otp=True,
+        otp_sent=True,
+        plan_selected="Telcel Libre 5",
+        process_id_api="MOCK-PROC-9",
     )
-    history = [{"role": "assistant", "content": "Le hemos enviado un código de verificación."}]
+    history = [
+        {"role": "assistant", "content": "Le hemos enviado un código de verificación."}
+    ]
 
     import app.contract.contract_flow as contract_flow
+
     original = contract_flow.call_create_product_order
     intentos = {"n": 0}
 
@@ -229,8 +268,16 @@ def escenario_9():
     finally:
         contract_flow.call_create_product_order = original
 
-    exito = bool(session.contract_folio) and session.stage == "END" and session.otp_attempt_count == 2
-    return exito, f"folio={session.contract_folio} stage={session.stage} intentos={session.otp_attempt_count}"
+    exito = (
+        bool(session.contract_folio)
+        and session.stage == "END"
+        and session.otp_attempt_count == 2
+    )
+    return (
+        exito,
+        f"folio={session.contract_folio} stage={session.stage} "
+        f"intentos={session.otp_attempt_count}",
+    )
 
 
 def escenario_10():
@@ -238,13 +285,21 @@ def escenario_10():
     print("Escenario 10 — OTP fallido 3 veces → bloqueo")
     print("=" * 70)
     session = _nuevo_perfil(
-        "Javier", "Telcel Max Sin Limite 3000", 449.0,
-        stage="CONTRACT", awaiting_otp=True, otp_sent=True,
-        plan_selected="Telcel Libre 5", process_id_api="MOCK-PROC-10",
+        "Javier",
+        "Telcel Max Sin Limite 3000",
+        449.0,
+        stage="CONTRACT",
+        awaiting_otp=True,
+        otp_sent=True,
+        plan_selected="Telcel Libre 5",
+        process_id_api="MOCK-PROC-10",
     )
-    history = [{"role": "assistant", "content": "Le hemos enviado un código de verificación."}]
+    history = [
+        {"role": "assistant", "content": "Le hemos enviado un código de verificación."}
+    ]
 
     import app.contract.contract_flow as contract_flow
+
     original = contract_flow.call_create_product_order
 
     def fake(id_plan, process_id):
@@ -263,7 +318,10 @@ def escenario_10():
         and session.contract_folio is None
         and ("superado" in respuesta.lower() or "soporte" in respuesta.lower())
     )
-    return exito, f"bloqueado={session.authentication_locked} folio={session.contract_folio}"
+    return (
+        exito,
+        f"bloqueado={session.authentication_locked} folio={session.contract_folio}",
+    )
 
 
 ESCENARIOS = [

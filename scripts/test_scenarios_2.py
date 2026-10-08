@@ -18,24 +18,27 @@ Uso:
     python scripts/test_scenarios_2.py
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.config.logging_config import setup_logging
+
 setup_logging()
 
 from app.router.semantic_router import load_reference_embeddings
+
 load_reference_embeddings()
 
-from scripts.test_scenarios import _nuevo_perfil, _iniciar_historial, _turno
-
+from scripts.test_scenarios import _iniciar_historial, _nuevo_perfil, _turno
 
 # ── 1-2: Detecciones pre-LLM deterministas ──────────────────────────────────
+
 
 def escenario_1():
     print("\n" + "=" * 70)
@@ -49,7 +52,11 @@ def escenario_1():
     history = _iniciar_historial(session)
     respuesta, history = _turno(session, history, "no soy el titular, soy su esposa")
     exito = "titular" in respuesta.lower() and session.is_titular is False
-    return exito, f"is_titular={session.is_titular} contiene 'titular'={'titular' in respuesta.lower()}"
+    return (
+        exito,
+        f"is_titular={session.is_titular} contiene "
+        f"'titular'={'titular' in respuesta.lower()}",
+    )
 
 
 def escenario_2():
@@ -60,13 +67,13 @@ def escenario_2():
     history = _iniciar_historial(session)
     respuesta, history = _turno(session, history, "mi nombre es Roberto, no Karla")
     exito = (
-        ("cac" in respuesta.lower() or "centro de atención" in respuesta.lower())
-        and session.nombre_incorrecto is True
-    )
+        "cac" in respuesta.lower() or "centro de atención" in respuesta.lower()
+    ) and session.nombre_incorrecto is True
     return exito, f"nombre_incorrecto={session.nombre_incorrecto} deriva a CAC={exito}"
 
 
 # ── 3: Rechazo hasta el cierre definitivo ───────────────────────────────────
+
 
 def escenario_3():
     print("\n" + "=" * 70)
@@ -75,13 +82,21 @@ def escenario_3():
     session = _nuevo_perfil("Lorena", "Telcel Max Sin Limite 5000", 499.0)
     history = _iniciar_historial(session)
     respuesta = ""
-    for msg in ["no me interesa", "no gracias, de verdad no quiero", "ya dije que no, gracias, no insistas"]:
+    for msg in [
+        "no me interesa",
+        "no gracias, de verdad no quiero",
+        "ya dije que no, gracias, no insistas",
+    ]:
         respuesta, history = _turno(session, history, msg)
     exito = session.rejection_count >= 2 and "cac" in respuesta.lower()
-    return exito, f"rejection_count={session.rejection_count} folio={session.contract_folio}"
+    return (
+        exito,
+        f"rejection_count={session.rejection_count} folio={session.contract_folio}",
+    )
 
 
 # ── 4-7: Intents del router / tools no cubiertos antes ──────────────────────
+
 
 def escenario_4():
     print("\n" + "=" * 70)
@@ -89,8 +104,12 @@ def escenario_4():
     print("=" * 70)
     session = _nuevo_perfil("Miguel", "Telcel Plus 8", 899.0)
     history = _iniciar_historial(session)
-    respuesta, history = _turno(session, history, "¿cuándo empieza el cobro del nuevo plan?")
-    exito = bool(respuesta.strip()) and ("soporte" in respuesta.lower() or "mi telcel" in respuesta.lower())
+    respuesta, history = _turno(
+        session, history, "¿cuándo empieza el cobro del nuevo plan?"
+    )
+    exito = bool(respuesta.strip()) and (
+        "soporte" in respuesta.lower() or "mi telcel" in respuesta.lower()
+    )
     return exito, f"deriva a Soporte/Mi Telcel={exito}"
 
 
@@ -100,7 +119,11 @@ def escenario_5():
     print("=" * 70)
     session = _nuevo_perfil("Nadia", "Telcel Max Sin Limite 6000", 699.0)
     history = _iniciar_historial(session)
-    respuesta, history = _turno(session, history, "¿por qué no puedes activarlo tú mismo? ¿por qué tengo que ir al CAC?")
+    respuesta, history = _turno(
+        session,
+        history,
+        "¿por qué no puedes activarlo tú mismo? ¿por qué tengo que ir al CAC?",
+    )
     exito = bool(respuesta.strip())
     return exito, f"respuesta no vacía={exito}"
 
@@ -109,9 +132,13 @@ def escenario_6():
     print("\n" + "=" * 70)
     print("Escenario 6 — Solicita modalidad distinta (Controlado siendo Abierto)")
     print("=" * 70)
-    session = _nuevo_perfil("Oscar", "Telcel Max Sin Limite 5000", 499.0, modalidad="Abierto")
+    session = _nuevo_perfil(
+        "Oscar", "Telcel Max Sin Limite 5000", 499.0, modalidad="Abierto"
+    )
     history = _iniciar_historial(session)
-    respuesta, history = _turno(session, history, "¿tienes planes en modalidad controlada?")
+    respuesta, history = _turno(
+        session, history, "¿tienes planes en modalidad controlada?"
+    )
     exito = "cac" in respuesta.lower() or "centro de atención" in respuesta.lower()
     return exito, f"deriva a CAC por modalidad={exito}"
 
@@ -122,8 +149,13 @@ def escenario_7():
     print("=" * 70)
     session = _nuevo_perfil("Paty", "Telcel Max Sin Limite 6500", 699.0)
     history = _iniciar_historial(session)
-    respuesta, history = _turno(session, history, "¿cuál es mi plan actual y cuánto pago?")
-    exito = "699" in respuesta or session.current_plan_name.split()[0].lower() in respuesta.lower()
+    respuesta, history = _turno(
+        session, history, "¿cuál es mi plan actual y cuánto pago?"
+    )
+    exito = (
+        "699" in respuesta
+        or session.current_plan_name.split()[0].lower() in respuesta.lower()
+    )
     return exito, f"menciona plan/renta actual={exito}"
 
 
@@ -141,6 +173,7 @@ def escenario_8():
 
 # ── 9: Falla técnica simulada en las APIs de Telcel ─────────────────────────
 
+
 def escenario_9():
     print("\n" + "=" * 70)
     print("Escenario 9 — Falla técnica en create_process (API Telcel caída)")
@@ -150,6 +183,7 @@ def escenario_9():
     _, history = _turno(session, history, "sí, actívalo")
 
     import app.contract.contract_flow as contract_flow
+
     original = contract_flow.call_create_process
 
     def fake(msisdn):
@@ -167,10 +201,15 @@ def escenario_9():
         and session.contract_folio is None
         and ("problema técnico" in respuesta.lower() or "soporte" in respuesta.lower())
     )
-    return exito, f"stage={session.stage} end_reason={session.end_reason} folio={session.contract_folio}"
+    return (
+        exito,
+        f"stage={session.stage} end_reason={session.end_reason} "
+        f"folio={session.contract_folio}",
+    )
 
 
 # ── 10: Mismo precio (sin OTP) vs. precio distinto (con OTP), aislado ───────
+
 
 def escenario_10():
     print("\n" + "=" * 70)
@@ -182,7 +221,11 @@ def escenario_10():
     history_a = _iniciar_historial(session_a)
     _, history_a = _turno(session_a, history_a, "sí, actívalo")
     _, history_a = _turno(session_a, history_a, "ACEPTO")
-    sin_otp_ok = bool(session_a.contract_folio) and session_a.awaiting_otp is False and session_a.stage == "END"
+    sin_otp_ok = (
+        bool(session_a.contract_folio)
+        and session_a.awaiting_otp is False
+        and session_a.stage == "END"
+    )
 
     print("\n-- Cliente B: renta por debajo del plan recomendado --")
     session_b = _nuevo_perfil("Paola", "Telcel Max Sin Limite 1000", 229.0)
@@ -196,7 +239,11 @@ def escenario_10():
         con_otp_ok = bool(session_b.contract_folio) and session_b.stage == "END"
 
     exito = sin_otp_ok and con_otp_ok
-    return exito, f"sin_otp_ok={sin_otp_ok} (folio A={session_a.contract_folio}) con_otp_ok={con_otp_ok} (folio B={session_b.contract_folio})"
+    return (
+        exito,
+        f"sin_otp_ok={sin_otp_ok} (folio A={session_a.contract_folio}) "
+        f"con_otp_ok={con_otp_ok} (folio B={session_b.contract_folio})",
+    )
 
 
 ESCENARIOS = [

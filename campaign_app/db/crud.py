@@ -1,15 +1,24 @@
 from datetime import datetime
-from typing import Optional
+
+from sqlalchemy import func, text
+from sqlalchemy.orm import selectinload
+
 from .database import get_db
 from .models import (
-    Familia, Plan, Beneficio, Servicio, PreguntaFrecuente,
-    Promocion, Campana, CampanaPlan, Cliente, CampanaCliente,
+    Beneficio,
+    Campana,
+    CampanaCliente,
+    CampanaPlan,
+    Cliente,
+    Familia,
+    Plan,
+    PreguntaFrecuente,
+    Promocion,
+    Servicio,
 )
-from sqlalchemy.orm import selectinload
-from sqlalchemy import func, text
-
 
 # ── Familia ───────────────────────────────────────────────────────────────────
+
 
 def get_all_familias():
     with get_db() as db:
@@ -46,6 +55,7 @@ def update_familia(familia_id: int, **kwargs) -> Familia:
 
 # ── Plan ──────────────────────────────────────────────────────────────────────
 
+
 def get_all_planes():
     with get_db() as db:
         return (
@@ -58,18 +68,33 @@ def get_all_planes():
 
 def get_planes_by_familia(familia_id: int):
     with get_db() as db:
-        return db.query(Plan).filter_by(familia_id=familia_id).order_by(Plan.precio_abierto).all()
+        return (
+            db.query(Plan)
+            .filter_by(familia_id=familia_id)
+            .order_by(Plan.precio_abierto)
+            .all()
+        )
 
 
-def create_plan(familia_id: int, nombre: str, precio_abierto: float,
-                precio_controlado: float, gb_base: float,
-                tiene_cashback: bool = False, cashback_porcentaje: float = 0.0) -> Plan:
+def create_plan(
+    familia_id: int,
+    nombre: str,
+    precio_abierto: float,
+    precio_controlado: float,
+    gb_base: float,
+    tiene_cashback: bool = False,
+    cashback_porcentaje: float = 0.0,
+) -> Plan:
     with get_db() as db:
         obj = Plan(
-            familia_id=familia_id, nombre=nombre,
-            precio_abierto=precio_abierto, precio_controlado=precio_controlado,
-            gb_base=gb_base, tiene_cashback=tiene_cashback,
-            cashback_porcentaje=cashback_porcentaje, activo=True,
+            familia_id=familia_id,
+            nombre=nombre,
+            precio_abierto=precio_abierto,
+            precio_controlado=precio_controlado,
+            gb_base=gb_base,
+            tiene_cashback=tiene_cashback,
+            cashback_porcentaje=cashback_porcentaje,
+            activo=True,
         )
         db.add(obj)
         db.flush()
@@ -94,6 +119,7 @@ def toggle_plan_activo(plan_id: int):
 
 
 # ── Beneficio ─────────────────────────────────────────────────────────────────
+
 
 def get_all_beneficios():
     with get_db() as db:
@@ -138,6 +164,7 @@ def toggle_beneficio_activo(beneficio_id: int):
 
 # ── Servicio ──────────────────────────────────────────────────────────────────
 
+
 def get_all_servicios():
     with get_db() as db:
         return (
@@ -148,10 +175,17 @@ def get_all_servicios():
         )
 
 
-def create_servicio(nombre: str, descripcion: str, tipo_acceso: str, detalle: str = "") -> Servicio:
+def create_servicio(
+    nombre: str, descripcion: str, tipo_acceso: str, detalle: str = ""
+) -> Servicio:
     with get_db() as db:
-        obj = Servicio(nombre=nombre, descripcion=descripcion,
-                       tipo_acceso=tipo_acceso, detalle=detalle, activo=True)
+        obj = Servicio(
+            nombre=nombre,
+            descripcion=descripcion,
+            tipo_acceso=tipo_acceso,
+            detalle=detalle,
+            activo=True,
+        )
         db.add(obj)
         db.flush()
         db.refresh(obj)
@@ -182,9 +216,12 @@ def toggle_servicio_activo(servicio_id: int):
 
 # ── PreguntaFrecuente ─────────────────────────────────────────────────────────
 
-def get_all_preguntas(ambito: Optional[str] = None,
-                      beneficio_id: Optional[int] = None,
-                      servicio_id: Optional[int] = None):
+
+def get_all_preguntas(
+    ambito: str | None = None,
+    beneficio_id: int | None = None,
+    servicio_id: int | None = None,
+):
     with get_db() as db:
         q = db.query(PreguntaFrecuente)
         if ambito:
@@ -196,13 +233,21 @@ def get_all_preguntas(ambito: Optional[str] = None,
         return q.order_by(PreguntaFrecuente.id).all()
 
 
-def create_pregunta(pregunta: str, respuesta: str, ambito: str = "general",
-                    beneficio_id: Optional[int] = None,
-                    servicio_id: Optional[int] = None) -> PreguntaFrecuente:
+def create_pregunta(
+    pregunta: str,
+    respuesta: str,
+    ambito: str = "general",
+    beneficio_id: int | None = None,
+    servicio_id: int | None = None,
+) -> PreguntaFrecuente:
     with get_db() as db:
         obj = PreguntaFrecuente(
-            pregunta=pregunta, respuesta=respuesta, ambito=ambito,
-            beneficio_id=beneficio_id, servicio_id=servicio_id, activo=True,
+            pregunta=pregunta,
+            respuesta=respuesta,
+            ambito=ambito,
+            beneficio_id=beneficio_id,
+            servicio_id=servicio_id,
+            activo=True,
         )
         db.add(obj)
         db.flush()
@@ -236,19 +281,29 @@ def delete_pregunta(pregunta_id: int):
 
 # ── Promocion ─────────────────────────────────────────────────────────────────
 
+
 def get_all_promociones():
     with get_db() as db:
         return db.query(Promocion).order_by(Promocion.vigencia_fin.desc()).all()
 
 
-def create_promocion(nombre: str, descripcion: str, vigencia_inicio: datetime,
-                     vigencia_fin: datetime, configuracion: dict = None,
-                     condicion: str = "") -> Promocion:
+def create_promocion(
+    nombre: str,
+    descripcion: str,
+    vigencia_inicio: datetime,
+    vigencia_fin: datetime,
+    configuracion: dict | None = None,
+    condicion: str = "",
+) -> Promocion:
     with get_db() as db:
         obj = Promocion(
-            nombre=nombre, descripcion=descripcion,
-            vigencia_inicio=vigencia_inicio, vigencia_fin=vigencia_fin,
-            configuracion=configuracion, condicion=condicion, activo=True,
+            nombre=nombre,
+            descripcion=descripcion,
+            vigencia_inicio=vigencia_inicio,
+            vigencia_fin=vigencia_fin,
+            configuracion=configuracion,
+            condicion=condicion,
+            activo=True,
         )
         db.add(obj)
         db.flush()
@@ -281,18 +336,24 @@ def delete_promocion(promocion_id: int):
 
 # ── Campana ───────────────────────────────────────────────────────────────────
 
+
 def get_all_campanas():
     with get_db() as db:
         return db.query(Campana).order_by(Campana.creado_en.desc()).all()
 
 
-def create_campana(nombre: str, descripcion: str = "",
-                   vigencia_inicio: Optional[datetime] = None,
-                   vigencia_fin: Optional[datetime] = None) -> Campana:
+def create_campana(
+    nombre: str,
+    descripcion: str = "",
+    vigencia_inicio: datetime | None = None,
+    vigencia_fin: datetime | None = None,
+) -> Campana:
     with get_db() as db:
         obj = Campana(
-            nombre=nombre, descripcion=descripcion,
-            vigencia_inicio=vigencia_inicio, vigencia_fin=vigencia_fin,
+            nombre=nombre,
+            descripcion=descripcion,
+            vigencia_inicio=vigencia_inicio,
+            vigencia_fin=vigencia_fin,
             estado="borrador",
         )
         db.add(obj)
@@ -324,26 +385,36 @@ def get_campana_planes(campana_id: int):
     with get_db() as db:
         return (
             db.query(CampanaPlan)
-            .options(selectinload(CampanaPlan.plan), selectinload(CampanaPlan.promocion))
+            .options(
+                selectinload(CampanaPlan.plan), selectinload(CampanaPlan.promocion)
+            )
             .filter_by(campana_id=campana_id)
             .all()
         )
 
 
-def add_plan_to_campana(campana_id: int, plan_id: int,
-                        promocion_id: Optional[int] = None):
+def add_plan_to_campana(campana_id: int, plan_id: int, promocion_id: int | None = None):
     with get_db() as db:
-        existing = db.query(CampanaPlan).filter_by(
-            campana_id=campana_id, plan_id=plan_id).first()
+        existing = (
+            db.query(CampanaPlan)
+            .filter_by(campana_id=campana_id, plan_id=plan_id)
+            .first()
+        )
         if not existing:
-            db.add(CampanaPlan(campana_id=campana_id, plan_id=plan_id,
-                               promocion_id=promocion_id))
+            db.add(
+                CampanaPlan(
+                    campana_id=campana_id, plan_id=plan_id, promocion_id=promocion_id
+                )
+            )
 
 
 def remove_plan_from_campana(campana_id: int, plan_id: int):
     with get_db() as db:
-        obj = db.query(CampanaPlan).filter_by(
-            campana_id=campana_id, plan_id=plan_id).first()
+        obj = (
+            db.query(CampanaPlan)
+            .filter_by(campana_id=campana_id, plan_id=plan_id)
+            .first()
+        )
         if obj:
             db.delete(obj)
 
@@ -352,42 +423,51 @@ def remove_plan_from_campana(campana_id: int, plan_id: int):
 
 # El CSV de Telcel usa nombres de columna distintos al modelo de BD.
 CSV_COL_MAP = {
-    "lineaapi":                          "lineaApi",
-    "plan":                              "plan_actual_nombre",
-    "tiposuscripcion":                   "tipo_suscripcion",
-    "rentaplan":                         "renta_plan",
-    "facturacion_promedio_3meses":       "facturacion_promedio",
-    "conmbtotal_promedio_3meses":        "consumo_mb_total_prom",
-    "conmbwhatsapp_prom3meses":          "consumo_mb_whatsapp_prom",
-    "conmbredsoc_prom3meses":            "consumo_mb_redes_prom",
-    "conmbyoutube_prom3meses":           "consumo_mb_youtube_prom",
-    "conmbuber_prom3meses":              "consumo_mb_uber_prom",
-    "conmbinstagr_prom3meses":           "consumo_mb_instagram_prom",
-    "conmbotros_prom3meses":             "consumo_mb_otros_prom",
-    "totalmb_nacexcedentes_prom3meses":  "excedentes_nac_mb_prom",
-    "totalmb_intexcedentes_prom3meses":  "excedentes_int_mb_prom",
+    "lineaapi": "lineaApi",
+    "plan": "plan_actual_nombre",
+    "tiposuscripcion": "tipo_suscripcion",
+    "rentaplan": "renta_plan",
+    "facturacion_promedio_3meses": "facturacion_promedio",
+    "conmbtotal_promedio_3meses": "consumo_mb_total_prom",
+    "conmbwhatsapp_prom3meses": "consumo_mb_whatsapp_prom",
+    "conmbredsoc_prom3meses": "consumo_mb_redes_prom",
+    "conmbyoutube_prom3meses": "consumo_mb_youtube_prom",
+    "conmbuber_prom3meses": "consumo_mb_uber_prom",
+    "conmbinstagr_prom3meses": "consumo_mb_instagram_prom",
+    "conmbotros_prom3meses": "consumo_mb_otros_prom",
+    "totalmb_nacexcedentes_prom3meses": "excedentes_nac_mb_prom",
+    "totalmb_intexcedentes_prom3meses": "excedentes_int_mb_prom",
     "total_ingresos_nacexce_prom3meses": "ingresos_exc_nac_prom",
-    "total_ingresos_intcexce_prom3meses":"ingresos_exc_int_prom",
+    "total_ingresos_intcexce_prom3meses": "ingresos_exc_int_prom",
 }
 
 SUSCRIPCION_MAP = {
     "POSTPAGO": "Abierto",
-    "MIXTO":    "Controlado",
+    "MIXTO": "Controlado",
 }
 
 _NUMERIC_CLIENTE_FIELDS = {
-    "renta_plan", "facturacion_promedio",
-    "consumo_mb_total_prom", "consumo_mb_whatsapp_prom",
-    "consumo_mb_redes_prom", "consumo_mb_youtube_prom",
-    "consumo_mb_uber_prom", "consumo_mb_instagram_prom",
-    "consumo_mb_otros_prom", "excedentes_nac_mb_prom",
-    "excedentes_int_mb_prom", "ingresos_exc_nac_prom",
+    "renta_plan",
+    "facturacion_promedio",
+    "consumo_mb_total_prom",
+    "consumo_mb_whatsapp_prom",
+    "consumo_mb_redes_prom",
+    "consumo_mb_youtube_prom",
+    "consumo_mb_uber_prom",
+    "consumo_mb_instagram_prom",
+    "consumo_mb_otros_prom",
+    "excedentes_nac_mb_prom",
+    "excedentes_int_mb_prom",
+    "ingresos_exc_nac_prom",
     "ingresos_exc_int_prom",
 }
 
 
 def normalize_cliente_csv_row(row: dict, valid_cols: set) -> dict:
-    """Rename CSV columns to model names, map subscription values, keep only valid cols."""
+    """Rename CSV columns to model names, map subscription values.
+
+    Keeps only valid cols.
+    """
     renamed = {}
     for k, v in row.items():
         model_key = CSV_COL_MAP.get(k.lower(), k)
@@ -404,7 +484,8 @@ def import_clientes_csv(rows: list) -> dict:
     Si el CSV trae columna 'orden', se respeta tal cual (permite reordenar clientes
     existentes). Si no la trae, a los clientes NUEVOS se les asigna el siguiente
     orden disponible; los existentes conservan el suyo sin tocarlo.
-    Retorna {"imported": [lineas...], "skipped": [{"row": i, "reason": "..."}], "total": N}."""
+    Retorna {"imported": [lineas...], "skipped": [{"row": i, "reason": "..."}],
+    "total": N}."""
     # Cliente.__mapper__.columns está keyed por el nombre de atributo Python
     # (ej. "linea_api"), no por el nombre real en la BD (Cliente.__table__.columns
     # usa "lineaApi" para esa columna) — Cliente(**data) requiere el nombre de atributo.
@@ -431,9 +512,14 @@ def import_clientes_csv(rows: list) -> dict:
 
     with get_db() as db:
         lineas = [d["linea"] for d in cleaned]
-        existentes = {
-            r[0] for r in db.query(Cliente.linea).filter(Cliente.linea.in_(lineas)).all()
-        } if lineas else set()
+        existentes = (
+            {
+                r[0]
+                for r in db.query(Cliente.linea).filter(Cliente.linea.in_(lineas)).all()
+            }
+            if lineas
+            else set()
+        )
         siguiente_orden = (db.query(func.max(Cliente.orden)).scalar() or 0) + 1
         for data in cleaned:
             if "orden" not in data and data["linea"] not in existentes:
@@ -485,10 +571,13 @@ def _ensure_column(db, column_name: str, ddl_type: str, quoted: bool = False) ->
     quoted=True preserva mayúsculas/minúsculas exactas del nombre (columnas creadas
     con comillas, ej. "lineaApi") — sin comillas, Postgres pliega el identificador
     a minúsculas y quedaría desalineado con el nombre real de la BD productiva."""
-    existe = db.execute(text(
-        "SELECT 1 FROM information_schema.columns "
-        "WHERE table_name = 'clientes' AND column_name = :col"
-    ), {"col": column_name}).scalar()
+    existe = db.execute(
+        text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'clientes' AND column_name = :col"
+        ),
+        {"col": column_name},
+    ).scalar()
     if not existe:
         ddl_name = f'"{column_name}"' if quoted else column_name
         db.execute(text(f"ALTER TABLE clientes ADD COLUMN {ddl_name} {ddl_type}"))
@@ -554,8 +643,9 @@ def ensure_linea_api_column() -> dict:
 
 
 def actualizar_plan_cliente(linea: str, plan_nuevo: str) -> None:
-    """Guarda el plan nuevo en 'clientes.plan_seleccionado' tras un cambio de plan exitoso.
-    No toca 'plan_actual_nombre', que conserva el plan original con el que se importó el cliente."""
+    """Guarda el plan nuevo en 'clientes.plan_seleccionado' tras un cambio de plan
+    exitoso. No toca 'plan_actual_nombre', que conserva el plan original con el que
+    se importó el cliente."""
     with get_db() as db:
         cliente = db.query(Cliente).filter_by(linea=linea).first()
         if cliente:
@@ -582,6 +672,7 @@ def delete_all_clientes() -> dict:
 
 
 # ── CampanaCliente ────────────────────────────────────────────────────────────
+
 
 def get_campana_clientes(campana_id: int):
     with get_db() as db:
@@ -622,20 +713,30 @@ def get_campana_clientes_pendientes(campana_id: int):
 def add_clientes_to_campana(campana_id: int, lineas: list):
     with get_db() as db:
         for linea in lineas:
-            existing = db.query(CampanaCliente).filter_by(
-                campana_id=campana_id, linea=linea).first()
+            existing = (
+                db.query(CampanaCliente)
+                .filter_by(campana_id=campana_id, linea=linea)
+                .first()
+            )
             if not existing:
-                db.add(CampanaCliente(
-                    campana_id=campana_id, linea=linea,
-                    estado_envio="pendiente", estado_interaccion="pendiente",
-                    num_turnos=0,
-                ))
+                db.add(
+                    CampanaCliente(
+                        campana_id=campana_id,
+                        linea=linea,
+                        estado_envio="pendiente",
+                        estado_interaccion="pendiente",
+                        num_turnos=0,
+                    )
+                )
 
 
 def mark_enviado(campana_id: int, linea: str):
     with get_db() as db:
-        obj = db.query(CampanaCliente).filter_by(
-            campana_id=campana_id, linea=linea).first()
+        obj = (
+            db.query(CampanaCliente)
+            .filter_by(campana_id=campana_id, linea=linea)
+            .first()
+        )
         if obj:
             obj.estado_envio = "enviado"
             obj.fecha_envio = datetime.utcnow()
@@ -643,19 +744,29 @@ def mark_enviado(campana_id: int, linea: str):
 
 def mark_fallido(campana_id: int, linea: str):
     with get_db() as db:
-        obj = db.query(CampanaCliente).filter_by(
-            campana_id=campana_id, linea=linea).first()
+        obj = (
+            db.query(CampanaCliente)
+            .filter_by(campana_id=campana_id, linea=linea)
+            .first()
+        )
         if obj:
             obj.estado_envio = "fallido"
 
 
-def update_interaction(campana_id: int, linea: str, num_turnos: int,
-                       estado_interaccion: str,
-                       plan_seleccionado: Optional[str] = None,
-                       folio_contrato: Optional[str] = None):
+def update_interaction(
+    campana_id: int,
+    linea: str,
+    num_turnos: int,
+    estado_interaccion: str,
+    plan_seleccionado: str | None = None,
+    folio_contrato: str | None = None,
+):
     with get_db() as db:
-        obj = db.query(CampanaCliente).filter_by(
-            campana_id=campana_id, linea=linea).first()
+        obj = (
+            db.query(CampanaCliente)
+            .filter_by(campana_id=campana_id, linea=linea)
+            .first()
+        )
         if not obj:
             return
         obj.num_turnos = num_turnos
@@ -668,17 +779,21 @@ def update_interaction(campana_id: int, linea: str, num_turnos: int,
             obj.folio_contrato = folio_contrato
 
 
-def close_session_snapshot(campana_id: int, linea: str,
-                            history: list, session_data: dict):
+def close_session_snapshot(
+    campana_id: int, linea: str, history: list, session_data: dict
+):
     with get_db() as db:
-        obj = db.query(CampanaCliente).filter_by(
-            campana_id=campana_id, linea=linea).first()
+        obj = (
+            db.query(CampanaCliente)
+            .filter_by(campana_id=campana_id, linea=linea)
+            .first()
+        )
         if obj:
             obj.historial_conversacion = history
             obj.session_data_snapshot = session_data
 
 
-def find_active_campana_cliente(linea: str) -> Optional[CampanaCliente]:
+def find_active_campana_cliente(linea: str) -> CampanaCliente | None:
     with get_db() as db:
         return (
             db.query(CampanaCliente)

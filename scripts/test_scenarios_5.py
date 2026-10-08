@@ -19,24 +19,28 @@ Uso:
     python scripts/test_scenarios_5.py
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.config.logging_config import setup_logging
+
 setup_logging()
 
-from app.router.semantic_router import load_reference_embeddings, classify
+from app.router.semantic_router import classify, load_reference_embeddings
+
 load_reference_embeddings()
 
-from scripts.test_scenarios import _nuevo_perfil, _iniciar_historial, _turno
 from app.state.session import SessionState
 from app.tools.telcel_tools import make_tools
+from scripts.test_scenarios import _iniciar_historial, _nuevo_perfil, _turno
 
+_PREFIJO_RIGIDO = "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:"
 
 # ── Parte A: barrido amplio de variantes de objeción de precio ─────────────
 
@@ -71,10 +75,14 @@ def parte_a_barrido_amplio():
         print(f"  {'OK ' if ok else 'MAL'} {frase!r:45} -> {intent}")
 
     exito = all(resultados)
-    return exito, f"{sum(resultados)}/{len(resultados)} correctas (todas deben ser None)"
+    return (
+        exito,
+        f"{sum(resultados)}/{len(resultados)} correctas (todas deben ser None)",
+    )
 
 
 # ── Parte B: escenarios conversacionales + prueba directa de la tool ────────
+
 
 def escenario_1():
     print("\n" + "=" * 70)
@@ -88,7 +96,10 @@ def escenario_1():
         and "opciones más económicas" not in respuesta.lower()
         and "?" in respuesta
     )
-    return exito, f"rejection_count={session.rejection_count} respuesta='{respuesta[:100]}...'"
+    return (
+        exito,
+        f"rejection_count={session.rejection_count} respuesta='{respuesta[:100]}...'",
+    )
 
 
 def escenario_2():
@@ -99,7 +110,10 @@ def escenario_2():
     history = _iniciar_historial(session)
     respuesta, history = _turno(session, history, "está fuera de mi presupuesto")
     exito = session.rejection_count >= 1 and bool(respuesta.strip())
-    return exito, f"rejection_count={session.rejection_count} respuesta='{respuesta[:100]}...'"
+    return (
+        exito,
+        f"rejection_count={session.rejection_count} respuesta='{respuesta[:100]}...'",
+    )
 
 
 def escenario_3():
@@ -110,7 +124,10 @@ def escenario_3():
     history = _iniciar_historial(session)
     respuesta, history = _turno(session, history, "ese precio no me late")
     exito = session.rejection_count >= 1 and bool(respuesta.strip())
-    return exito, f"rejection_count={session.rejection_count} respuesta='{respuesta[:100]}...'"
+    return (
+        exito,
+        f"rejection_count={session.rejection_count} respuesta='{respuesta[:100]}...'",
+    )
 
 
 def escenario_4():
@@ -121,23 +138,40 @@ def escenario_4():
     # current_cost por debajo del precio del plan Ultra 3 ($349) para forzar
     # la rama "con incremento" (Ultra no tiene cashback -> solo debe salir GB).
     session = SessionState(
-        first_name="Julio", phone_number="999", current_plan_name="Telcel Plus 1",
-        current_cost=249.0, subscription_type="Abierto", plan_anclado="Telcel Ultra 3 Abierto",
+        first_name="Julio",
+        phone_number="999",
+        current_plan_name="Telcel Plus 1",
+        current_cost=249.0,
+        subscription_type="Abierto",
+        plan_anclado="Telcel Ultra 3 Abierto",
     )
     tools = make_tools(session)
     manejar = next(t for t in tools if t.tool_name == "manejar_objecion")
     respuesta = manejar(motivo="precio")
-    exito = "gb" in respuesta.lower() and "cashback" not in respuesta.lower() and "?" in respuesta
-    return exito, f"respuesta='{respuesta[len('RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:'):].strip()[:150]}...'"
+    exito = (
+        "gb" in respuesta.lower()
+        and "cashback" not in respuesta.lower()
+        and "?" in respuesta
+    )
+    return (
+        exito,
+        f"respuesta='{respuesta[len(_PREFIJO_RIGIDO) :].strip()[:150]}...'",
+    )
 
 
 def escenario_5():
     print("\n" + "=" * 70)
-    print("Escenario 5 — Verificación directa en la SEGUNDA objeción (rejection_count==1)")
+    print(
+        "Escenario 5 — Verificación directa en la SEGUNDA objeción (rejection_count==1)"
+    )
     print("=" * 70)
     session = SessionState(
-        first_name="Karen", phone_number="998", current_plan_name="Telcel Max Sin Limite 1000",
-        current_cost=229.0, subscription_type="Abierto", plan_anclado="Telcel Libre 1 Abierto",
+        first_name="Karen",
+        phone_number="998",
+        current_plan_name="Telcel Max Sin Limite 1000",
+        current_cost=229.0,
+        subscription_type="Abierto",
+        plan_anclado="Telcel Libre 1 Abierto",
         rejection_count=1,
     )
     tools = make_tools(session)
@@ -146,9 +180,18 @@ def escenario_5():
     exito = (
         session.rejection_count == 2
         and "opciones más económicas" not in respuesta.lower()
-        and ("gb" in respuesta.lower() or "cashback" in respuesta.lower() or "incremento" in respuesta.lower())
+        and (
+            "gb" in respuesta.lower()
+            or "cashback" in respuesta.lower()
+            or "incremento" in respuesta.lower()
+        )
     )
-    return exito, f"rejection_count={session.rejection_count} respuesta='{respuesta[len('RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:'):].strip()[:150]}...'"
+    return (
+        exito,
+        f"rejection_count={session.rejection_count} respuesta='"
+        f"{respuesta[len(_PREFIJO_RIGIDO) :].strip()[:150]}"
+        "...'",
+    )
 
 
 ESCENARIOS = [

@@ -1,5 +1,5 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -15,7 +15,7 @@ st.set_page_config(
 # Ensure tables exist on first run (idempotent)
 try:
     init_db()
-except Exception as e:
+except Exception as e:  # noqa: BLE001 — se muestra al usuario y se detiene la página
     st.error(f"Error al conectar con la base de datos: {e}")
     st.stop()
 

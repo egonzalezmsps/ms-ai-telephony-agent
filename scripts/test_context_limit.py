@@ -1,18 +1,35 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-from app.config.oci_model import oci_model
 from strands import Agent
+
+from app.config.oci_model import oci_model
 
 print("\nProbando límite de contexto del modelo...\n")
 
 # Texto de relleno (~4 tokens por palabra)
 WORD = "navegación "
-sizes = [1000, 2000, 4000, 6000, 8000, 10000, 12000, 14000, 16000, 20000, 30000, 40000, 50000]
+sizes = [
+    1000,
+    2000,
+    4000,
+    6000,
+    8000,
+    10000,
+    12000,
+    14000,
+    16000,
+    20000,
+    30000,
+    40000,
+    50000,
+]
 
 for target_tokens in sizes:
     # ~4 chars por token aproximadamente
@@ -51,10 +68,16 @@ for target_tokens in sizes:
             out_int = 1  # si no podemos leer, asumimos que funcionó
 
         status = "✅" if out_int > 0 else "❌ FALLO"
-        print(f"{status} ~{target_tokens:5d} tokens input → input={input_tokens} output={output_tokens} latency={latency}ms respuesta='{text[:30]}'")
+        print(
+            f"{status} ~{target_tokens:5d} tokens input → input={input_tokens} "
+            f"output={output_tokens} latency={latency}ms respuesta='{text[:30]}'"
+        )
 
         if out_int == 0:
-            print(f"\n⚠️  LÍMITE DETECTADO: el modelo falla con ~{target_tokens} tokens de input")
+            print(
+                f"\n⚠️  LÍMITE DETECTADO: el modelo falla con ~{target_tokens} "
+                "tokens de input"
+            )
             break
 
     except Exception as e:

@@ -8,18 +8,23 @@ import csv
 import io
 import logging
 import os
-from typing import Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, model_validator
 
-from app.state.session import SessionState
-from app.state.persistence import save_session, delete_session
-from app.state.serializer import session_to_dict
 from app.prompts.campaign_template import build_campaign_message, build_template_params
-from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template
-from app.state.campaign_traceability import campaign_crud, CAMPAIGN_DB_AVAILABLE, CAMPAIGN_DB_ERROR, _to_linea
 from app.routes.deps import require_api_key
+from app.state.campaign_traceability import (
+    CAMPAIGN_DB_AVAILABLE,
+    CAMPAIGN_DB_ERROR,
+    _to_linea,
+    campaign_crud,
+)
+from app.state.persistence import delete_session, save_session
+from app.state.serializer import session_to_dict
+from app.state.session import SessionState
+from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_template
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +33,9 @@ router = APIRouter(dependencies=[Depends(require_api_key)])
 
 def _require_campaign_db():
     if not CAMPAIGN_DB_AVAILABLE:
-        raise HTTPException(status_code=503, detail=f"Campaign DB not available: {CAMPAIGN_DB_ERROR}")
+        raise HTTPException(
+            status_code=503, detail=f"Campaign DB not available: {CAMPAIGN_DB_ERROR}"
+        )
 
 
 def _delete_sessions_for_lineas(lineas: list[str]) -> None:
@@ -49,19 +56,26 @@ class CampaignRequest(BaseModel):
     Acepta 'lineas' (contrato interno original) o 'phone_numbers' (contrato real
     del API Gateway de OCI en producción, ej. {"phone_numbers": ["2721140994"]}).
     """
+
     lineas: list[str] = []
 
     @model_validator(mode="before")
     @classmethod
     def _accept_phone_numbers(cls, data):
-        if isinstance(data, dict) and not data.get("lineas") and data.get("phone_numbers"):
+        if (
+            isinstance(data, dict)
+            and not data.get("lineas")
+            and data.get("phone_numbers")
+        ):
             data = {**data, "lineas": data["phone_numbers"]}
         return data
 
     @model_validator(mode="after")
     def _require_at_least_one_linea(self):
         if not self.lineas:
-            raise ValueError("Debe enviar 'lineas' o 'phone_numbers' con al menos un número.")
+            raise ValueError(
+                "Debe enviar 'lineas' o 'phone_numbers' con al menos un número."
+            )
         return self
 
 
@@ -90,10 +104,13 @@ def campaign(request: CampaignRequest):
     seleccionados = []
     for linea in request.lineas:
         # El número puede llegar con o sin código de país (521.../52...) según
-        # el llamador — se normaliza al mismo formato de 10 dígitos que 'clientes.linea'.
+        # el llamador — se normaliza al mismo formato de 10 dígitos que
+        # 'clientes.linea'.
         cliente = por_linea.get(linea) or por_linea.get(_to_linea(linea))
         if cliente is None:
-            results["failed"].append({"phone_number": linea, "reason": "cliente no encontrado"})
+            results["failed"].append(
+                {"phone_number": linea, "reason": "cliente no encontrado"}
+            )
         else:
             seleccionados.append(cliente)
 
@@ -125,8 +142,14 @@ def campaign(request: CampaignRequest):
                     send_whatsapp_message(phone_number, campaign_msg)
                     delivered = True
                 except Exception as e:
-                    logger.error(f"CAMPAIGN | {phone_number} texto plano falló: {e}")
-                logger.info(f"CAMPAIGN | {phone_number} — sin plan elegible, texto plano enviado")
+                    logger.error(
+                        f"CAMPAIGN | {phone_number} texto plano falló: {e}",
+                        exc_info=True,
+                    )
+                logger.info(
+                    f"CAMPAIGN | {phone_number} — sin plan elegible, "
+                    "texto plano enviado"
+                )
             else:
                 template_name = template_result["template_name"]
                 logger.info(
@@ -140,46 +163,67 @@ def campaign(request: CampaignRequest):
                         template_name=template_name,
                         params=template_result["params"],
                     )
-                    # wa_id es solo informativo (para logs) — Meta lo confirma en formato
-                    # "52XXXXXXXXXX" (12 dígitos), pero el remitente que llega en el webhook
-                    # de la respuesta usa "521XXXXXXXXXX" (13 dígitos) — NO usar wa_id como
-                    # clave de sesión, ver save_session() más abajo.
+                    # wa_id es solo informativo (para logs) — Meta lo confirma en
+                    # formato "52XXXXXXXXXX" (12 dígitos), pero el remitente que
+                    # llega en el webhook de la respuesta usa "521XXXXXXXXXX"
+                    # (13 dígitos) — NO usar wa_id como clave de sesión, ver
+                    # save_session() más abajo.
                     wa_id = wa_resp.get("contacts", [{}])[0].get("wa_id", phone_number)
-                    logger.info(f"CAMPAIGN | {phone_number} → wa_id={wa_id} — template '{template_name}' enviado")
+                    logger.info(
+                        f"CAMPAIGN | {phone_number} → wa_id={wa_id} — "
+                        f"template '{template_name}' enviado"
+                    )
                     sent_template = True
                     delivered = True
                 except Exception as e:
-                    logger.warning(f"CAMPAIGN | {phone_number} template falló, usando texto plano: {e}")
+                    logger.warning(
+                        f"CAMPAIGN | {phone_number} template falló, "
+                        f"usando texto plano: {e}",
+                        exc_info=True,
+                    )
                     try:
                         send_whatsapp_message(phone_number, campaign_msg)
                         delivered = True
                     except Exception as e2:
-                        logger.error(f"CAMPAIGN | {phone_number} fallback texto también falló: {e2}")
+                        logger.error(
+                            f"CAMPAIGN | {phone_number} fallback texto "
+                            f"también falló: {e2}",
+                            exc_info=True,
+                        )
 
             if not delivered:
-                results["failed"].append({"phone_number": phone_number, "reason": "envío de WhatsApp falló (template y texto plano)"})
+                results["failed"].append(
+                    {
+                        "phone_number": phone_number,
+                        "reason": "envío de WhatsApp falló (template y texto plano)",
+                    }
+                )
                 continue
 
             campaign_crud.marcar_estado_cliente(phone_number, "Enviada")
 
-            # Guardar sesión bajo 'phone_number' (linea de 10 dígitos) — no bajo 'wa_id':
-            # webhook.py normaliza el remitente entrante a este mismo formato de 10 dígitos
-            # antes de buscar la sesión (ver _to_linea() en app/routes/webhook.py), así que
-            # esta es la clave que sí va a encontrar.
+            # Guardar sesión bajo 'phone_number' (linea de 10 dígitos) — no bajo
+            # 'wa_id': webhook.py normaliza el remitente entrante a este mismo
+            # formato de 10 dígitos antes de buscar la sesión (ver _to_linea() en
+            # app/routes/webhook.py), así que esta es la clave que sí va a encontrar.
             save_session(
                 phone_number=phone_number,
                 session_data=session_to_dict(session),
                 history=[{"role": "assistant", "content": campaign_msg}],
             )
 
-            results["sent"].append({
-                "phone_number": phone_number,
-                "wa_id": wa_id,
-                "sent_template": sent_template,
-                "template_name": template_name if sent_template else None,
-            })
+            results["sent"].append(
+                {
+                    "phone_number": phone_number,
+                    "wa_id": wa_id,
+                    "sent_template": sent_template,
+                    "template_name": template_name if sent_template else None,
+                }
+            )
         except Exception as e:
-            logger.error(f"CAMPAIGN | {phone_number} error inesperado: {e}", exc_info=True)
+            logger.error(
+                f"CAMPAIGN | {phone_number} error inesperado: {e}", exc_info=True
+            )
             results["failed"].append({"phone_number": phone_number, "reason": str(e)})
 
     return results
@@ -187,8 +231,13 @@ def campaign(request: CampaignRequest):
 
 @router.get("/reportes/campana-clientes")
 def get_campana_clientes(
-    campana_id: Optional[int] = Query(default=None, description="Si se omite, trae todas las campañas"),
-    full: bool = Query(default=False, description="Incluir historial_conversacion y session_data_snapshot"),
+    campana_id: int | None = Query(
+        default=None, description="Si se omite, trae todas las campañas"
+    ),
+    full: bool = Query(
+        default=False,
+        description="Incluir historial_conversacion y session_data_snapshot",
+    ),
 ):
     """
     Devuelve el contenido de la tabla 'campana_clientes', con los datos del
@@ -211,7 +260,9 @@ def get_campana_clientes(
             "fecha_envio": r.fecha_envio.isoformat() if r.fecha_envio else None,
             "estado_interaccion": r.estado_interaccion,
             "plan_seleccionado": r.plan_seleccionado,
-            "fecha_seleccion": r.fecha_seleccion.isoformat() if r.fecha_seleccion else None,
+            "fecha_seleccion": r.fecha_seleccion.isoformat()
+            if r.fecha_seleccion
+            else None,
             "num_turnos": r.num_turnos,
             "folio_contrato": r.folio_contrato,
             "cliente": {
@@ -221,7 +272,9 @@ def get_campana_clientes(
                 "tipo_suscripcion": r.cliente.tipo_suscripcion,
                 "renta_plan": r.cliente.renta_plan,
                 "estado": r.cliente.estado,
-            } if r.cliente else None,
+            }
+            if r.cliente
+            else None,
         }
         if full:
             item["historial_conversacion"] = r.historial_conversacion
@@ -246,11 +299,14 @@ def campaign_dispatch(request: DispatchRequest):
         try:
             from campaign_app.db.database import get_db
             from campaign_app.db.models import Cliente as ClienteModel
+
             with get_db() as db:
                 cliente = db.query(ClienteModel).filter_by(linea=linea).first()
 
             if not cliente:
-                results["failed"].append({"linea": linea, "reason": "cliente no encontrado"})
+                results["failed"].append(
+                    {"linea": linea, "reason": "cliente no encontrado"}
+                )
                 continue
 
             session = SessionState(
@@ -276,9 +332,11 @@ def campaign_dispatch(request: DispatchRequest):
             try:
                 if template_result:
                     from app.whatsapp.sender import _normalize_phone
+
                     numero_normalizado = _normalize_phone(linea)
                     logger.info(
-                        f"DISPATCH | {linea} | enviando template='{template_result['template_name']}' "
+                        f"DISPATCH | {linea} | enviando "
+                        f"template='{template_result['template_name']}' "
                         f"idioma={os.environ.get('TEMPLATE_LANGUAGE', 'es_MX')} "
                         f"numero_normalizado={numero_normalizado} "
                         f"params={template_result['params']}"
@@ -289,20 +347,26 @@ def campaign_dispatch(request: DispatchRequest):
                         params=template_result["params"],
                     )
                     wa_id = wa_resp.get("contacts", [{}])[0].get("wa_id", linea)
-                    logger.info(f"DISPATCH | {linea} → wa_id={wa_id} | respuesta Meta: {wa_resp}")
+                    logger.info(
+                        f"DISPATCH | {linea} → wa_id={wa_id} | "
+                        f"respuesta Meta: {wa_resp}"
+                    )
                 else:
-                    logger.info(f"DISPATCH | {linea} | sin plan elegible, enviando texto plano")
+                    logger.info(
+                        f"DISPATCH | {linea} | sin plan elegible, enviando texto plano"
+                    )
                     send_whatsapp_message(linea, campaign_msg)
                 campaign_crud.mark_enviado(request.campana_id, linea)
                 results["sent"].append(linea)
             except Exception as e:
-                logger.error(f"DISPATCH | {linea} falló: {e}")
+                logger.error(f"DISPATCH | {linea} falló: {e}", exc_info=True)
                 campaign_crud.mark_fallido(request.campana_id, linea)
                 results["failed"].append({"linea": linea, "reason": str(e)})
 
             # Guardar sesión bajo 'linea' (10 dígitos) — no bajo 'wa_id': webhook.py
             # normaliza el remitente entrante a este mismo formato antes de buscar la
-            # sesión (ver _to_linea() en app/routes/webhook.py). wa_id queda solo para logs.
+            # sesión (ver _to_linea() en app/routes/webhook.py). wa_id queda solo
+            # para logs.
             save_session(
                 phone_number=linea,
                 session_data=session_to_dict(session),
@@ -326,7 +390,8 @@ def campaign_dispatch_lote(request: DispatchLoteRequest):
     _require_campaign_db()
 
     from campaign_app.db.database import get_db
-    from campaign_app.db.models import CampanaCliente, Cliente as ClienteModel
+    from campaign_app.db.models import CampanaCliente
+    from campaign_app.db.models import Cliente as ClienteModel
 
     with get_db() as db:
         pendientes = (
@@ -343,10 +408,19 @@ def campaign_dispatch_lote(request: DispatchLoteRequest):
         lineas = [cc.linea for cc in pendientes]
 
     if not lineas:
-        return {"sent": [], "failed": [], "detail": "No hay clientes pendientes para esta campaña"}
+        return {
+            "sent": [],
+            "failed": [],
+            "detail": "No hay clientes pendientes para esta campaña",
+        }
 
-    logger.info(f"DISPATCH_LOTE | campana_id={request.campana_id} resueltos={len(lineas)} de limite={request.limite}")
-    return campaign_dispatch(DispatchRequest(campana_id=request.campana_id, lineas=lineas))
+    logger.info(
+        f"DISPATCH_LOTE | campana_id={request.campana_id} "
+        f"resueltos={len(lineas)} de limite={request.limite}"
+    )
+    return campaign_dispatch(
+        DispatchRequest(campana_id=request.campana_id, lineas=lineas)
+    )
 
 
 @router.post("/campaign/migrate-orden")
@@ -375,7 +449,9 @@ def campaign_migrate_plan_seleccionado():
     _require_campaign_db()
 
     result = campaign_crud.ensure_plan_seleccionado_column()
-    logger.info(f"MIGRATE_PLAN_SELECCIONADO | columna_agregada={result['columna_agregada']}")
+    logger.info(
+        f"MIGRATE_PLAN_SELECCIONADO | columna_agregada={result['columna_agregada']}"
+    )
     return result
 
 
@@ -394,15 +470,16 @@ def campaign_migrate_linea_api():
 
 @router.post("/campaign/import-clientes")
 def campaign_import_clientes(
-    file: UploadFile = File(...),
-    campana_id: Optional[int] = Form(default=None),
-    reemplazar: bool = Form(default=False),
+    file: Annotated[UploadFile, File()],
+    campana_id: Annotated[int | None, Form()] = None,
+    reemplazar: Annotated[bool, Form()] = False,
 ):
     """
     Importa/actualiza clientes en la tabla 'clientes' a partir de un CSV subido
     (mismo formato que docs/Masivo_backup.csv).
     Si se manda 'campana_id', además vincula las líneas importadas a esa campaña
-    en 'campana_clientes' (estado_envio='pendiente'), listas para /campaign/dispatch/lote.
+    en 'campana_clientes' (estado_envio='pendiente'), listas para
+    /campaign/dispatch/lote.
     Si 'reemplazar' es true, borra TODOS los clientes y vínculos de campaña
     existentes antes de importar — el CSV subido pasa a ser el único contenido
     de la tabla (en vez de mezclarse con lo que ya había).
@@ -410,24 +487,37 @@ def campaign_import_clientes(
     _require_campaign_db()
 
     nombre_archivo = file.filename or "sin_nombre.csv"
-    logger.info(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | recibido | campana_id={campana_id} | reemplazar={reemplazar}")
+    logger.info(
+        f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | recibido | "
+        f"campana_id={campana_id} | reemplazar={reemplazar}"
+    )
 
     try:
         content = file.file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(content))
         rows = list(reader)
         if not rows or "linea" not in rows[0]:
-            logger.warning(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | rechazado: CSV vacío o sin columna 'linea'")
-            raise HTTPException(status_code=400, detail="El CSV no tiene la columna 'linea'.")
+            logger.warning(
+                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | "
+                "rechazado: CSV vacío o sin columna 'linea'"
+            )
+            raise HTTPException(
+                status_code=400, detail="El CSV no tiene la columna 'linea'."
+            )
 
-        logger.info(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | {len(rows)} filas leídas, columnas={reader.fieldnames}")
+        logger.info(
+            f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | "
+            f"{len(rows)} filas leídas, columnas={reader.fieldnames}"
+        )
 
         borrado = None
         if reemplazar:
             borrado = campaign_crud.delete_all_clientes()
             logger.warning(
-                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | reemplazar=true | borrados antes de importar: "
-                f"{borrado['clientes_borrados']} clientes, {borrado['campana_clientes_borrados']} vínculos"
+                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | "
+                "reemplazar=true | borrados antes de importar: "
+                f"{borrado['clientes_borrados']} clientes, "
+                f"{borrado['campana_clientes_borrados']} vínculos"
             )
 
         result = campaign_crud.import_clientes_csv(rows)
@@ -437,20 +527,29 @@ def campaign_import_clientes(
         if result["imported"]:
             _delete_sessions_for_lineas(result["imported"])
             logger.info(
-                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | sesiones de conversación "
+                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | "
+                "sesiones de conversación "
                 f"eliminadas para {len(result['imported'])} líneas importadas"
             )
 
         if result["skipped"]:
-            logger.warning(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | {len(result['skipped'])} filas omitidas: {result['skipped']}")
+            logger.warning(
+                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | "
+                f"{len(result['skipped'])} filas omitidas: {result['skipped']}"
+            )
 
         if campana_id is not None and result["imported"]:
             campaign_crud.add_clientes_to_campana(campana_id, result["imported"])
             result["campana_id"] = campana_id
-            logger.info(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | {len(result['imported'])} líneas vinculadas a campana_id={campana_id}")
+            logger.info(
+                f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | "
+                f"{len(result['imported'])} líneas vinculadas a "
+                f"campana_id={campana_id}"
+            )
 
         logger.info(
-            f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | completado | {result['total']} filas | "
+            f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | completado | "
+            f"{result['total']} filas | "
             f"{len(result['imported'])} importados | {len(result['skipped'])} omitidos"
         )
         return result
@@ -458,8 +557,11 @@ def campaign_import_clientes(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | error inesperado: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error importando CSV: {e}")
+        logger.error(
+            f"IMPORT_CLIENTES | archivo='{nombre_archivo}' | error inesperado: {e}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=f"Error importando CSV: {e}") from e
 
 
 @router.get("/campaign/clientes")
@@ -472,22 +574,25 @@ def campaign_get_all_clientes():
     _require_campaign_db()
 
     clientes = campaign_crud.get_all_clientes()
-    result = [{
-        "fila": i,
-        "orden": c.orden,
-        "linea": c.linea,
-        "lineaApi": c.lineaApi,
-        "nombre": c.nombre,
-        "apellidos": c.apellidos,
-        "plan_actual_nombre": c.plan_actual_nombre,
-        "plan_seleccionado": c.plan_seleccionado,
-        "familia_plan": c.familia_plan,
-        "tipo_suscripcion": c.tipo_suscripcion,
-        "renta_plan": c.renta_plan,
-        "facturacion_promedio": c.facturacion_promedio,
-        "estado": c.estado,
-        "creado_en": c.creado_en.isoformat() if c.creado_en else None,
-    } for i, c in enumerate(clientes, start=1)]
+    result = [
+        {
+            "fila": i,
+            "orden": c.orden,
+            "linea": c.linea,
+            "lineaApi": c.lineaApi,
+            "nombre": c.nombre,
+            "apellidos": c.apellidos,
+            "plan_actual_nombre": c.plan_actual_nombre,
+            "plan_seleccionado": c.plan_seleccionado,
+            "familia_plan": c.familia_plan,
+            "tipo_suscripcion": c.tipo_suscripcion,
+            "renta_plan": c.renta_plan,
+            "facturacion_promedio": c.facturacion_promedio,
+            "estado": c.estado,
+            "creado_en": c.creado_en.isoformat() if c.creado_en else None,
+        }
+        for i, c in enumerate(clientes, start=1)
+    ]
 
     return {"total": len(result), "clientes": result}
 
@@ -504,24 +609,26 @@ def campaign_get_clientes(campana_id: int):
     clientes = []
     for i, cc in enumerate(campana_clientes, start=1):
         c = cc.cliente
-        clientes.append({
-            "fila": i,
-            "orden": c.orden if c else None,
-            "linea": cc.linea,
-            "nombre": c.nombre if c else None,
-            "apellidos": c.apellidos if c else None,
-            "plan_actual_nombre": c.plan_actual_nombre if c else None,
-            "familia_plan": c.familia_plan if c else None,
-            "tipo_suscripcion": c.tipo_suscripcion if c else None,
-            "renta_plan": c.renta_plan if c else None,
-            "estado": c.estado if c else None,
-            "estado_envio": cc.estado_envio,
-            "estado_interaccion": cc.estado_interaccion,
-            "fecha_envio": cc.fecha_envio.isoformat() if cc.fecha_envio else None,
-            "plan_seleccionado": cc.plan_seleccionado,
-            "folio_contrato": cc.folio_contrato,
-            "num_turnos": cc.num_turnos,
-        })
+        clientes.append(
+            {
+                "fila": i,
+                "orden": c.orden if c else None,
+                "linea": cc.linea,
+                "nombre": c.nombre if c else None,
+                "apellidos": c.apellidos if c else None,
+                "plan_actual_nombre": c.plan_actual_nombre if c else None,
+                "familia_plan": c.familia_plan if c else None,
+                "tipo_suscripcion": c.tipo_suscripcion if c else None,
+                "renta_plan": c.renta_plan if c else None,
+                "estado": c.estado if c else None,
+                "estado_envio": cc.estado_envio,
+                "estado_interaccion": cc.estado_interaccion,
+                "fecha_envio": cc.fecha_envio.isoformat() if cc.fecha_envio else None,
+                "plan_seleccionado": cc.plan_seleccionado,
+                "folio_contrato": cc.folio_contrato,
+                "num_turnos": cc.num_turnos,
+            }
+        )
 
     return {"campana_id": campana_id, "total": len(clientes), "clientes": clientes}
 
@@ -535,7 +642,10 @@ def campaign_delete_all_clientes(confirm: bool = Query(default=False)):
     _require_campaign_db()
 
     if not confirm:
-        raise HTTPException(status_code=400, detail="Falta ?confirm=true — esta acción borra TODOS los clientes.")
+        raise HTTPException(
+            status_code=400,
+            detail="Falta ?confirm=true — esta acción borra TODOS los clientes.",
+        )
 
     result = campaign_crud.delete_all_clientes()
     logger.warning(

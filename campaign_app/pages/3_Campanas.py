@@ -1,14 +1,16 @@
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import csv
 import io
 from datetime import datetime
+
 import httpx
 import streamlit as st
-from dotenv import load_dotenv
-
 from db import crud
+from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
@@ -20,12 +22,13 @@ API_KEY = os.environ.get("CAMPAIGN_API_KEY") or os.environ.get("API_KEY", "")
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _estado_badge(estado: str) -> str:
     colors = {
         "borrador": "🟡",
-        "activa":   "🟢",
-        "pausada":  "🟠",
-        "cerrada":  "🔴",
+        "activa": "🟢",
+        "pausada": "🟠",
+        "cerrada": "🔴",
     }
     return f"{colors.get(estado, '⚪')} {estado.capitalize()}"
 
@@ -42,7 +45,7 @@ def _send_campaign(campana_id: int, lineas: list[str]) -> dict:
         if not resp.is_success:
             return {"error": f"HTTP {resp.status_code} — {resp.text}"}
         return resp.json()
-    except Exception as e:
+    except (httpx.HTTPError, ValueError) as e:  # red/timeout o JSON inválido
         return {"error": str(e)}
 
 
@@ -55,8 +58,9 @@ campana_opts = {f"[{c.id}] {c.nombre}": c.id for c in campanas}
 
 st.sidebar.header("Campaña activa")
 if campana_opts:
-    sel_label = st.sidebar.selectbox("Seleccionar campaña",
-                                      ["— nueva —"] + list(campana_opts.keys()))
+    sel_label = st.sidebar.selectbox(
+        "Seleccionar campaña", ["— nueva —", *list(campana_opts.keys())]
+    )
     campana_id = campana_opts.get(sel_label)
 else:
     sel_label = "— nueva —"
@@ -99,9 +103,9 @@ st.caption(campana.descripcion or "")
 # Estado transitions
 allowed_states = ["borrador", "activa", "pausada", "cerrada"]
 col_e1, col_e2, col_e3 = st.columns([3, 1, 1])
-new_estado = col_e1.selectbox("Cambiar estado",
-                               allowed_states,
-                               index=allowed_states.index(campana.estado))
+new_estado = col_e1.selectbox(
+    "Cambiar estado", allowed_states, index=allowed_states.index(campana.estado)
+)
 if col_e2.button("Aplicar"):
     crud.update_campana(campana_id, estado=new_estado)
     st.success(f"Estado actualizado a '{new_estado}'.")
@@ -112,7 +116,10 @@ if col_e3.button("🗑️ Eliminar", type="secondary"):
     st.session_state[_del_key] = True
 
 if st.session_state.get(_del_key):
-    st.warning(f"¿Eliminar la campaña **{campana.nombre}** y todos sus datos? Esta acción no se puede deshacer.")
+    st.warning(
+        f"¿Eliminar la campaña **{campana.nombre}** y todos sus datos? Esta acción "
+        "no se puede deshacer."
+    )
     col_yes, col_no, _ = st.columns([1, 1, 6])
     if col_yes.button("Sí, eliminar", type="primary"):
         crud.delete_campana(campana_id)
@@ -146,7 +153,9 @@ with tab_planes:
             plan = next((p for p in all_planes if p.id == cp.plan_id), None)
             if not plan:
                 continue
-            promo_name = next((p.nombre for p in all_promos if p.id == cp.promocion_id), "—")
+            promo_name = next(
+                (p.nombre for p in all_promos if p.id == cp.promocion_id), "—"
+            )
             col_p, col_rm = st.columns([5, 1])
             col_p.markdown(f"- **{plan.nombre}** · Promo: {promo_name}")
             if col_rm.button("Quitar", key=f"rm_plan_{campana_id}_{plan.id}"):
@@ -164,12 +173,16 @@ with tab_planes:
         if available:
             plan_opts = {p.nombre: p.id for p in available}
             col_ps, col_prom, col_add = st.columns([3, 3, 1])
-            plan_sel = col_ps.selectbox("Plan", list(plan_opts.keys()), key="add_plan_sel")
-            promo_sel = col_prom.selectbox("Promoción", list(promo_opts.keys()),
-                                            key="add_plan_promo")
+            plan_sel = col_ps.selectbox(
+                "Plan", list(plan_opts.keys()), key="add_plan_sel"
+            )
+            promo_sel = col_prom.selectbox(
+                "Promoción", list(promo_opts.keys()), key="add_plan_promo"
+            )
             if col_add.button("Agregar", key="btn_add_plan_ind"):
-                crud.add_plan_to_campana(campana_id, plan_opts[plan_sel],
-                                          promo_opts[promo_sel])
+                crud.add_plan_to_campana(
+                    campana_id, plan_opts[plan_sel], promo_opts[promo_sel]
+                )
                 st.success(f"Plan '{plan_sel}' agregado.")
                 st.rerun()
         else:
@@ -179,19 +192,26 @@ with tab_planes:
         all_familias = crud.get_all_familias()
         fam_disponibles = []
         for f in all_familias:
-            planes_fam_disp = [p for p in f.planes if p.activo and p.id not in plan_ids_in_campana]
+            planes_fam_disp = [
+                p for p in f.planes if p.activo and p.id not in plan_ids_in_campana
+            ]
             if planes_fam_disp:
                 fam_disponibles.append((f, planes_fam_disp))
 
         if fam_disponibles:
             fam_opts_map = {f.nombre: (f, ps) for f, ps in fam_disponibles}
             col_fs, col_fprom, col_fadd = st.columns([3, 3, 1])
-            fam_sel = col_fs.selectbox("Familia", list(fam_opts_map.keys()), key="add_fam_sel")
-            fprom_sel = col_fprom.selectbox("Promoción", list(promo_opts.keys()),
-                                             key="add_fam_promo")
+            fam_sel = col_fs.selectbox(
+                "Familia", list(fam_opts_map.keys()), key="add_fam_sel"
+            )
+            fprom_sel = col_fprom.selectbox(
+                "Promoción", list(promo_opts.keys()), key="add_fam_promo"
+            )
             _, planes_a_agregar = fam_opts_map[fam_sel]
-            col_fs.caption(f"{len(planes_a_agregar)} planes se agregarán: "
-                           f"{', '.join(p.nombre for p in planes_a_agregar)}")
+            col_fs.caption(
+                f"{len(planes_a_agregar)} planes se agregarán: "
+                f"{', '.join(p.nombre for p in planes_a_agregar)}"
+            )
             if col_fadd.button("Agregar", key="btn_add_plan_fam"):
                 for p in planes_a_agregar:
                     crud.add_plan_to_campana(campana_id, p.id, promo_opts[fprom_sel])
@@ -214,12 +234,16 @@ with tab_clientes:
     # ── Métricas ──────────────────────────────────────────────────────────────
     col_tot, col_pend, col_env, col_fall = st.columns(4)
     col_tot.metric("Total", len(campana_clientes))
-    col_pend.metric("Pendientes",
-                    sum(1 for cc in campana_clientes if cc.estado_envio == "pendiente"))
-    col_env.metric("Enviados",
-                   sum(1 for cc in campana_clientes if cc.estado_envio == "enviado"))
-    col_fall.metric("Fallidos",
-                    sum(1 for cc in campana_clientes if cc.estado_envio == "fallido"))
+    col_pend.metric(
+        "Pendientes",
+        sum(1 for cc in campana_clientes if cc.estado_envio == "pendiente"),
+    )
+    col_env.metric(
+        "Enviados", sum(1 for cc in campana_clientes if cc.estado_envio == "enviado")
+    )
+    col_fall.metric(
+        "Fallidos", sum(1 for cc in campana_clientes if cc.estado_envio == "fallido")
+    )
 
     # ── Tabla de clientes ─────────────────────────────────────────────────────
     if campana_clientes:
@@ -228,15 +252,19 @@ with tab_clientes:
         for cc in campana_clientes:
             c = cc.cliente
             nombre_completo = " ".join(filter(None, [c.nombre, c.apellidos])) or "—"
-            tabla.append({
-                "Línea":       cc.linea,
-                "Nombre":      nombre_completo,
-                "Plan actual": c.plan_actual_nombre or "—",
-                "Tipo":        c.tipo_suscripcion or "—",
-                "Renta":       f"${c.renta_plan:.0f}" if c.renta_plan else "—",
-                "Envío":       f"{_ESTADO_ICON.get(cc.estado_envio, '')} {cc.estado_envio}",
-                "Interacción": cc.estado_interaccion or "—",
-            })
+            tabla.append(
+                {
+                    "Línea": cc.linea,
+                    "Nombre": nombre_completo,
+                    "Plan actual": c.plan_actual_nombre or "—",
+                    "Tipo": c.tipo_suscripcion or "—",
+                    "Renta": f"${c.renta_plan:.0f}" if c.renta_plan else "—",
+                    "Envío": (
+                        f"{_ESTADO_ICON.get(cc.estado_envio, '')} {cc.estado_envio}"
+                    ),
+                    "Interacción": cc.estado_interaccion or "—",
+                }
+            )
         st.dataframe(pd.DataFrame(tabla), use_container_width=True, hide_index=True)
     else:
         st.info("No hay clientes en esta campaña aún.")
@@ -245,8 +273,11 @@ with tab_clientes:
 
     # ── Cargar CSV ────────────────────────────────────────────────────────────
     with st.expander("📂 Cargar lista CSV"):
-        st.caption("El CSV debe tener al menos la columna `linea`. Columnas opcionales: nombre, "
-                   "apellidos, plan_actual_nombre, tipo_suscripcion, renta_plan, etc.")
+        st.caption(
+            "El CSV debe tener al menos la columna `linea`. Columnas opcionales: "
+            "nombre, "
+            "apellidos, plan_actual_nombre, tipo_suscripcion, renta_plan, etc."
+        )
         uploaded = st.file_uploader("Subir CSV", type=["csv"], key="csv_upload")
         if uploaded:
             content = uploaded.read().decode("utf-8-sig")
@@ -255,49 +286,67 @@ with tab_clientes:
             if not rows or "linea" not in rows[0]:
                 st.error("El CSV no tiene la columna 'linea'.")
             else:
-                nuevas = [r["linea"] for r in rows if r["linea"] not in lineas_en_campana]
-                st.write(f"{len(rows)} filas leídas · {len(nuevas)} líneas nuevas a agregar.")
+                nuevas = [
+                    r["linea"] for r in rows if r["linea"] not in lineas_en_campana
+                ]
+                st.write(
+                    f"{len(rows)} filas leídas · {len(nuevas)} líneas nuevas a agregar."
+                )
 
                 if st.button("Importar clientes"):
                     result = crud.import_clientes_csv(rows)
                     crud.add_clientes_to_campana(campana_id, result["imported"])
                     if result["skipped"]:
-                        st.warning(f"{len(result['skipped'])} filas omitidas (sin línea válida).")
+                        st.warning(
+                            f"{len(result['skipped'])} filas omitidas (sin línea "
+                            "válida)."
+                        )
                     st.success(f"{len(result['imported'])} clientes importados.")
                     st.rerun()
 
     # ── Agregar individual ────────────────────────────────────────────────────
-    with st.expander("➕ Agregar línea individual"):
-        with st.form("add_linea"):
-            col_l, col_n, col_a = st.columns(3)
-            linea = col_l.text_input("Número de línea *")
-            nombre = col_n.text_input("Nombre")
-            apellidos = col_a.text_input("Apellidos")
+    with st.expander("➕ Agregar línea individual"), st.form("add_linea"):
+        col_l, col_n, col_a = st.columns(3)
+        linea = col_l.text_input("Número de línea *")
+        nombre = col_n.text_input("Nombre")
+        apellidos = col_a.text_input("Apellidos")
 
-            col_plan, col_tipo, col_renta = st.columns(3)
-            plan_actual = col_plan.text_input("Plan actual (nombre)",
-                                              help="Nombre del plan legacy que tiene el cliente")
-            tipo_susc = col_tipo.selectbox("Tipo de suscripción",
-                                           ["", "Abierto", "Controlado"],
-                                           help="Modalidad del plan actual")
-            renta = col_renta.number_input("Renta mensual actual ($)",
-                                           min_value=0.0, value=0.0,
-                                           help="Requerido para calcular planes elegibles")
+        col_plan, col_tipo, col_renta = st.columns(3)
+        plan_actual = col_plan.text_input(
+            "Plan actual (nombre)",
+            help="Nombre del plan legacy que tiene el cliente",
+        )
+        tipo_susc = col_tipo.selectbox(
+            "Tipo de suscripción",
+            ["", "Abierto", "Controlado"],
+            help="Modalidad del plan actual",
+        )
+        renta = col_renta.number_input(
+            "Renta mensual actual ($)",
+            min_value=0.0,
+            value=0.0,
+            help="Requerido para calcular planes elegibles",
+        )
 
-            if st.form_submit_button("Agregar"):
-                if not linea:
-                    st.warning("El número de línea es obligatorio.")
-                else:
-                    data = {"linea": linea}
-                    if nombre:      data["nombre"] = nombre
-                    if apellidos:   data["apellidos"] = apellidos
-                    if plan_actual: data["plan_actual_nombre"] = plan_actual
-                    if tipo_susc:   data["tipo_suscripcion"] = tipo_susc
-                    if renta > 0:   data["renta_plan"] = renta
-                    crud.upsert_cliente(data)
-                    crud.add_clientes_to_campana(campana_id, [linea])
-                    st.success(f"Línea {linea} agregada.")
-                    st.rerun()
+        if st.form_submit_button("Agregar"):
+            if not linea:
+                st.warning("El número de línea es obligatorio.")
+            else:
+                data = {"linea": linea}
+                if nombre:
+                    data["nombre"] = nombre
+                if apellidos:
+                    data["apellidos"] = apellidos
+                if plan_actual:
+                    data["plan_actual_nombre"] = plan_actual
+                if tipo_susc:
+                    data["tipo_suscripcion"] = tipo_susc
+                if renta > 0:
+                    data["renta_plan"] = renta
+                crud.upsert_cliente(data)
+                crud.add_clientes_to_campana(campana_id, [linea])
+                st.success(f"Línea {linea} agregada.")
+                st.rerun()
 
 
 # ── Tab: Envío ────────────────────────────────────────────────────────────────
@@ -346,7 +395,9 @@ with tab_envio:
             c = _pend_map[cc.linea].cliente
             nombre = " ".join(filter(None, [c.nombre, c.apellidos])) or "—"
             chk_key = f"chk_{campana_id}_{cc.linea}"
-            estado_icon = "🔴 Fallido" if cc.estado_envio == "fallido" else "🕐 Pendiente"
+            estado_icon = (
+                "🔴 Fallido" if cc.estado_envio == "fallido" else "🕐 Pendiente"
+            )
             c0, c1, c2, c3, c4, c5, c6 = st.columns([0.4, 1.5, 2, 2.5, 1.2, 1, 1])
             checked = c0.checkbox("", key=chk_key, label_visibility="collapsed")
             c1.write(cc.linea)
@@ -360,8 +411,10 @@ with tab_envio:
 
         st.caption(f"{len(lineas_sel)} de {len(pendientes)} clientes seleccionados")
 
-        if st.button("📤 Enviar a seleccionados",
-                     disabled=not lineas_sel or campana.estado != "activa"):
+        if st.button(
+            "📤 Enviar a seleccionados",
+            disabled=not lineas_sel or campana.estado != "activa",
+        ):
             with st.spinner(f"Enviando a {len(lineas_sel)} clientes..."):
                 result = _send_campaign(campana_id, lineas_sel)
             st.session_state[f"send_result_{campana_id}"] = result
@@ -380,7 +433,7 @@ with tab_envio:
         if "error" in res:
             st.error(f"Error de conexión: {res['error']}")
         else:
-            sent  = res.get("sent", [])
+            sent = res.get("sent", [])
             failed = res.get("failed", [])
             col_s, col_f = st.columns(2)
             col_s.metric("✅ Enviados", len(sent))
@@ -390,7 +443,7 @@ with tab_envio:
                 st.markdown("**Detalle de fallidos:**")
                 for f in failed:
                     linea_f = f.get("linea", "?") if isinstance(f, dict) else f
-                    reason  = f.get("reason", "—")  if isinstance(f, dict) else "—"
+                    reason = f.get("reason", "—") if isinstance(f, dict) else "—"
                     st.caption(f"• `{linea_f}` — {reason}")
 
         if st.button("Cerrar resultados", key=f"close_result_{campana_id}"):

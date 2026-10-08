@@ -1,11 +1,13 @@
 """
 config/oci_model.py
 """
+
 import logging
 import os
 import time
-import litellm
+
 from dotenv import load_dotenv
+from litellm.llms.oci.chat.transformation import OCIChatConfig
 from strands.models.litellm import LiteLLMModel
 
 logger = logging.getLogger(__name__)
@@ -13,18 +15,21 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Parche temporal: fuerza drop_params=True para OCI hasta que LiteLLM lo corrija
-from litellm.llms.oci.chat.transformation import OCIChatConfig
 _original_map = OCIChatConfig.map_openai_params
 
+
 def _patched_map(self, non_default_params, optional_params, model, drop_params):
-    return _original_map(self, non_default_params, optional_params, model, drop_params=True)
+    return _original_map(
+        self, non_default_params, optional_params, model, drop_params=True
+    )
+
 
 OCIChatConfig.map_openai_params = _patched_map
 
 
 def _read_key_file(path: str) -> str:
     abs_path = os.path.expanduser(path)
-    with open(abs_path, "r") as f:
+    with open(abs_path) as f:
         return f.read()
 
 
@@ -68,14 +73,22 @@ def build_oci_model() -> LiteLLMModel:
     except Exception:
         logger.error(
             "[OCI] Fallo al construir el modelo model_id=%s region=%s auth=%s",
-            model_id, region, auth_mode, exc_info=True,
+            model_id,
+            region,
+            auth_mode,
+            exc_info=True,
         )
         raise
     logger.info(
         "[OCI] Modelo listo en %.2fs model_id=%s region=%s auth=%s "
         "temperature=%.1f max_tokens=%d top_p=%.2f",
-        time.time() - t0, model_id, region, auth_mode,
-        params["temperature"], params["max_tokens"], params["top_p"],
+        time.time() - t0,
+        model_id,
+        region,
+        auth_mode,
+        params["temperature"],
+        params["max_tokens"],
+        params["top_p"],
     )
     return model
 

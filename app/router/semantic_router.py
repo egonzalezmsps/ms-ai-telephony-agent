@@ -5,12 +5,10 @@ Clasificador semántico de intenciones usando embeddings de Cohere en OCI.
 Reemplaza los bloques pre-LLM de matching exacto en reni_agent.py.
 """
 
-import os
-import math
 import logging
-from typing import Optional
+import math
+import os
 
-import oci
 from oci.generative_ai_inference import GenerativeAiInferenceClient
 from oci.generative_ai_inference.models import (
     EmbedTextDetails,
@@ -263,7 +261,7 @@ def _embed(texts: list) -> list:
 
 
 def _cosine_similarity(a: list, b: list) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
     if norm_a == 0 or norm_b == 0:
@@ -291,7 +289,7 @@ def load_reference_embeddings():
     logger.info("[ROUTER] Router semántico listo — %d intenciones", len(INTENCIONES))
 
 
-def classify(message: str, threshold: float = 0.75) -> Optional[str]:
+def classify(message: str, threshold: float = 0.75) -> str | None:
     """
     Clasifica un mensaje en una intención.
     Retorna el nombre de la intención o None si no supera el threshold.
@@ -303,7 +301,7 @@ def classify(message: str, threshold: float = 0.75) -> Optional[str]:
     try:
         msg_embedding = _embed([message])[0]
     except Exception as e:
-        logger.error("[ROUTER] Error generando embedding: %s", e)
+        logger.error("[ROUTER] Error generando embedding: %s", e, exc_info=True)
         return None
 
     best_intencion = None

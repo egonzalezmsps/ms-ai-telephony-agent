@@ -23,31 +23,35 @@ Uso:
     python scripts/test_scenarios_6.py
 """
 
-import sys
 import os
 import re
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.config.logging_config import setup_logging
+
 setup_logging()
 
 from app.router.semantic_router import load_reference_embeddings
+
 load_reference_embeddings()
 
-from app.catalog.plans import CATALOG, find_plan, get_price
 from app.agent.reni_agent import _check_invented_plans
+from app.catalog.plans import find_plan, get_price
 from app.state.session import SessionState
-from scripts.test_scenarios import _nuevo_perfil, _iniciar_historial, _turno
-
+from scripts.test_scenarios import _iniciar_historial, _nuevo_perfil, _turno
 
 # ── Auditor independiente: nombre de plan + precio contra el catálogo real ──
 
-_PLAN_MENTION_RE = re.compile(r'Telcel\s+(?:Libre|Ultra)\s+(?:\d+(?:\.\d+)?|VIP|Ilimitado)', re.IGNORECASE)
-_PRICE_RE = re.compile(r'\$\s?([\d,]+(?:\.\d+)?)')
+_PLAN_MENTION_RE = re.compile(
+    r"Telcel\s+(?:Libre|Ultra)\s+(?:\d+(?:\.\d+)?|VIP|Ilimitado)", re.IGNORECASE
+)
+_PRICE_RE = re.compile(r"\$\s?([\d,]+(?:\.\d+)?)")
 
 
 def auditar_respuesta(texto: str):
@@ -59,7 +63,9 @@ def auditar_respuesta(texto: str):
     hallazgos = []
     menciones = _PLAN_MENTION_RE.findall(texto)
     for mencion in menciones:
-        nombre_limpio = re.sub(r'\s+(Controlado|Abierto)$', '', mencion.strip(), flags=re.IGNORECASE)
+        nombre_limpio = re.sub(
+            r"\s+(Controlado|Abierto)$", "", mencion.strip(), flags=re.IGNORECASE
+        )
         plan = find_plan(nombre_limpio)
         if not plan:
             hallazgos.append(f"PLAN INVENTADO: '{mencion}' no existe en el catálogo")
@@ -71,27 +77,43 @@ def auditar_respuesta(texto: str):
                 continue
             for precio_str in _PRICE_RE.findall(linea):
                 precio = float(precio_str.replace(",", ""))
-                if abs(precio - precio_abierto) > 1.0 and abs(precio - precio_controlado) > 1.0:
+                if (
+                    abs(precio - precio_abierto) > 1.0
+                    and abs(precio - precio_controlado) > 1.0
+                ):
                     hallazgos.append(
                         f"PRECIO INCORRECTO: '{mencion}' junto a ${precio_str} "
-                        f"(catálogo real: Abierto=${precio_abierto:.0f}, Controlado=${precio_controlado:.0f})"
+                        f"(catálogo real: Abierto=${precio_abierto:.0f}, "
+                        f"Controlado=${precio_controlado:.0f})"
                     )
     return (len(hallazgos) == 0, hallazgos)
 
 
 # ── Parte A: _check_invented_plans() con texto sintético ────────────────────
 
+
 def parte_a_check_invented_plans():
     print("\n" + "=" * 70)
     print("PARTE A — _check_invented_plans() con texto sintético (sin LLM)")
     print("=" * 70)
-    session = SessionState(first_name="Test", phone_number="1", plan_anclado="Telcel Libre 5 Abierto")
+    session = SessionState(
+        first_name="Test", phone_number="1", plan_anclado="Telcel Libre 5 Abierto"
+    )
 
     casos = [
-        ("Le recomendamos el *Telcel Libre 20 Abierto* a $850/mes.", True),   # plan inventado
-        ("¿Qué le parece el *Telcel Ultra 15 Abierto*?", True),               # plan inventado
-        ("El *Telcel Libre 5 Abierto* cuesta $599/mes con 20 GB.", False),    # plan real, no debe tocarse
-        ("Le ofrecemos el *Telcel Libre VIP Abierto* con todos los beneficios.", False),  # plan real (VIP)
+        (
+            "Le recomendamos el *Telcel Libre 20 Abierto* a $850/mes.",
+            True,
+        ),  # plan inventado
+        ("¿Qué le parece el *Telcel Ultra 15 Abierto*?", True),  # plan inventado
+        (
+            "El *Telcel Libre 5 Abierto* cuesta $599/mes con 20 GB.",
+            False,
+        ),  # plan real, no debe tocarse
+        (
+            "Le ofrecemos el *Telcel Libre VIP Abierto* con todos los beneficios.",
+            False,
+        ),  # plan real (VIP)
     ]
 
     resultados = []
@@ -100,7 +122,10 @@ def parte_a_check_invented_plans():
         detectado = resultado != texto
         ok = detectado == deberia_detectar
         resultados.append(ok)
-        print(f"  {'OK ' if ok else 'MAL'} detectado={detectado} (esperado={deberia_detectar}) -> {texto!r}")
+        print(
+            f"  {'OK ' if ok else 'MAL'} detectado={detectado} "
+            f"(esperado={deberia_detectar}) -> {texto!r}"
+        )
 
     exito = all(resultados)
     return exito, f"{sum(resultados)}/{len(resultados)} casos correctos"
@@ -141,12 +166,18 @@ def parte_b_auditoria_llm_real():
             print(f"  OK  '{prompt}' -> sin planes/precios inventados")
 
     exito = len(todos_hallazgos) == 0
-    return exito, f"{len(todos_hallazgos)} hallazgo(s) en {len(PROMPTS_ADVERSARIALES)} prompts"
+    return (
+        exito,
+        f"{len(todos_hallazgos)} hallazgo(s) en {len(PROMPTS_ADVERSARIALES)} prompts",
+    )
 
 
 ESCENARIOS = [
     ("A. _check_invented_plans() con texto sintético", parte_a_check_invented_plans),
-    ("B. Auditoría de respuestas reales ante prompts adversariales", parte_b_auditoria_llm_real),
+    (
+        "B. Auditoría de respuestas reales ante prompts adversariales",
+        parte_b_auditoria_llm_real,
+    ),
 ]
 
 

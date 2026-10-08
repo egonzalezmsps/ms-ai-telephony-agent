@@ -10,8 +10,7 @@ porque el modelo razona directamente. Solo necesitamos:
 3. Estado de la contratación (si ya aceptó y qué plan)
 """
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass
@@ -22,30 +21,34 @@ class SessionState:
     first_name: str = ""
     full_name: str = ""
     phone_number: str = ""
-    api_phone_number: Optional[str] = None  # teléfono para call_create_process (Cliente.lineaApi); si no hay, se usa phone_number
+    # teléfono para call_create_process (Cliente.lineaApi); si no hay, se usa
+    # phone_number
+    api_phone_number: str | None = None
 
     # ── Plan actual ───────────────────────────────────────────────
     current_plan_name: str = ""
     previous_plan_name: str = ""
     current_cost: float = 0.0
-    current_plan_gb: Optional[float] = None
-    current_plan_cashback: Optional[float] = None
-    subscription_type: str = "Abierto"      # "Abierto" | "Controlado"
+    current_plan_gb: float | None = None
+    current_plan_cashback: float | None = None
+    subscription_type: str = "Abierto"  # "Abierto" | "Controlado"
 
     # ── Promoción ─────────────────────────────────────────────────
     has_promotion: bool = True
     fecha_vigencia: str = "30/05/2026"
 
     # ── Perfil de uso ─────────────────────────────────────────────
-    usage_summary: Optional[str] = None
+    usage_summary: str | None = None
 
     # ── Contratación ─────────────────────────────────────────────
-    plan_selected: Optional[str] = None     # plan que el cliente aceptó activar
-    plan_anclado: str = ""                  # plan contextual activo para preguntas de cierre
-    rejection_count: int = 0               # contador de rechazos para manejo de objeciones
-    stage: str = "PERSUASION"               # PERSUASION | CONTRACT | POST_SALE | END
-    end_reason: str = ""                    # "success" | "blocked"
-    esperando_criterio_recomendacion: bool = False  # esperando respuesta a "¿qué prefiere?"
+    plan_selected: str | None = None  # plan que el cliente aceptó activar
+    plan_anclado: str = ""  # plan contextual activo para preguntas de cierre
+    rejection_count: int = 0  # contador de rechazos para manejo de objeciones
+    stage: str = "PERSUASION"  # PERSUASION | CONTRACT | POST_SALE | END
+    end_reason: str = ""  # "success" | "blocked"
+    esperando_criterio_recomendacion: bool = (
+        False  # esperando respuesta a "¿qué prefiere?"
+    )
 
     # ── Titular ───────────────────────────────────────────────────
     is_titular: bool = True
@@ -61,6 +64,5 @@ class SessionState:
     otp_resend_count: int = 0
     is_authenticated: bool = False
     authentication_locked: bool = False
-    contract_folio: Optional[str] = None
-    process_id_api: Optional[str] = None
-
+    contract_folio: str | None = None
+    process_id_api: str | None = None

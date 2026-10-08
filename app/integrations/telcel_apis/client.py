@@ -23,7 +23,11 @@ from dataclasses import dataclass
 import requests
 from dotenv import load_dotenv
 
-from app.integrations.telcel_apis.crypto import build_header_token, decrypt_aes256cbc, encrypt_aes256cbc
+from app.integrations.telcel_apis.crypto import (
+    build_header_token,
+    decrypt_aes256cbc,
+    encrypt_aes256cbc,
+)
 
 load_dotenv()
 
@@ -31,12 +35,16 @@ logger = logging.getLogger(__name__)
 
 
 def _is_mock_enabled(prefix: str) -> bool:
-    """<PREFIX>_MOCK=true evita la llamada HTTP real de esa API específica (mock por endpoint, no global)."""
+    """<PREFIX>_MOCK=true evita la llamada HTTP real de esa API específica
+    (mock por endpoint, no global)."""
     return os.environ.get(f"{prefix}_MOCK", "false").strip().lower() == "true"
 
 
 def _mock_create_process_response() -> dict:
-    result = {"raw": {"mock": True}, "decrypted": {"processId": f"MOCK-{uuid.uuid4().hex[:10].upper()}"}}
+    result = {
+        "raw": {"mock": True},
+        "decrypted": {"processId": f"MOCK-{uuid.uuid4().hex[:10].upper()}"},
+    }
     logger.info("[TELCEL_CREATE_PROCESS_MOCK] response=%s", result)
     return result
 
@@ -48,7 +56,10 @@ def _mock_communication_message_response() -> dict:
 
 
 def _mock_create_product_order_response() -> dict:
-    result = {"raw": {"mock": True}, "decrypted": {"orderId": f"MOCK-ORDER-{uuid.uuid4().hex[:8].upper()}"}}
+    result = {
+        "raw": {"mock": True},
+        "decrypted": {"orderId": f"MOCK-ORDER-{uuid.uuid4().hex[:8].upper()}"},
+    }
     logger.info("[TELCEL_CREATE_PRODUCT_ORDER_MOCK] response=%s", result)
     return result
 
@@ -94,7 +105,9 @@ def _post(config: APIConfig, body: dict) -> requests.Response:
     headers = {
         "Content-Type": "application/json",
         "x-api-key": config.api_key,
-        "X-amzn-waf-headertkn": build_header_token(config.usuario, config.enc_key, config.enc_iv),
+        "X-amzn-waf-headertkn": build_header_token(
+            config.usuario, config.enc_key, config.enc_iv
+        ),
     }
     return requests.post(config.endpoint, headers=headers, json=body, timeout=30)
 
@@ -125,10 +138,12 @@ def _raise_for_error(response: requests.Response) -> dict:
 
 
 def _to_msisdn(phone_number: str) -> str:
-    """Normaliza a MSISDN completo con código de país (52 + 10 dígitos) para las APIs Telcel.
+    """Normaliza a MSISDN completo con código de país (52 + 10 dígitos) para las
+    APIs Telcel.
 
     Entradas soportadas:
-      - "521XXXXXXXXXX" (formato WhatsApp, 13 dígitos con el "1" de celular MX) -> se quita el "1"
+      - "521XXXXXXXXXX" (formato WhatsApp, 13 dígitos con el "1" de celular MX)
+        -> se quita el "1"
       - "52XXXXXXXXXX"  (12 dígitos, ya en formato MSISDN) -> se deja igual
       - "XXXXXXXXXX"    (10 dígitos, sin lada país) -> se antepone "52"
     """
@@ -148,24 +163,31 @@ def call_create_process(phone_number: str) -> dict:
 
     config = _config_from_env("TELCEL_CREATE_PROCESS")
 
-    # Mapeo del número: crudo (tal como llega de la sesión/WhatsApp) -> MSISDN normalizado
-    # -> payload -> cifrado. Todo el tratamiento del teléfono para esta API vive aquí.
+    # Mapeo del número: crudo (tal como llega de la sesión/WhatsApp) -> MSISDN
+    # normalizado -> payload -> cifrado. Todo el tratamiento del teléfono para esta
+    # API vive aquí.
     msisdn = _to_msisdn(phone_number)
     inner_payload = {"msisdn": msisdn}
-    encrypted = encrypt_aes256cbc(json.dumps(inner_payload), config.enc_key, config.enc_iv)
+    encrypted = encrypt_aes256cbc(
+        json.dumps(inner_payload), config.enc_key, config.enc_iv
+    )
     body = {"createProcessRequest": encrypted}
 
     response = _post(config, body)
     logger.info(
         "[TELCEL_CREATE_PROCESS] status=%s msisdn=%s response=%s",
-        response.status_code, msisdn, response.text[:500],
+        response.status_code,
+        msisdn,
+        response.text[:500],
     )
     raw = _raise_for_error(response)
 
     decrypted_response = None
     encrypted_response = raw.get("createProcessResponse")
     if encrypted_response:
-        decrypted_text = decrypt_aes256cbc(encrypted_response, config.enc_key, config.enc_iv)
+        decrypted_text = decrypt_aes256cbc(
+            encrypted_response, config.enc_key, config.enc_iv
+        )
         decrypted_response = json.loads(decrypted_text)
 
     return {"raw": raw, "decrypted": decrypted_response}
@@ -177,10 +199,12 @@ def call_communication_message(process_id: str) -> dict:
 
     config = _config_from_env("TELCEL_COMM_MSG")
 
-    # TODO(temporal / hallazgo QA — no documentado ni garantizado por Telcel, e INTERMITENTE):
-    # mientras TELCEL_CREATE_PROCESS_MOCK esté activo no hay un processId real que cifrar.
-    # - Payload cifrado real + headers de auth reales -> 400 "Invalid ... length/data type"
-    #   (esta ruta sí valida el contenido cuando la auth es correcta).
+    # TODO(temporal / hallazgo QA — no documentado ni garantizado por Telcel, e
+    # INTERMITENTE): mientras TELCEL_CREATE_PROCESS_MOCK esté activo no hay un
+    # processId real que cifrar.
+    # - Payload cifrado real + headers de auth reales -> 400 "Invalid ...
+    #   length/data type" (esta ruta sí valida el contenido cuando la auth es
+    #   correcta).
     # - Body vacío SIN api-key ni token WAF (headers vacíos) -> a veces 200 "Transaction
     #   Completed" (confirmado por curl), a veces 403 Forbidden (confirmado por requests
     #   en la misma sesión de pruebas) — no hay garantía de qué código regresará en cada
@@ -193,20 +217,28 @@ def call_communication_message(process_id: str) -> dict:
     body = {"communicationMessageRequest": ""}
     response = requests.post(
         config.endpoint,
-        headers={"Content-Type": "application/json", "x-api-key": "", "X-amzn-waf-headertkn": ""},
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": "",
+            "X-amzn-waf-headertkn": "",
+        },
         json=body,
         timeout=30,
     )
     logger.info(
         "[TELCEL_COMM_MSG] status=%s process_id=%s response=%s",
-        response.status_code, process_id, response.text[:500],
+        response.status_code,
+        process_id,
+        response.text[:500],
     )
     raw = _raise_for_error(response)
 
     decrypted_response = None
     encrypted_response = raw.get("communicationMessageResponse")
     if encrypted_response:
-        decrypted_text = decrypt_aes256cbc(encrypted_response, config.enc_key, config.enc_iv)
+        decrypted_text = decrypt_aes256cbc(
+            encrypted_response, config.enc_key, config.enc_iv
+        )
         decrypted_response = json.loads(decrypted_text)
 
     return {"raw": raw, "decrypted": decrypted_response}
@@ -218,24 +250,31 @@ def call_create_product_order(id_plan: str, process_id: str) -> dict:
 
     config = _config_from_env("TELCEL_CREATE_PRODUCT_ORDER")
 
-    # TODO(temporal): mismo caso que communication_message — sin un processId real todavía
-    # no tiene caso cifrar {"id": id_plan, "processId": process_id} — se manda el campo vacío.
+    # TODO(temporal): mismo caso que communication_message — sin un processId real
+    # todavía no tiene caso cifrar {"id": id_plan, "processId": process_id} — se
+    # manda el campo vacío.
     # Restaurar el payload cifrado real cuando createProcess deje de estar mockeado.
     body = {"createProductOrderRequest": ""}
 
     response = _post(config, body)
     logger.info(
         "[TELCEL_CREATE_PRODUCT_ORDER] status=%s id_plan=%s process_id=%s response=%s",
-        response.status_code, id_plan, process_id, response.text[:500],
+        response.status_code,
+        id_plan,
+        process_id,
+        response.text[:500],
     )
     raw = _raise_for_error(response)
 
     decrypted_response = None
     encrypted_response = raw.get("createProductOrderResponse")
     if encrypted_response:
-        decrypted_text = decrypt_aes256cbc(encrypted_response, config.enc_key, config.enc_iv)
+        decrypted_text = decrypt_aes256cbc(
+            encrypted_response, config.enc_key, config.enc_iv
+        )
         decrypted_response = json.loads(decrypted_text)
 
     return {"raw": raw, "decrypted": decrypted_response}
- # TODO
-  
+
+
+# TODO

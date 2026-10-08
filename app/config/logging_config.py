@@ -1,10 +1,10 @@
 """
 config/logging_config.py — Configuración de logs a archivo con rotación.
 """
+
 import io
 import logging
 import os
-import re
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -31,11 +31,12 @@ class _RedactSecretsFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             message = record.getMessage()
-        except Exception:
+        except Exception:  # noqa: BLE001 — un filtro de logging nunca debe lanzar
             return True
         if any(marker in message for marker in _SECRET_MARKERS):
             record.msg = (
-                "[REDACTADO] El mensaje original de '%s' contenía una llave/certificado "
+                "[REDACTADO] El mensaje original de '%s' contenía una "
+                "llave/certificado "
                 "y fue suprimido por seguridad."
             )
             record.args = (record.name,)
@@ -65,9 +66,13 @@ def setup_logging():
     # legado (cp1252/cp850), que no puede codificar emojis (✅, ❌, 👋, etc.
     # usados en los mensajes al cliente). Sin esto, esas líneas se pierden
     # en silencio (UnicodeEncodeError capturado por logging.Handler.emit).
-    console_stream = io.TextIOWrapper(
-        sys.stdout.buffer, encoding="utf-8", errors="backslashreplace", newline=""
-    ) if hasattr(sys.stdout, "buffer") else sys.stdout
+    console_stream = (
+        io.TextIOWrapper(
+            sys.stdout.buffer, encoding="utf-8", errors="backslashreplace", newline=""
+        )
+        if hasattr(sys.stdout, "buffer")
+        else sys.stdout
+    )
     console_handler = logging.StreamHandler(console_stream)
     console_handler.setFormatter(formatter)
     console_handler.addFilter(_RedactSecretsFilter())

@@ -4,7 +4,6 @@ state/serializer.py
 Convierte SessionState a dict (para guardar en DB) y viceversa.
 """
 
-
 from app.state.session import SessionState
 
 
@@ -67,12 +66,18 @@ def dict_to_session(data: dict) -> SessionState:
         rejection_count=int(data.get("rejection_count", 0)),
         stage=data.get("stage", "PERSUASION"),
         end_reason=data.get("end_reason", ""),
-        esperando_criterio_recomendacion=bool(data.get("esperando_criterio_recomendacion", False)),
+        esperando_criterio_recomendacion=bool(
+            data.get("esperando_criterio_recomendacion", False)
+        ),
         is_titular=data.get("is_titular", True),
         nombre_incorrecto=bool(data.get("nombre_incorrecto", False)),
-        cac_nombre_incorrecto_shown=bool(data.get("cac_nombre_incorrecto_shown", False)),
+        cac_nombre_incorrecto_shown=bool(
+            data.get("cac_nombre_incorrecto_shown", False)
+        ),
         post_not_titular=bool(data.get("post_not_titular", False)),
-        awaiting_contract_confirmation=bool(data.get("awaiting_contract_confirmation", False)),
+        awaiting_contract_confirmation=bool(
+            data.get("awaiting_contract_confirmation", False)
+        ),
         awaiting_otp=bool(data.get("awaiting_otp", False)),
         otp_sent=bool(data.get("otp_sent", False)),
         otp_attempt_count=int(data.get("otp_attempt_count", 0)),

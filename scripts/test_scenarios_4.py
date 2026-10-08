@@ -18,22 +18,24 @@ Uso:
     python scripts/test_scenarios_4.py
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.config.logging_config import setup_logging
+
 setup_logging()
 
-from app.router.semantic_router import load_reference_embeddings, classify
+from app.router.semantic_router import classify, load_reference_embeddings
+
 load_reference_embeddings()
 
-from scripts.test_scenarios import _nuevo_perfil, _iniciar_historial, _turno
-
+from scripts.test_scenarios import _iniciar_historial, _nuevo_perfil, _turno
 
 # ── Parte A: barrido directo sobre classify() ───────────────────────────────
 
@@ -65,7 +67,9 @@ def parte_a_barrido_router():
     print("PARTE A — Barrido directo sobre classify() (sin LLM)")
     print("=" * 70)
 
-    print("\n-- Peticiones genuinas de plan más barato (esperado: planes_mas_baratos) --")
+    print(
+        "\n-- Peticiones genuinas de plan más barato (esperado: planes_mas_baratos) --"
+    )
     resultados_peticion = []
     for frase in FRASES_PETICION_GENUINA:
         intent = classify(frase)
@@ -73,7 +77,9 @@ def parte_a_barrido_router():
         resultados_peticion.append(ok)
         print(f"  {'OK ' if ok else 'MAL'} {frase!r:55} -> {intent}")
 
-    print("\n-- Objeciones puras de precio (esperado: NADA que sea planes_mas_baratos) --")
+    print(
+        "\n-- Objeciones puras de precio (esperado: NADA que sea planes_mas_baratos) --"
+    )
     resultados_objecion = []
     for frase in FRASES_OBJECION_PURA:
         intent = classify(frase)
@@ -91,39 +97,62 @@ def parte_a_barrido_router():
 
 # ── Parte B: escenarios conversacionales completos ──────────────────────────
 
+
 def escenario_1():
     print("\n" + "=" * 70)
     print("Escenario 1 — Objeción pura ('está muy caro') -> debe manejar objeción")
     print("=" * 70)
     session = _nuevo_perfil("Ana", "Telcel Max Sin Limite 5000", 499.0)
     history = _iniciar_historial(session)
-    respuesta, history = _turno(session, history, "está muy caro, no creo que me convenga")
-    exito = session.rejection_count >= 1 and "opciones más económicas" not in respuesta.lower()
-    return exito, f"rejection_count={session.rejection_count} respuesta='{respuesta[:80]}...'"
+    respuesta, history = _turno(
+        session, history, "está muy caro, no creo que me convenga"
+    )
+    exito = (
+        session.rejection_count >= 1
+        and "opciones más económicas" not in respuesta.lower()
+    )
+    return (
+        exito,
+        f"rejection_count={session.rejection_count} respuesta='{respuesta[:80]}...'",
+    )
 
 
 def escenario_2():
     print("\n" + "=" * 70)
-    print("Escenario 2 — Petición genuina ('tienes algo más barato?') -> debe mostrar opciones")
+    print(
+        "Escenario 2 — Petición genuina ('tienes algo más barato?') -> debe "
+        "mostrar opciones"
+    )
     print("=" * 70)
     session = _nuevo_perfil("Beto", "Telcel Max Sin Limite 6000", 699.0)
     history = _iniciar_historial(session)
     respuesta, history = _turno(session, history, "¿tienes planes más baratos?")
     exito = "$" in respuesta and session.rejection_count == 0
-    return exito, f"rejection_count={session.rejection_count} contiene precio={'$' in respuesta}"
+    return (
+        exito,
+        f"rejection_count={session.rejection_count} contiene precio={'$' in respuesta}",
+    )
 
 
 def escenario_3():
     print("\n" + "=" * 70)
-    print("Escenario 3 — Mensaje mixto: objeción + petición explícita en la misma frase")
+    print(
+        "Escenario 3 — Mensaje mixto: objeción + petición explícita en la misma frase"
+    )
     print("=" * 70)
     session = _nuevo_perfil("Carla", "Telcel Max Sin Limite 6500", 699.0)
     history = _iniciar_historial(session)
-    respuesta, history = _turno(session, history, "está caro, ¿no tienes algo más barato?")
+    respuesta, history = _turno(
+        session, history, "está caro, ¿no tienes algo más barato?"
+    )
     # Aquí no exigimos un único camino "correcto" — solo que la respuesta sea
     # coherente (no vacía) y no invente datos. Se reporta para revisión manual.
     exito = bool(respuesta.strip())
-    return exito, f"respuesta no vacía={exito} (revisar manualmente cuál camino tomó) -> '{respuesta[:100]}...'"
+    return (
+        exito,
+        f"respuesta no vacía={exito} (revisar manualmente cuál camino tomó) -> "
+        f"'{respuesta[:100]}...'",
+    )
 
 
 def escenario_4():
@@ -134,7 +163,10 @@ def escenario_4():
     history = _iniciar_historial(session)
     respuesta, history = _turno(session, history, "no manches, qué caro está eso")
     exito = session.rejection_count >= 1
-    return exito, f"rejection_count={session.rejection_count} respuesta='{respuesta[:80]}...'"
+    return (
+        exito,
+        f"rejection_count={session.rejection_count} respuesta='{respuesta[:80]}...'",
+    )
 
 
 def escenario_5():
@@ -144,9 +176,15 @@ def escenario_5():
     session = _nuevo_perfil("Elena", "Telcel Max Sin Limite 3000", 449.0)
     history = _iniciar_historial(session)
     _, history = _turno(session, history, "no me interesa")
-    respuesta, history = _turno(session, history, "¿tienes algo más económico que lo que me ofreces?")
+    respuesta, history = _turno(
+        session, history, "¿tienes algo más económico que lo que me ofreces?"
+    )
     exito = "$" in respuesta
-    return exito, f"segunda respuesta contiene precio={'$' in respuesta} respuesta='{respuesta[:100]}...'"
+    return (
+        exito,
+        f"segunda respuesta contiene precio={'$' in respuesta} "
+        f"respuesta='{respuesta[:100]}...'",
+    )
 
 
 ESCENARIOS = [

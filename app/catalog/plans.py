@@ -6,56 +6,269 @@ Espejo de docs/catalog/plans.md.
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
 
-PRICE_EPSILON_MXN = 0.005  # margen puramente técnico (medio centavo) para errores de precisión float — NO es tolerancia de negocio
+# margen puramente técnico (medio centavo) para errores de precisión float
+# — NO es tolerancia de negocio
+PRICE_EPSILON_MXN = 0.005
 PROMO_VIGENCIA = "30/05/2026"
 PROMO_TERM_MONTHS = 24
 
 
 @dataclass(frozen=True)
 class Plan:
-    plan_code: str                 # código corto del plan para integraciones (ej. "TL5", "TU3")
+    plan_code: str  # código corto del plan para integraciones (ej. "TL5", "TU3")
     plan_id: str
-    family: str                    # "Telcel Libre" | "Telcel Ultra"
+    family: str  # "Telcel Libre" | "Telcel Ultra"
     price_abierto: float
     price_controlado: float
-    gb_base: float                 # 0 = ilimitado
-    gb_promo: float                # igual a gb_base si no hay promo
+    gb_base: float  # 0 = ilimitado
+    gb_promo: float  # igual a gb_base si no hay promo
     cashback_abierto: float
     cashback_controlado: float
-    has_social_apps: bool          # True = Libre (7 apps), False = Ultra (solo WhatsApp)
-    is_unlimited: bool             # True solo para Ultra Ilimitado
+    has_social_apps: bool  # True = Libre (7 apps), False = Ultra (solo WhatsApp)
+    is_unlimited: bool  # True solo para Ultra Ilimitado
     calls_sms: str = "Llamadas y SMS ilimitados a México, EUA y Canadá"
-    telcel_product_id: Optional[str] = None  # id de catálogo Telcel para CreateProductOrder — TODO: pendiente de poblar con Telcel
+    # id de catálogo Telcel para CreateProductOrder — TODO: pendiente de poblar
+    # con Telcel
+    telcel_product_id: str | None = None
 
 
-CATALOG: List[Plan] = [
+CATALOG: list[Plan] = [
     # ── Telcel Libre ─────────────────────────────────────────────────────────
-    # telcel_product_id: placeholder mock (MOCK-<plan_code>) hasta que Telcel entregue los IDs reales de catálogo.
-    Plan("TL1",    "Telcel Libre 1",          "Telcel Libre",   249,  299,  4,   6.0,  12.45,  14.95, True,  False, telcel_product_id="MOCK-TL1"),
-    Plan("TL2",    "Telcel Libre 2",          "Telcel Libre",   319,  369,  5,   7.5,  15.95,  18.45, True,  False, telcel_product_id="MOCK-TL2"),
-    Plan("TL3",    "Telcel Libre 3",          "Telcel Libre",   399,  449,  6,   9.0,  39.90,  44.90, True,  False, telcel_product_id="MOCK-TL3"),
-    Plan("TL4",    "Telcel Libre 4",          "Telcel Libre",   499,  549, 10,  15.0,  74.85,  82.35, True,  False, telcel_product_id="MOCK-TL4"),
-    Plan("TL5",    "Telcel Libre 5",          "Telcel Libre",   599,  699, 20,  30.0,  89.85, 104.85, True,  False, telcel_product_id="MOCK-TL5"),
-    Plan("TL6",    "Telcel Libre 6",          "Telcel Libre",   699,  799, 30,  45.0, 104.85, 119.85, True,  False, telcel_product_id="MOCK-TL6"),
-    Plan("TL7",    "Telcel Libre 7",          "Telcel Libre",   799,  899, 40,  60.0, 119.85, 134.85, True,  False, telcel_product_id="MOCK-TL7"),
-    Plan("TL9",    "Telcel Libre 9",          "Telcel Libre",   999, 1099, 45,  67.5, 149.85, 164.85, True,  False, telcel_product_id="MOCK-TL9"),
-    Plan("TL12",   "Telcel Libre 12",         "Telcel Libre",  1299, 1399, 55,  82.5, 194.85, 209.85, True,  False, telcel_product_id="MOCK-TL12"),
-    Plan("TLVIP",  "Telcel Libre VIP",        "Telcel Libre",  1499, 1599, 40,  60.0, 629.58, 671.58, True,  False, telcel_product_id="MOCK-TLVIP"),
+    # telcel_product_id: placeholder mock (MOCK-<plan_code>) hasta que Telcel
+    # entregue los IDs reales de catálogo.
+    Plan(
+        "TL1",
+        "Telcel Libre 1",
+        "Telcel Libre",
+        249,
+        299,
+        4,
+        6.0,
+        12.45,
+        14.95,
+        True,
+        False,
+        telcel_product_id="MOCK-TL1",
+    ),
+    Plan(
+        "TL2",
+        "Telcel Libre 2",
+        "Telcel Libre",
+        319,
+        369,
+        5,
+        7.5,
+        15.95,
+        18.45,
+        True,
+        False,
+        telcel_product_id="MOCK-TL2",
+    ),
+    Plan(
+        "TL3",
+        "Telcel Libre 3",
+        "Telcel Libre",
+        399,
+        449,
+        6,
+        9.0,
+        39.90,
+        44.90,
+        True,
+        False,
+        telcel_product_id="MOCK-TL3",
+    ),
+    Plan(
+        "TL4",
+        "Telcel Libre 4",
+        "Telcel Libre",
+        499,
+        549,
+        10,
+        15.0,
+        74.85,
+        82.35,
+        True,
+        False,
+        telcel_product_id="MOCK-TL4",
+    ),
+    Plan(
+        "TL5",
+        "Telcel Libre 5",
+        "Telcel Libre",
+        599,
+        699,
+        20,
+        30.0,
+        89.85,
+        104.85,
+        True,
+        False,
+        telcel_product_id="MOCK-TL5",
+    ),
+    Plan(
+        "TL6",
+        "Telcel Libre 6",
+        "Telcel Libre",
+        699,
+        799,
+        30,
+        45.0,
+        104.85,
+        119.85,
+        True,
+        False,
+        telcel_product_id="MOCK-TL6",
+    ),
+    Plan(
+        "TL7",
+        "Telcel Libre 7",
+        "Telcel Libre",
+        799,
+        899,
+        40,
+        60.0,
+        119.85,
+        134.85,
+        True,
+        False,
+        telcel_product_id="MOCK-TL7",
+    ),
+    Plan(
+        "TL9",
+        "Telcel Libre 9",
+        "Telcel Libre",
+        999,
+        1099,
+        45,
+        67.5,
+        149.85,
+        164.85,
+        True,
+        False,
+        telcel_product_id="MOCK-TL9",
+    ),
+    Plan(
+        "TL12",
+        "Telcel Libre 12",
+        "Telcel Libre",
+        1299,
+        1399,
+        55,
+        82.5,
+        194.85,
+        209.85,
+        True,
+        False,
+        telcel_product_id="MOCK-TL12",
+    ),
+    Plan(
+        "TLVIP",
+        "Telcel Libre VIP",
+        "Telcel Libre",
+        1499,
+        1599,
+        40,
+        60.0,
+        629.58,
+        671.58,
+        True,
+        False,
+        telcel_product_id="MOCK-TLVIP",
+    ),
     # ── Telcel Ultra ─────────────────────────────────────────────────────────
-    Plan("TU3",    "Telcel Ultra 3",          "Telcel Ultra",   349,  399, 15,  15.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU3"),
-    Plan("TU4",    "Telcel Ultra 4",          "Telcel Ultra",   449,  499, 25,  25.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU4"),
-    Plan("TU5",    "Telcel Ultra 5",          "Telcel Ultra",   549,  599, 40,  40.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU5"),
-    Plan("TU7",    "Telcel Ultra 7",          "Telcel Ultra",   749,  799, 60,  60.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU7"),
-    Plan("TU9",    "Telcel Ultra 9",          "Telcel Ultra",   949,  999,100, 100.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU9"),
-    Plan("TUILIM", "Telcel Ultra Ilimitado",  "Telcel Ultra",  1349, 1399,  0,   0.0,   0.00,   0.00, False, True,  telcel_product_id="MOCK-TUILIM"),
+    Plan(
+        "TU3",
+        "Telcel Ultra 3",
+        "Telcel Ultra",
+        349,
+        399,
+        15,
+        15.0,
+        0.00,
+        0.00,
+        False,
+        False,
+        telcel_product_id="MOCK-TU3",
+    ),
+    Plan(
+        "TU4",
+        "Telcel Ultra 4",
+        "Telcel Ultra",
+        449,
+        499,
+        25,
+        25.0,
+        0.00,
+        0.00,
+        False,
+        False,
+        telcel_product_id="MOCK-TU4",
+    ),
+    Plan(
+        "TU5",
+        "Telcel Ultra 5",
+        "Telcel Ultra",
+        549,
+        599,
+        40,
+        40.0,
+        0.00,
+        0.00,
+        False,
+        False,
+        telcel_product_id="MOCK-TU5",
+    ),
+    Plan(
+        "TU7",
+        "Telcel Ultra 7",
+        "Telcel Ultra",
+        749,
+        799,
+        60,
+        60.0,
+        0.00,
+        0.00,
+        False,
+        False,
+        telcel_product_id="MOCK-TU7",
+    ),
+    Plan(
+        "TU9",
+        "Telcel Ultra 9",
+        "Telcel Ultra",
+        949,
+        999,
+        100,
+        100.0,
+        0.00,
+        0.00,
+        False,
+        False,
+        telcel_product_id="MOCK-TU9",
+    ),
+    Plan(
+        "TUILIM",
+        "Telcel Ultra Ilimitado",
+        "Telcel Ultra",
+        1349,
+        1399,
+        0,
+        0.0,
+        0.00,
+        0.00,
+        False,
+        True,
+        telcel_product_id="MOCK-TUILIM",
+    ),
 ]
 
 
 FAMILY_BENEFITS = {
     "Telcel Libre": (
-        "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat, Uber\n"
+        "📱 Apps ilimitadas: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat, "
+        "Uber\n"
         "🎬 Claro Video (streaming)\n"
         "☁️ Claro Drive 20 GB en la nube\n"
         "💰 Cashback mensual Telcel\n"
@@ -75,69 +288,78 @@ def get_price(plan: Plan, modality: str) -> float:
 
 
 def get_cashback(plan: Plan, modality: str) -> float:
-    return plan.cashback_controlado if modality == "Controlado" else plan.cashback_abierto
+    return (
+        plan.cashback_controlado if modality == "Controlado" else plan.cashback_abierto
+    )
 
 
-def eligible_plans(current_cost: float, modality: str) -> List[Plan]:
+def eligible_plans(current_cost: float, modality: str) -> list[Plan]:
     """Planes con precio >= renta actual (sin tolerancia de negocio)."""
-    return [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN]
+    return [
+        p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN
+    ]
 
 
-def recommend_plan(current_cost: float, modality: str) -> Optional[Plan]:
+def recommend_plan(current_cost: float, modality: str) -> Plan | None:
     """Plan con precio más cercano por encima de la renta actual.
     En empate de precio, Telcel Libre tiene prioridad sobre Telcel Ultra.
     """
-    eligible = [p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN]
+    eligible = [
+        p for p in CATALOG if get_price(p, modality) >= current_cost - PRICE_EPSILON_MXN
+    ]
     if not eligible:
         return None
-    return min(eligible, key=lambda p: (get_price(p, modality), 0 if p.family == "Telcel Libre" else 1))
+    return min(
+        eligible,
+        key=lambda p: (get_price(p, modality), 0 if p.family == "Telcel Libre" else 1),
+    )
 
 
 LEGACY_PLANS_GB: dict = {
-    "TELCEL MAX SIN LIMITE 1000":  1.0,
-    "TELCEL MAX SIN LIMITE 1500":  1.5,
-    "TELCEL MAX SIN LIMITE 2000":  2.0,
-    "TELCEL MAX SIN LIMITE 3000":  3.0,
-    "TELCEL MAX SIN LIMITE 5000":  5.0,
-    "TELCEL MAX SIN LIMITE 6000":  7.0,
-    "TELCEL MAX SIN LIMITE 6500":  8.0,
+    "TELCEL MAX SIN LIMITE 1000": 1.0,
+    "TELCEL MAX SIN LIMITE 1500": 1.5,
+    "TELCEL MAX SIN LIMITE 2000": 2.0,
+    "TELCEL MAX SIN LIMITE 3000": 3.0,
+    "TELCEL MAX SIN LIMITE 5000": 5.0,
+    "TELCEL MAX SIN LIMITE 6000": 7.0,
+    "TELCEL MAX SIN LIMITE 6500": 8.0,
     "TELCEL MAX SIN LIMITE 7000": 10.0,
     "TELCEL MAX SIN LIMITE 8000": 11.0,
     "TELCEL MAX SIN LIMITE 9000": 13.0,
     "TELCEL MAX SIN LIMITE 12000": 15.0,
     "TELCEL MAX SIN LIMITE 20000": 20.0,
     # Telcel Plus — nombre completo
-    "TELCEL PLUS 1":   3.0,
+    "TELCEL PLUS 1": 3.0,
     "TELCEL PLUS 1.5": 3.5,
-    "TELCEL PLUS 2":   4.0,
-    "TELCEL PLUS 3":   6.0,
-    "TELCEL PLUS 4":  10.0,
-    "TELCEL PLUS 5":  14.0,
-    "TELCEL PLUS 6":  18.0,
-    "TELCEL PLUS 7":  22.0,
-    "TELCEL PLUS 8":  26.0,
-    "TELCEL PLUS 9":  32.0,
+    "TELCEL PLUS 2": 4.0,
+    "TELCEL PLUS 3": 6.0,
+    "TELCEL PLUS 4": 10.0,
+    "TELCEL PLUS 5": 14.0,
+    "TELCEL PLUS 6": 18.0,
+    "TELCEL PLUS 7": 22.0,
+    "TELCEL PLUS 8": 26.0,
+    "TELCEL PLUS 9": 32.0,
     "TELCEL PLUS 12": 45.0,
     "TELCEL PLUS 14": 60.0,
     "TELCEL PLUS VIP": 35.0,
     # Telcel Plus — abreviación TP (variante CSV)
-    "TP1":   3.0,
+    "TP1": 3.0,
     "TP1.5": 3.5,
-    "TP2":   4.0,
-    "TP3":   6.0,
-    "TP4":  10.0,
-    "TP5":  14.0,
-    "TP6":  18.0,
-    "TP7":  22.0,
-    "TP8":  26.0,
-    "TP9":  32.0,
+    "TP2": 4.0,
+    "TP3": 6.0,
+    "TP4": 10.0,
+    "TP5": 14.0,
+    "TP6": 18.0,
+    "TP7": 22.0,
+    "TP8": 26.0,
+    "TP9": 32.0,
     "TP12": 45.0,
     "TP14": 60.0,
     "TPVIP": 35.0,
 }
 
 
-def get_legacy_gb(plan_name: str) -> Optional[float]:
+def get_legacy_gb(plan_name: str) -> float | None:
     """Retorna los GB del plan legacy o None si no se encuentra.
     Normaliza tildes y mayúsculas para que 'Límite' y 'Limite' sean equivalentes.
     """
@@ -145,7 +367,8 @@ def get_legacy_gb(plan_name: str) -> Optional[float]:
 
     def _norm(s: str) -> str:
         return "".join(
-            c for c in unicodedata.normalize("NFD", s.strip().upper())
+            c
+            for c in unicodedata.normalize("NFD", s.strip().upper())
             if unicodedata.category(c) != "Mn"
         )
 
@@ -156,13 +379,14 @@ def get_legacy_gb(plan_name: str) -> Optional[float]:
     return None
 
 
-def find_plan(plan_id: str) -> Optional[Plan]:
+def find_plan(plan_id: str) -> Plan | None:
     """Busca un plan por ID exacto o nombre parcial."""
     import unicodedata
 
     def norm(s: str) -> str:
         return "".join(
-            c for c in unicodedata.normalize("NFD", s.strip().lower())
+            c
+            for c in unicodedata.normalize("NFD", s.strip().lower())
             if unicodedata.category(c) != "Mn"
         )
 
@@ -196,7 +420,10 @@ def format_plan_for_agent(plan: Plan, modality: str, has_promo: bool = True) -> 
         gb_label = "Datos ilimitados (sujeto a PUJ)"
     elif has_promo and plan.gb_promo > plan.gb_base and plan.family == "Telcel Libre":
         extra = plan.gb_promo - plan.gb_base
-        gb_label = f"{plan.gb_base:g} GB base + {extra:g} GB de promoción = {plan.gb_promo:g} GB totales"
+        gb_label = (
+            f"{plan.gb_base:g} GB base + {extra:g} GB de promoción = "
+            f"{plan.gb_promo:g} GB totales"
+        )
     else:
         gb_label = f"{plan.gb_base:g} GB"
 
@@ -214,6 +441,9 @@ def format_plan_for_agent(plan: Plan, modality: str, has_promo: bool = True) -> 
     lines.append(benefits)
 
     if has_promo and plan.gb_promo > plan.gb_base and plan.family == "Telcel Libre":
-        lines.append(f"\n🎁 Promoción vigente hasta el {PROMO_VIGENCIA} · GB extra durante {PROMO_TERM_MONTHS} meses")
+        lines.append(
+            f"\n🎁 Promoción vigente hasta el {PROMO_VIGENCIA} · GB extra durante "
+            f"{PROMO_TERM_MONTHS} meses"
+        )
 
     return "\n".join(lines)

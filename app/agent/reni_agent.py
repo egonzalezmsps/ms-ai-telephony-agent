@@ -12,18 +12,23 @@ import time
 import unicodedata
 import warnings
 from collections import deque
-from typing import List, Dict, Tuple
 
 from strands import Agent
 
-from app.catalog.plans import CATALOG, PRICE_EPSILON_MXN, find_plan, get_price, recommend_plan
+from app.catalog.plans import (
+    CATALOG,
+    PRICE_EPSILON_MXN,
+    find_plan,
+    get_price,
+    recommend_plan,
+)
 from app.config.oci_model import oci_model
-from app.prompts.system_prompt import build_system_prompt
-from app.tools.telcel_tools import make_tools
-from app.state.session import SessionState
-from app.contract.contract_flow import handle_contract_turn, build_summary_template
+from app.contract.contract_flow import build_summary_template, handle_contract_turn
 from app.contract.post_sale import build_post_sale_message
+from app.prompts.system_prompt import build_system_prompt
 from app.router.semantic_router import classify
+from app.state.session import SessionState
+from app.tools.telcel_tools import make_tools
 
 DEBUG_WHATSAPP = os.getenv("DEBUG_WHATSAPP", "false").lower() == "true"
 
@@ -39,15 +44,17 @@ def _check_rpm() -> int:
     return len(_request_timestamps)
 
 
-def _apply_debug(response_text: str, tools_invoked: list = None,
-                  user_message: str = "") -> str:
+def _apply_debug(
+    response_text: str, tools_invoked: list | None = None, user_message: str = ""
+) -> str:
     if not DEBUG_WHATSAPP:
         return response_text
     tools_str = f"[TOOLS] {tools_invoked if tools_invoked else 'ninguna'}"
     return f"{tools_str}\n{response_text}"
 
 
-# Silencia los WARNING internos de Strands (ej. "overriding stop reason due to toolUse").
+# Silencia los WARNING internos de Strands (ej. "overriding stop reason due to
+# toolUse").
 # El mensaje viene de strands.event_loop.streaming como logger.warning() y no debe
 # llegar al cliente. Mantenemos ERROR y CRITICAL para fallos reales.
 logging.getLogger("strands").setLevel(logging.ERROR)
@@ -73,20 +80,15 @@ def clean_response(
     """
     # Eliminar nombres de tools escritos como texto literal
     text = re.sub(
-        r'\([a-z_]+(?:_[a-z]+)*,\s*(?:tipo|criterio|tema|motivo|plan_id)=[^)]*\)',
-        '',
+        r"\([a-z_]+(?:_[a-z]+)*,\s*(?:tipo|criterio|tema|motivo|plan_id)=[^)]*\)",
+        "",
         text,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE,
     )
-    text = re.sub(
-        r'\[[a-z_]+(?:_[a-z]+)*\]',
-        '',
-        text,
-        flags=re.IGNORECASE
-    )
+    text = re.sub(r"\[[a-z_]+(?:_[a-z]+)*\]", "", text, flags=re.IGNORECASE)
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
-    text = re.sub(r'\[\s*\]', '', text).strip()
-    text = re.sub(r'\n{3,}', '\n\n', text).strip()
+    text = re.sub(r"\[\s*\]", "", text).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
 
     text = _fix_tuteo(text)
     text = _strip_technical_cac_reasons(text)
@@ -96,10 +98,14 @@ def clean_response(
         text = _filter_wrong_modality(text, session)
 
     # Elimina paréntesis incompletos y su contenido hasta fin de texto
-    if text.count('(') > text.count(')'):
-        logger.warning("[PARENTESIS_INCOMPLETO] text='%s' phone=%s", text[-100:], session.phone_number if session else "")
-        text = re.sub(r'\([^)]*$', '', text).strip()
-        text = re.sub(r'[\s,+\.]+$', '', text).strip()
+    if text.count("(") > text.count(")"):
+        logger.warning(
+            "[PARENTESIS_INCOMPLETO] text='%s' phone=%s",
+            text[-100:],
+            session.phone_number if session else "",
+        )
+        text = re.sub(r"\([^)]*$", "", text).strip()
+        text = re.sub(r"[\s,+\.]+$", "", text).strip()
 
     if is_rejection:
         rejection_phrases = ("entiendo", "comprendo", "respetamos su decisión")
@@ -108,7 +114,9 @@ def clean_response(
             last_q = text.rfind("¿")
             if last_q != -1:
                 question = text[last_q:]
-                if any(w in question.upper() for w in ["ACTIVAR", "ACTIVARLO", "PROCEDER"]):
+                if any(
+                    w in question.upper() for w in ["ACTIVAR", "ACTIVARLO", "PROCEDER"]
+                ):
                     text = text[:last_q].rstrip()
 
     if text.count("?") <= 1:
@@ -125,19 +133,29 @@ def clean_response(
     # Si el texto anterior también contiene preguntas, filtrar esas líneas
     if "?" in before:
         lines = re.split(r"\n+", before)
-        before = "\n".join(l for l in lines if "?" not in l).rstrip()
+        before = "\n".join(line for line in lines if "?" not in line).rstrip()
 
     return (before + "\n\n" + last_q).strip() if before else last_q
+
 
 _CAC_MARKERS = ["cac", "800 220 9518", "centro de atención a clientes"]
 
 _TECHNICAL_CAC_PHRASES = [
-    re.compile(r"ya que su precio \(\$[\d,]+/mes\) es menor a su renta actual \(\$[\d,]+/mes\)", re.IGNORECASE),
+    re.compile(
+        r"ya que su precio \(\$[\d,]+/mes\) es menor a su renta actual "
+        r"\(\$[\d,]+/mes\)",
+        re.IGNORECASE,
+    ),
     re.compile(r"ya que su precio es menor a su renta actual[^.]*\.", re.IGNORECASE),
     re.compile(r"debido a que su precio es menor[^.]*\.", re.IGNORECASE),
     re.compile(r"porque su precio \(\$[\d,]+\) es menor[^.]*\.", re.IGNORECASE),
-    re.compile(r"ya que su renta actual es de \$[\d,]+[^.]*precio menor[^.]*\.", re.IGNORECASE),
-    re.compile(r"ya que su precio \(\$[\d,]+/mes\) es mayor a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(
+        r"ya que su renta actual es de \$[\d,]+[^.]*precio menor[^.]*\.", re.IGNORECASE
+    ),
+    re.compile(
+        r"ya que su precio \(\$[\d,]+/mes\) es mayor a su renta actual[^.]*\.",
+        re.IGNORECASE,
+    ),
     re.compile(r"ya que el precio del plan[^.]*es mayor[^.]*\.", re.IGNORECASE),
     re.compile(r"y requiere cambio de plan en un CAC[^.]*\.", re.IGNORECASE),
     re.compile(r"requiere cambio de plan en un CAC[^.]*\.", re.IGNORECASE),
@@ -148,21 +166,37 @@ _TECHNICAL_CAC_PHRASES = [
     re.compile(r"por ser más barato que su renta actual[^.]*\.", re.IGNORECASE),
     re.compile(r"por ser más barato que tu renta actual[^.]*\.", re.IGNORECASE),
     re.compile(r"ya que su precio \(\$[\d,]+\) es menor[^.]*\.", re.IGNORECASE),
-    re.compile(r"ya que su precio \(\$[\d,]+/mes\) es igual a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(
+        r"ya que su precio \(\$[\d,]+/mes\) es igual a su renta actual[^.]*\.",
+        re.IGNORECASE,
+    ),
     re.compile(r"ya que su precio es igual a su renta actual[^.]*\.", re.IGNORECASE),
     re.compile(r"porque su precio.*igual.*renta[^.]*\.", re.IGNORECASE),
     re.compile(r"dado que su precio.*igual[^.]*\.", re.IGNORECASE),
-    re.compile(r"ya que su nuevo plan \(\$[\d,]+/mes\) es más caro que su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(
+        r"ya que su nuevo plan \(\$[\d,]+/mes\) es más caro que su renta actual[^.]*\.",
+        re.IGNORECASE,
+    ),
     re.compile(r"ya que su nuevo plan.*más caro[^.]*\.", re.IGNORECASE),
     re.compile(r"desde la activación, ya que[^.]*\.", re.IGNORECASE),
-    re.compile(r"aplica durante \d+ meses desde la activación, ya que[^.]*\.", re.IGNORECASE),
+    re.compile(
+        r"aplica durante \d+ meses desde la activación, ya que[^.]*\.", re.IGNORECASE
+    ),
     re.compile(r"este plan es más barato que su renta actual[^.]*\.", re.IGNORECASE),
-    re.compile(r"no es elegible para activarse directamente en este canal[^.]*\.", re.IGNORECASE),
+    re.compile(
+        r"no es elegible para activarse directamente en este canal[^.]*\.",
+        re.IGNORECASE,
+    ),
     re.compile(r"por lo tanto, no es elegible[^.]*\.", re.IGNORECASE),
     re.compile(r"tenga en cuenta que este plan es más barato[^.]*\.", re.IGNORECASE),
-    re.compile(r"La promoción de GB aplica cuando el precio del plan nuevo es mayor[^.]*\.", re.IGNORECASE),
+    re.compile(
+        r"La promoción de GB aplica cuando el precio del plan nuevo es mayor[^.]*\.",
+        re.IGNORECASE,
+    ),
     re.compile(r"aplica cuando el precio.*mayor.*renta[^.]*\.", re.IGNORECASE),
-    re.compile(r"tiene promoción porque es mayor a su renta actual[^.]*\.", re.IGNORECASE),
+    re.compile(
+        r"tiene promoción porque es mayor a su renta actual[^.]*\.", re.IGNORECASE
+    ),
     re.compile(r"tiene promoción porque.*mayor[^.]*\.", re.IGNORECASE),
     re.compile(r"reversible[^.]*\.", re.IGNORECASE),
     re.compile(r"puede revertirse[^.]*\.", re.IGNORECASE),
@@ -173,29 +207,30 @@ _TECHNICAL_CAC_PHRASES = [
 
 
 def _strip_technical_cac_reasons(text: str) -> str:
-    """Elimina explicaciones técnicas de elegibilidad que nunca deben llegar al cliente."""
+    """Elimina explicaciones técnicas de elegibilidad que nunca deben llegar al \
+cliente."""
     for pattern in _TECHNICAL_CAC_PHRASES:
         text = pattern.sub("", text)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 _TUTEO_MAP = {
-    'tienes': 'tiene',
-    'podrías': 'podría',
-    'recibirías': 'recibiría',
-    'tendrías': 'tendría',
+    "tienes": "tiene",
+    "podrías": "podría",
+    "recibirías": "recibiría",
+    "tendrías": "tendría",
 }
 _TUTEO_PATTERN = re.compile(
-    r'\b(tienes|podr[ií]as|recibir[ií]as|tendr[ií]as)\b',
+    r"\b(tienes|podr[ií]as|recibir[ií]as|tendr[ií]as)\b",
     re.IGNORECASE | re.UNICODE,
 )
 
 _PROMO_PATTERNS = [
-    r'\+50%\s*(?:de\s*)?GB[^\s,\.]*',
-    r'\d+(?:[,\.]\d+)?\s*GB\s*(?:de\s*)?(?:promoción|promo)\b[^,\.\n]*',
-    r'\d+(?:[,\.]\d+)?\s*GB\s*extra\b[^,\.\n]*',
-    r'\d+(?:[,\.]\d+)?\s*GB\s*adicionales\b[^,\.\n]*',
-    r'\(.*?\d+\s*GB\s*base\s*\+\s*\d+(?:[,\.]\d+)?\s*GB[^\)]*\)',
+    r"\+50%\s*(?:de\s*)?GB[^\s,\.]*",
+    r"\d+(?:[,\.]\d+)?\s*GB\s*(?:de\s*)?(?:promoción|promo)\b[^,\.\n]*",
+    r"\d+(?:[,\.]\d+)?\s*GB\s*extra\b[^,\.\n]*",
+    r"\d+(?:[,\.]\d+)?\s*GB\s*adicionales\b[^,\.\n]*",
+    r"\(.*?\d+\s*GB\s*base\s*\+\s*\d+(?:[,\.]\d+)?\s*GB[^\)]*\)",
 ]
 
 
@@ -204,6 +239,7 @@ def _fix_tuteo(text: str) -> str:
         original = m.group(0)
         formal = _TUTEO_MAP.get(original.lower(), original)
         return formal[0].upper() + formal[1:] if original[0].isupper() else formal
+
     return _TUTEO_PATTERN.sub(_repl, text)
 
 
@@ -214,37 +250,50 @@ def _fix_incorrect_promo(text: str, session) -> str:
     """
     # Buscar TODOS los precios y verificar que NINGUNO sea diferente
     # a la renta actual — si hay un precio diferente, la promoción sí aplica
-    prices = re.findall(r'\$(\d+)/mes', text)
+    prices = re.findall(r"\$(\d+)/mes", text)
     if not prices:
         return text
     # Si algún precio es diferente a la renta actual, no eliminar promoción
     if any(abs(float(p) - session.current_cost) > PRICE_EPSILON_MXN for p in prices):
         return text
     for pattern in _PROMO_PATTERNS:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-    return re.sub(r'\n{3,}', '\n\n', text).strip()
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 _CHEAPER_REQUEST_PATTERN = re.compile(
-    r'\b(m[aá]s\s+barato|econ[oó]mico|m[eé]nos\s+(?:caro|precio)|precio\s*m[aá]s\s*bajo|'
-    r'm[aá]s\s+econ[oó]mico|plan\s+barato|algo\s+(?:m[aá]s\s+)?barato)\b',
+    r"\b(m[aá]s\s+barato|econ[oó]mico|m[eé]nos\s+(?:caro|precio)|precio\s*m[aá]s\s*bajo|"
+    r"m[aá]s\s+econ[oó]mico|plan\s+barato|algo\s+(?:m[aá]s\s+)?barato)\b",
     re.IGNORECASE | re.UNICODE,
 )
-_PRICE_IN_LINE_PATTERN = re.compile(r'\$(\d[\d,\.]*)/mes', re.IGNORECASE)
+_PRICE_IN_LINE_PATTERN = re.compile(r"\$(\d[\d,\.]*)/mes", re.IGNORECASE)
 # Líneas que parecen listado de planes: bullet/tabla con nombre Telcel
 _PLAN_LISTING_LINE = re.compile(
-    r'^\s*(?:[•\-\*\|]|\d+[\.\)]\s)\s*Telcel\s+(?:Libre|Ultra)'
-    r'|^Telcel\s+(?:Libre|Ultra)',
+    r"^\s*(?:[•\-\*\|]|\d+[\.\)]\s)\s*Telcel\s+(?:Libre|Ultra)"
+    r"|^Telcel\s+(?:Libre|Ultra)",
     re.IGNORECASE,
 )
 
 # Patrón de activación en modalidad incorrecta (para cliente Controlado)
 _WRONG_MODAL_ACTIVATION = re.compile(
-    r'(?:activar|activarlo|activarla|contratar|migrar|se\s+activa|puede\s+activar)'
-    r'.*?\bmodalidad\s+abierto\b'
-    r'|\bmodalidad\s+abierto\b.*?(?:activar|activarlo|contratar|migrar|se\s+activa)',
+    r"(?:activar|activarlo|activarla|contratar|migrar|se\s+activa|puede\s+activar)"
+    r".*?\bmodalidad\s+abierto\b"
+    r"|\bmodalidad\s+abierto\b.*?(?:activar|activarlo|contratar|migrar|se\s+activa)",
     re.IGNORECASE | re.DOTALL,
 )
+
+
+_CHEAPER_WORDS = [
+    "barato",
+    "económico",
+    "economico",
+    "menor costo",
+    "menor precio",
+    "accesible",
+    "más barato",
+    "mas barato",
+    "menos caro",
+]
 
 
 def _filter_ineligible_plans(text: str, user_message: str, session) -> str:
@@ -254,17 +303,13 @@ def _filter_ineligible_plans(text: str, user_message: str, session) -> str:
     """
     if session is None:
         return text
-    _CHEAPER_WORDS = [
-        "barato", "económico", "economico", "menor costo", "menor precio",
-        "accesible", "más barato", "mas barato", "menos caro",
-    ]
     if _CHEAPER_REQUEST_PATTERN.search(user_message) or any(
         w in user_message.lower() for w in _CHEAPER_WORDS
     ):
         return text  # cliente pidió explícitamente ver opciones más baratas
 
     current_cost = session.current_cost
-    lines = text.split('\n')
+    lines = text.split("\n")
     result = []
     for line in lines:
         if _PLAN_LISTING_LINE.match(line.strip()):
@@ -272,13 +317,13 @@ def _filter_ineligible_plans(text: str, user_message: str, session) -> str:
             if prices:
                 # Usar solo el primer precio (precio del plan) — no cashback ni otros
                 # Quitar separadores de miles (coma o punto antes de 3 dígitos)
-                raw = re.sub(r'[,.](?=\d{3}(?:\D|$))', '', prices[0])
-                plan_price = float(raw.replace(',', ''))
+                raw = re.sub(r"[,.](?=\d{3}(?:\D|$))", "", prices[0])
+                plan_price = float(raw.replace(",", ""))
                 if plan_price < current_cost - PRICE_EPSILON_MXN:
                     continue  # omitir línea no elegible
         result.append(line)
 
-    return re.sub(r'\n{3,}', '\n\n', '\n'.join(result))
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(result))
 
 
 def _filter_wrong_modality(text: str, session) -> str:
@@ -291,28 +336,39 @@ def _filter_wrong_modality(text: str, session) -> str:
     if session is None or session.subscription_type != "Controlado":
         return text
 
-    lines = text.split('\n')
+    lines = text.split("\n")
     result = [line for line in lines if not _WRONG_MODAL_ACTIVATION.search(line)]
-    return '\n'.join(result)
+    return "\n".join(result)
 
 
 _NOT_TITULAR_KEYWORDS = [
-    "no soy", "no es mi nombre", "soy su esposa", "soy su hijo",
-    "soy su madre", "no me llamo", "equivocado de persona",
-    "número equivocado", "este no es mi número",
+    "no soy",
+    "no es mi nombre",
+    "soy su esposa",
+    "soy su hijo",
+    "soy su madre",
+    "no me llamo",
+    "equivocado de persona",
+    "número equivocado",
+    "este no es mi número",
 ]
 
 _WRONG_NAME_PHRASES = [
-    "mi nombre es", "me llamo",
-    "el nombre está mal", "nombre equivocado",
+    "mi nombre es",
+    "me llamo",
+    "el nombre está mal",
+    "nombre equivocado",
     "el nombre está equivocado",
-    "yo soy", "soy ", "mi nombre",
+    "yo soy",
+    "soy ",
+    "mi nombre",
 ]
 
 
 def _norm_name(s: str) -> str:
     return "".join(
-        c for c in unicodedata.normalize("NFD", s.strip().lower())
+        c
+        for c in unicodedata.normalize("NFD", s.strip().lower())
         if unicodedata.category(c) != "Mn"
     )
 
@@ -335,33 +391,40 @@ def _detect_titular_issues(session, user_message: str):
         )
 
     # B) Nombre incorrecto — solo si sigue considerado titular
-    if session.is_titular and not session.nombre_incorrecto:
-        if any(kw in msg_lower for kw in _WRONG_NAME_PHRASES):
-            name_is_different = False
-            name_match = re.search(
-                r'(?:mi nombre es|me llamo|yo soy|soy)\s+([a-záéíóúüñ]+)',
-                msg_lower,
-            )
-            if name_match:
-                claimed = _norm_name(name_match.group(1))
-                registered = _norm_name(session.first_name)
-                name_is_different = bool(claimed) and claimed != registered
-            elif any(
-                kw in msg_lower
-                for kw in ["el nombre está mal", "nombre equivocado", "el nombre está equivocado"]
-            ):
-                name_is_different = True
+    if (
+        session.is_titular
+        and not session.nombre_incorrecto
+        and any(kw in msg_lower for kw in _WRONG_NAME_PHRASES)
+    ):
+        name_is_different = False
+        name_match = re.search(
+            r"(?:mi nombre es|me llamo|yo soy|soy)\s+([a-záéíóúüñ]+)",
+            msg_lower,
+        )
+        if name_match:
+            claimed = _norm_name(name_match.group(1))
+            registered = _norm_name(session.first_name)
+            name_is_different = bool(claimed) and claimed != registered
+        elif any(
+            kw in msg_lower
+            for kw in [
+                "el nombre está mal",
+                "nombre equivocado",
+                "el nombre está equivocado",
+            ]
+        ):
+            name_is_different = True
 
-            if name_is_different:
-                session.nombre_incorrecto = True
-                return (
-                    "Entendemos que usted es el titular de la línea. Sin embargo, "
-                    "existe una discrepancia en el nombre registrado en nuestros sistemas, "
-                    "lo que impide formalizar el cambio de plan desde este canal.\n\n"
-                    "Para proceder con la activación, le invitamos a corregir sus datos "
-                    "acudiendo a un Centro de Atención a Clientes (CAC):\n"
-                    "📍 https://www.telcel.com/personas/atencion-a-clientes/puntos-de-contacto/centro-atencion"
-                )
+        if name_is_different:
+            session.nombre_incorrecto = True
+            return (
+                "Entendemos que usted es el titular de la línea. Sin embargo, "
+                "existe una discrepancia en el nombre registrado en nuestros sistemas, "
+                "lo que impide formalizar el cambio de plan desde este canal.\n\n"
+                "Para proceder con la activación, le invitamos a corregir sus datos "
+                "acudiendo a un Centro de Atención a Clientes (CAC):\n"
+                "📍 https://www.telcel.com/personas/atencion-a-clientes/puntos-de-contacto/centro-atencion"
+            )
 
     return None
 
@@ -387,7 +450,7 @@ def _strip_incorrect_cac(
             mentioned_plan = plan
             break
     if mentioned_plan is None:
-        for m in re.findall(r'(?:libre|ultra)\s+\w+', msg_lower):
+        for m in re.findall(r"(?:libre|ultra)\s+\w+", msg_lower):
             mentioned_plan = find_plan("telcel " + m)
             if mentioned_plan:
                 break
@@ -408,7 +471,7 @@ def _strip_incorrect_cac(
         return text
 
     # Eliminar párrafos/líneas que contengan derivación al CAC o Soporte
-    paragraphs = re.split(r'\n+', text)
+    paragraphs = re.split(r"\n+", text)
     cleaned = [p for p in paragraphs if not any(m in p.lower() for m in _CAC_MARKERS)]
     clean_text = "\n".join(cleaned).strip()
 
@@ -425,22 +488,26 @@ def _strip_incorrect_cac(
 
 def _check_invented_plans(text: str, session: SessionState) -> str:
     plan_mentions = re.findall(
-        r'Telcel\s+(?:Libre|Ultra)\s+(?:\d+|VIP|Ilimitado)',
-        text,
-        re.IGNORECASE
+        r"Telcel\s+(?:Libre|Ultra)\s+(?:\d+|VIP|Ilimitado)", text, re.IGNORECASE
     )
     for mention in plan_mentions:
-        clean = re.sub(r'\s+(Controlado|Abierto)$', '', mention.strip(), flags=re.IGNORECASE)
+        clean = re.sub(
+            r"\s+(Controlado|Abierto)$", "", mention.strip(), flags=re.IGNORECASE
+        )
         plan_obj = find_plan(clean)
         if not plan_obj:
-            logger.warning("[PLAN_INVENTADO] '%s' phone=%s", clean, session.phone_number)
-            plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
+            logger.warning(
+                "[PLAN_INVENTADO] '%s' phone=%s", clean, session.phone_number
+            )
+            plan = (
+                session.plan_anclado if session.plan_anclado else "el plan recomendado"
+            )
             return f"¿Le gustaría activar el *{plan}*?"
 
     return text
 
 
-def create_agent(session: SessionState, messages: List[Dict] = None) -> Agent:
+def create_agent(session: SessionState, messages: list[dict] | None = None) -> Agent:
     """Crea el agente con system prompt, herramientas e historial inicial."""
     return Agent(
         model=oci_model,
@@ -451,11 +518,109 @@ def create_agent(session: SessionState, messages: List[Dict] = None) -> Agent:
     )
 
 
+_BENEFICIO_KEYWORDS = [
+    "cashback",
+    "claro video",
+    "claro drive",
+    "apps",
+    "gigas",
+    "datos",
+    "llamadas",
+    "sms",
+    "roaming",
+    "cobertura",
+    "plan",
+    "beneficio",
+    "promocion",
+    "promoción",
+]
+
+_QUEJA_KEYWORDS = [
+    "quejar",
+    "queja",
+    "descuento",
+    "resuelvelo",
+    "resolvelo",
+    "mal servicio",
+    "no me ayudas",
+    "no sirve",
+    "exijo",
+]
+
+# ── Detección pre-LLM: pregunta sobre por qué se deriva al CAC/Soporte ───
+# (conservado como fallback — por_que_cac ya está en el router)
+_CAC_QUESTIONS = [
+    "porque tengo que comunicarme",
+    "por qué tengo que comunicarme",
+    "porque tengo que ir al cac",
+    "por qué tengo que ir al cac",
+    "no puedes cambiarlo tu",
+    "no puedes cambiarlo tú",
+    "no lo puedes cambiar",
+    "por que me mandas",
+    "por qué me mandas",
+    "no puedes hacerlo tu",
+    "no puedes hacerlo tú",
+    "porque no puedes",
+    "por qué no puedes",
+]
+
+# ── Detección pre-LLM: solicitud de otra recomendación ──────────
+_OTRA_RECOMENDACION = [
+    "otra recomendacion",
+    "otra recomendación",
+    "dame otra",
+    "otra opcion",
+    "otra opción",
+    "recomiendame otro",
+    "recomiéndame otro",
+    "que mas recomiendas",
+    "qué más recomiendas",
+    "cual me recomiendas",
+    "cuál me recomiendas",
+]
+
+# ── Detección pre-LLM: rechazo corto ─────────────────────────────
+_RECHAZOS_CORTOS = {"no", "no.", "no!", "nope", "nel", "nop", "paso"}
+
+_INTERNAL_LEAK_TERMS = [
+    "CONTRATACION_INICIADA",
+    "Verificación de seguridad",
+    "OTP",
+    "(OTP)",
+    "invocaré iniciar_contratacion",
+    "invocar iniciar_contratacion",
+    "flujo completo de contratación",
+    "flujo de contratación",
+    "siga el flujo",
+    "necesito seguir el proceso",
+    "el proceso establecido",
+    "recibirá las instrucciones para completar",
+]
+
+# Llama 4 Maverick a veces escribe herramientas como texto literal:
+# "[tool_name]" o "tool_name(param='valor')" en lugar de invocarlas.
+# Si se detecta ese patrón, se reintenta una vez con un agente fresco.
+_TOOL_PATTERN = re.compile(
+    r"(\[[a-z_]+(?:\([^)]*\))?\]|[a-z_]+\([^)]*\)|\([a-z_]+,\s*\w+=)", re.IGNORECASE
+)
+
+REJECTION_WORDS = {
+    "no",
+    "no quiero",
+    "no me interesa",
+    "no gracias",
+    "no por ahora",
+    "paso",
+    "no aplica",
+}
+
+
 def run_turn(
     session: SessionState,
     user_message: str,
-    history: List[Dict] = None,
-) -> Tuple[str, List[Dict]]:
+    history: list[dict] | None = None,
+) -> tuple[str, list[dict]]:
     """
     Ejecuta un turno de conversación con historial persistente.
 
@@ -472,14 +637,19 @@ def run_turn(
     # Inicializar plan_anclado al primer turno real (antes de cualquier
     # bloque pre-LLM, ya que varios de ellos lo referencian directamente)
     if not session.plan_anclado:
-        _anclado_target = recommend_plan(session.current_cost, session.subscription_type)
+        _anclado_target = recommend_plan(
+            session.current_cost, session.subscription_type
+        )
         if _anclado_target:
-            session.plan_anclado = f"{_anclado_target.plan_id} {session.subscription_type}"
+            session.plan_anclado = (
+                f"{_anclado_target.plan_id} {session.subscription_type}"
+            )
 
     # ── Detección pre-LLM: titular y nombre ───────────────────────────────────
     titular_msg = _detect_titular_issues(session, user_message)
     if titular_msg is not None:
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": titular_msg},
         ]
@@ -491,12 +661,14 @@ def run_turn(
         _cierre = (
             f"Su cambio de plan ya fue procesado, {session.first_name}.\n\n"
             f"🔄 *Detalle del cambio:*\n"
-            f"- Plan anterior: *{session.previous_plan_name} {session.subscription_type}*\n"
+            f"- Plan anterior: *{session.previous_plan_name} "
+            f"{session.subscription_type}*\n"
             f"- Plan nuevo: *{session.plan_selected} {session.subscription_type}*\n\n"
             f"En breve nos contactaremos para dar seguimiento.\n\n"
             f"Si tiene alguna duda puede comunicarse con Soporte al 800 220 9518."
         )
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": _cierre},
         ]
@@ -512,7 +684,8 @@ def run_turn(
         contract_msg = handle_contract_turn(session, user_message)
 
         if contract_msg is not None:
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": contract_msg},
             ]
@@ -521,7 +694,8 @@ def run_turn(
         if session.stage == "POST_SALE":
             post_sale_text = build_post_sale_message(session)
             session.stage = "END"
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": post_sale_text},
             ]
@@ -530,30 +704,37 @@ def run_turn(
         if session.stage == "PERSUASION":
             # Cliente canceló — respuesta empática sin LLM
             from app.tools.telcel_tools import make_tools
+
             tools = make_tools(session)
-            manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
+            manejar_fn = next(
+                (t for t in tools if t.tool_name == "manejar_objecion"), None
+            )
             if manejar_fn:
                 result = manejar_fn(motivo="")
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["manejar_objecion"], user_message
+                ), updated_history
         # else: pregunta durante espera → continúa al LLM con contexto de contrato
 
     # ── Detección pre-LLM: botones quick_reply del mensaje de campaña ────────
     # ("Sí, compáralo" / "En otro momento") — coincidencia determinística por
     # id de botón interactivo o por texto/payload de botón de template, sin
     # depender del router semántico.
-    _msg_btn_norm = re.sub(r'[¿?¡!,\.]', ' ', user_message.strip().lower())
+    _msg_btn_norm = re.sub(r"[¿?¡!,\.]", " ", user_message.strip().lower())
     _msg_btn_norm = _norm_name(_msg_btn_norm)
-    _msg_btn_norm = re.sub(r'\s+', ' ', _msg_btn_norm).strip()
+    _msg_btn_norm = re.sub(r"\s+", " ", _msg_btn_norm).strip()
 
     if _msg_btn_norm in {"comparar", "si comparalo"}:
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
         comparar_fn = next((t for t in tools if t.tool_name == "comparar_planes"), None)
         if comparar_fn:
@@ -561,14 +742,21 @@ def run_turn(
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
             )
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": response_text},
             ]
-            return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
+            return _apply_debug(
+                response_text, ["comparar_planes"], user_message
+            ), updated_history
 
-    if _msg_btn_norm in {"despues", "en otro momento"} and session.stage == "PERSUASION":
+    if (
+        _msg_btn_norm in {"despues", "en otro momento"}
+        and session.stage == "PERSUASION"
+    ):
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
         manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
         if manejar_fn:
@@ -576,11 +764,14 @@ def run_turn(
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
             )
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": response_text},
             ]
-            return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
+            return _apply_debug(
+                response_text, ["manejar_objecion"], user_message
+            ), updated_history
 
     msg_lower = user_message.lower()
 
@@ -595,7 +786,8 @@ def run_turn(
             f"a encontrar la mejor opción disponible para usted.\n\n"
             f"¿Le gustaría activar el *{session.plan_anclado}*?"
         )
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
@@ -603,7 +795,11 @@ def run_turn(
 
     elif _intencion == "criterio_promo":
         target = recommend_plan(session.current_cost, session.subscription_type)
-        plan_name = f"{target.plan_id} {session.subscription_type}" if target else "el plan recomendado"
+        plan_name = (
+            f"{target.plan_id} {session.subscription_type}"
+            if target
+            else "el plan recomendado"
+        )
         if target:
             plan_price = get_price(target, session.subscription_type)
             tiene_promo_gb = (
@@ -625,18 +821,14 @@ def run_turn(
                 f"para su línea sin costo adicional."
             )
         response_text = f"{msg_promo}\n\n¿Le gustaría activar el {plan_name}?"
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
         return _apply_debug(response_text, [], user_message), updated_history
 
     elif _intencion == "reglas_internas":
-        _BENEFICIO_KEYWORDS = [
-            "cashback", "claro video", "claro drive", "apps", "gigas",
-            "datos", "llamadas", "sms", "roaming", "cobertura", "plan",
-            "beneficio", "promocion", "promoción",
-        ]
         if not any(b in msg_lower for b in _BENEFICIO_KEYWORDS):
             response_text = (
                 "Solo puedo ayudarle con información sobre planes y "
@@ -644,7 +836,8 @@ def run_turn(
                 "¿Le gustaría que le muestre las opciones disponibles "
                 "para usted?"
             )
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": response_text},
             ]
@@ -657,7 +850,8 @@ def run_turn(
                 "Para continuar, comuníquese con Soporte al 800 220 9518 "
                 "o acuda a un Centro de Atención a Clientes."
             )
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": response_text},
             ]
@@ -668,7 +862,8 @@ def run_turn(
             f"y nosotros nos encargamos del resto.\n\n"
             f"¿Le gustaría activar el *{session.plan_anclado}*?"
         )
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
@@ -682,7 +877,8 @@ def run_turn(
             f"herramientas necesarias para ese trámite.\n\n"
             f"¿Le gustaría activar el *{session.plan_anclado}*?"
         )
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
@@ -695,7 +891,8 @@ def run_turn(
             "o revisar su información en la app Mi Telcel.\n\n"
             f"¿Le gustaría activar el *{session.plan_anclado}*?"
         )
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
@@ -703,35 +900,46 @@ def run_turn(
 
     elif _intencion == "info_plan_actual":
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        informar_fn = next((t for t in tools if t.tool_name == "informar_plan_actual"), None)
+        informar_fn = next(
+            (t for t in tools if t.tool_name == "informar_plan_actual"), None
+        )
         if informar_fn:
             result = informar_fn()
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
             )
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": response_text},
             ]
-            return _apply_debug(response_text, ["informar_plan_actual"], user_message), updated_history
+            return _apply_debug(
+                response_text, ["informar_plan_actual"], user_message
+            ), updated_history
 
     elif _intencion == "comparar_beneficios":
         plan_match = re.search(
-            r'telcel\s+(libre|ultra)\s+(\d+|vip|ilimitado)',
-            user_message,
-            re.IGNORECASE
+            r"telcel\s+(libre|ultra)\s+(\d+|vip|ilimitado)", user_message, re.IGNORECASE
         )
         if plan_match:
-            plan_mencionado = f"Telcel {plan_match.group(1).capitalize()} {plan_match.group(2).upper() if plan_match.group(2).lower() in ['vip'] else plan_match.group(2).capitalize()}"
+            nivel = plan_match.group(2)
+            nivel = nivel.upper() if nivel.lower() in ["vip"] else nivel.capitalize()
+            plan_mencionado = f"Telcel {plan_match.group(1).capitalize()} {nivel}"
             from app.catalog.plans import find_plan
+
             plan_obj = find_plan(plan_mencionado)
             if plan_obj:
                 session.plan_anclado = f"{plan_obj.plan_id} {session.subscription_type}"
-                logger.info("[COMPARAR] plan_mencionado='%s' phone=%s",
-                           session.plan_anclado, session.phone_number)
+                logger.info(
+                    "[COMPARAR] plan_mencionado='%s' phone=%s",
+                    session.plan_anclado,
+                    session.phone_number,
+                )
 
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
         comparar_fn = next((t for t in tools if t.tool_name == "comparar_planes"), None)
         if comparar_fn:
@@ -739,96 +947,126 @@ def run_turn(
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
             )
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": response_text},
             ]
-            return _apply_debug(response_text, ["comparar_planes"], user_message), updated_history
+            return _apply_debug(
+                response_text, ["comparar_planes"], user_message
+            ), updated_history
 
     elif _intencion == "planes_mas_baratos":
-        _QUEJA_KEYWORDS = [
-            "quejar", "queja", "descuento", "resuelvelo", "resolvelo",
-            "mal servicio", "no me ayudas", "no sirve", "exijo",
-        ]
         if not any(k in msg_lower for k in _QUEJA_KEYWORDS):
             from app.tools.telcel_tools import make_tools
+
             tools = make_tools(session)
-            presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+            presentar_fn = next(
+                (t for t in tools if t.tool_name == "presentar_planes"), None
+            )
             if presentar_fn:
                 result = presentar_fn(criterio="mas barato", tipo="mas_barato")
                 if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                     response_text = result.replace(
-                        "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                        "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n",
+                        "",
                     )
-                    updated_history = history + [
+                    updated_history = [
+                        *history,
                         {"role": "user", "content": user_message},
                         {"role": "assistant", "content": response_text},
                     ]
-                    return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+                    return _apply_debug(
+                        response_text, ["presentar_planes"], user_message
+                    ), updated_history
 
     elif _intencion == "planes_mas_caros":
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        presentar_fn = next(
+            (t for t in tools if t.tool_name == "presentar_planes"), None
+        )
         if presentar_fn:
             result = presentar_fn(criterio="mas caro", tipo="mas_caro")
             if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["presentar_planes"], user_message
+                ), updated_history
 
     elif _intencion == "planes_ultra":
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        presentar_fn = next(
+            (t for t in tools if t.tool_name == "presentar_planes"), None
+        )
         if presentar_fn:
             result = presentar_fn(criterio="general", tipo="ultra")
             if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["presentar_planes"], user_message
+                ), updated_history
 
     elif _intencion == "planes_libre":
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        presentar_fn = next(
+            (t for t in tools if t.tool_name == "presentar_planes"), None
+        )
         if presentar_fn:
             result = presentar_fn(criterio="general", tipo="libre")
             if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["presentar_planes"], user_message
+                ), updated_history
 
     elif _intencion == "planes_mas_gb":
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        presentar_fn = next(
+            (t for t in tools if t.tool_name == "presentar_planes"), None
+        )
         if presentar_fn:
             result = presentar_fn(criterio="general", tipo="mas_gb")
             if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["presentar_planes"], user_message
+                ), updated_history
 
     elif _intencion == "otra_recomendacion":
         session.esperando_criterio_recomendacion = True
@@ -840,7 +1078,8 @@ def run_turn(
             f"• 📱 Apps ilimitadas incluidas\n\n"
             f"¿Cuál prefiere?"
         )
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
@@ -848,42 +1087,33 @@ def run_turn(
 
     elif _intencion == "confirmacion_activacion":
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        iniciar_fn = next((t for t in tools if t.tool_name == "iniciar_contratacion"), None)
+        iniciar_fn = next(
+            (t for t in tools if t.tool_name == "iniciar_contratacion"), None
+        )
         if iniciar_fn and session.plan_anclado:
-            plan_id = session.plan_anclado.removesuffix(f" {session.subscription_type}").strip()
+            plan_id = session.plan_anclado.removesuffix(
+                f" {session.subscription_type}"
+            ).strip()
             iniciar_fn(plan_id=plan_id)
             if session.stage == "CONTRACT":
                 response_text = build_summary_template(session)
                 session.awaiting_contract_confirmation = True
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
                 if len(updated_history) > 20:
                     updated_history = updated_history[-20:]
-                return _apply_debug(response_text, ["iniciar_contratacion"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["iniciar_contratacion"], user_message
+                ), updated_history
 
     # ── Fallbacks pre-LLM que NO van al router semántico ──────────────────────
-    msg_lower_clean = re.sub(r'[¿?¡!,\.]', ' ', msg_lower).strip()
+    msg_lower_clean = re.sub(r"[¿?¡!,\.]", " ", msg_lower).strip()
 
-    # ── Detección pre-LLM: pregunta sobre por qué se deriva al CAC/Soporte ───
-    # (conservado como fallback — por_que_cac ya está en el router)
-    _CAC_QUESTIONS = [
-        "porque tengo que comunicarme",
-        "por qué tengo que comunicarme",
-        "porque tengo que ir al cac",
-        "por qué tengo que ir al cac",
-        "no puedes cambiarlo tu",
-        "no puedes cambiarlo tú",
-        "no lo puedes cambiar",
-        "por que me mandas",
-        "por qué me mandas",
-        "no puedes hacerlo tu",
-        "no puedes hacerlo tú",
-        "porque no puedes",
-        "por qué no puedes",
-    ]
     if any(q in msg_lower_clean for q in _CAC_QUESTIONS):
         response_text = (
             f"Algunos cambios requieren gestión a través de nuestros "
@@ -892,59 +1122,73 @@ def run_turn(
             f"herramientas necesarias para ese trámite.\n\n"
             f"¿Le gustaría activar el *{session.plan_anclado}*?"
         )
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
         return _apply_debug(response_text, [], user_message), updated_history
 
     # ── Detección pre-LLM: cliente pregunta por GB específicos ───────────────
-    _GB_ESPECIFICO_MATCH = re.search(r'\b(\d+)\s*(?:gb|gigas?)\b', msg_lower_clean)
-    if _GB_ESPECIFICO_MATCH and not any(w in msg_lower_clean for w in [
-        "cuantos", "cuántos", "tengo", "tiene mi plan", "tiene el plan",
-    ]):
+    gb_especifico_match = re.search(r"\b(\d+)\s*(?:gb|gigas?)\b", msg_lower_clean)
+    if gb_especifico_match and not any(
+        w in msg_lower_clean
+        for w in [
+            "cuantos",
+            "cuántos",
+            "tengo",
+            "tiene mi plan",
+            "tiene el plan",
+        ]
+    ):
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        presentar_fn = next(
+            (t for t in tools if t.tool_name == "presentar_planes"), None
+        )
         if presentar_fn:
-            criterio_gb = _GB_ESPECIFICO_MATCH.group(0)
+            criterio_gb = gb_especifico_match.group(0)
             result = presentar_fn(criterio=criterio_gb, tipo="especifico")
             if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["presentar_planes"], user_message
+                ), updated_history
 
     # ── Detección pre-LLM: cliente pide modalidad diferente ─────────
-    alt_modality = "Abierto" if session.subscription_type == "Controlado" else "Controlado"
+    alt_modality = (
+        "Abierto" if session.subscription_type == "Controlado" else "Controlado"
+    )
     if alt_modality.lower() in msg_lower_clean:
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        presentar_fn = next(
+            (t for t in tools if t.tool_name == "presentar_planes"), None
+        )
         if presentar_fn:
             result = presentar_fn(criterio=alt_modality, tipo="general")
             if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["presentar_planes"], user_message
+                ), updated_history
 
-    # ── Detección pre-LLM: solicitud de otra recomendación ──────────
-    _OTRA_RECOMENDACION = [
-        "otra recomendacion", "otra recomendación",
-        "dame otra", "otra opcion", "otra opción",
-        "recomiendame otro", "recomiéndame otro",
-        "que mas recomiendas", "qué más recomiendas",
-        "cual me recomiendas", "cuál me recomiendas",
-    ]
     if any(q in msg_lower_clean for q in _OTRA_RECOMENDACION):
         session.esperando_criterio_recomendacion = True
         response_text = (
@@ -955,7 +1199,8 @@ def run_turn(
             f"• 📱 Apps ilimitadas incluidas\n\n"
             f"¿Cuál prefiere?"
         )
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
@@ -965,14 +1210,23 @@ def run_turn(
     if session.esperando_criterio_recomendacion:
         session.esperando_criterio_recomendacion = False
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+        presentar_fn = next(
+            (t for t in tools if t.tool_name == "presentar_planes"), None
+        )
         if presentar_fn:
             if any(w in msg_lower_clean for w in ["giga", "gb", "datos", "navegacion"]):
                 result = presentar_fn(criterio="mas gb", tipo="mas_caro")
-            elif any(w in msg_lower_clean for w in ["cashback", "dinero", "descuento", "precio"]):
+            elif any(
+                w in msg_lower_clean
+                for w in ["cashback", "dinero", "descuento", "precio"]
+            ):
                 result = presentar_fn(criterio="cashback", tipo="libre")
-            elif any(w in msg_lower_clean for w in ["apps", "aplicaciones", "redes", "sociales"]):
+            elif any(
+                w in msg_lower_clean
+                for w in ["apps", "aplicaciones", "redes", "sociales"]
+            ):
                 result = presentar_fn(criterio="apps libres", tipo="libre")
             else:
                 result = presentar_fn(criterio="general", tipo="mas_caro")
@@ -983,16 +1237,21 @@ def run_turn(
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["presentar_planes"], user_message
+                ), updated_history
 
-    # ── Detección pre-LLM: rechazo corto ─────────────────────────────
-    _RECHAZOS_CORTOS = {"no", "no.", "no!", "nope", "nel", "nop", "paso"}
-    if user_message.strip().lower() in _RECHAZOS_CORTOS and session.stage == "PERSUASION":
+    if (
+        user_message.strip().lower() in _RECHAZOS_CORTOS
+        and session.stage == "PERSUASION"
+    ):
         from app.tools.telcel_tools import make_tools
+
         tools = make_tools(session)
         manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
         if manejar_fn:
@@ -1000,11 +1259,14 @@ def run_turn(
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
             )
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": response_text},
             ]
-            return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
+            return _apply_debug(
+                response_text, ["manejar_objecion"], user_message
+            ), updated_history
 
     # ── Flujo de contratación determinístico (sin LLM) ────────────────────────
     if session.stage == "CONTRACT":
@@ -1012,7 +1274,8 @@ def run_turn(
 
         if contract_msg is not None:
             # Respuesta determinística — enviar directamente
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": contract_msg},
             ]
@@ -1022,7 +1285,8 @@ def run_turn(
             # OTP validado — generar mensaje de confirmación
             post_sale_text = build_post_sale_message(session)
             session.stage = "END"
-            updated_history = history + [
+            updated_history = [
+                *history,
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": post_sale_text},
             ]
@@ -1030,18 +1294,24 @@ def run_turn(
 
         if session.stage == "PERSUASION":
             from app.tools.telcel_tools import make_tools
+
             tools = make_tools(session)
-            manejar_fn = next((t for t in tools if t.tool_name == "manejar_objecion"), None)
+            manejar_fn = next(
+                (t for t in tools if t.tool_name == "manejar_objecion"), None
+            )
             if manejar_fn:
                 result = manejar_fn(motivo="")
                 response_text = result.replace(
                     "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
                 )
-                updated_history = history + [
+                updated_history = [
+                    *history,
                     {"role": "user", "content": user_message},
                     {"role": "assistant", "content": response_text},
                 ]
-                return _apply_debug(response_text, ["manejar_objecion"], user_message), updated_history
+                return _apply_debug(
+                    response_text, ["manejar_objecion"], user_message
+                ), updated_history
         # else: pregunta durante espera → continúa al LLM con contexto de contrato
 
     # ── Flujo conversacional con LLM ─────────────────────────────────────────
@@ -1057,25 +1327,39 @@ def run_turn(
     # El historial va en el constructor, no como kwarg de agent().
     # Pasar messages= a agent() lo mete en **kwargs (deprecado) y no
     # tiene efecto en la memoria de la conversación.
-    logger.info("[HISTORIAL] %d mensajes previos phone=%s",
-                len(prior_messages), session.phone_number)
-    logger.info("[HISTORIAL_DETALLE] %d mensajes phone=%s ultimo_rol=%s ultimo_preview='%s'",
-                len(prior_messages),
-                session.phone_number,
-                prior_messages[-1].get("role", "?") if prior_messages else "ninguno",
-                str(prior_messages[-1].get("content", ""))[:80] if prior_messages else "")
+    logger.info(
+        "[HISTORIAL] %d mensajes previos phone=%s",
+        len(prior_messages),
+        session.phone_number,
+    )
+    logger.info(
+        "[HISTORIAL_DETALLE] %d mensajes phone=%s ultimo_rol=%s ultimo_preview='%s'",
+        len(prior_messages),
+        session.phone_number,
+        prior_messages[-1].get("role", "?") if prior_messages else "ninguno",
+        str(prior_messages[-1].get("content", ""))[:80] if prior_messages else "",
+    )
     system_prompt = build_system_prompt(session)
-    logger.info("[SYSTEM_PROMPT_LEN] chars=%d history_msgs=%d phone=%s",
-                len(system_prompt),
-                len(prior_messages),
-                session.phone_number)
+    logger.info(
+        "[SYSTEM_PROMPT_LEN] chars=%d history_msgs=%d phone=%s",
+        len(system_prompt),
+        len(prior_messages),
+        session.phone_number,
+    )
     rpm = _check_rpm()
     rpm_estimado = rpm * 2  # factor de tool calling (~2 peticiones por turno)
-    logger.info("[RPM] invocaciones_llm=%d rpm_estimado=%d phone=%s",
-                rpm, rpm_estimado, session.phone_number)
+    logger.info(
+        "[RPM] invocaciones_llm=%d rpm_estimado=%d phone=%s",
+        rpm,
+        rpm_estimado,
+        session.phone_number,
+    )
     if rpm_estimado > 1800:
-        logger.warning("[RPM_ALERT] rpm_estimado=%d cerca del limite phone=%s",
-                       rpm_estimado, session.phone_number)
+        logger.warning(
+            "[RPM_ALERT] rpm_estimado=%d cerca del limite phone=%s",
+            rpm_estimado,
+            session.phone_number,
+        )
     agent = create_agent(session, messages=prior_messages)
 
     try:
@@ -1087,21 +1371,34 @@ def run_turn(
         logger.error(
             "[UNICODE_ERROR] fallo de codificación en la llamada al modelo "
             "phone=%s stage=%s temperature=%s max_tokens=%s msg='%s'",
-            session.phone_number, session.stage,
-            model_params.get("temperature"), model_params.get("max_tokens"),
-            user_message[:120], exc_info=True,
+            session.phone_number,
+            session.stage,
+            model_params.get("temperature"),
+            model_params.get("max_tokens"),
+            user_message[:120],
+            exc_info=True,
         )
         raise
     except Exception as e:
         error_str = str(e)
         if "429" in error_str:
-            logger.warning("[RPM_EXCEEDED] Error 429 throttling phone=%s msg='%s' error='%s'",
-                          session.phone_number, user_message[:60], error_str)
+            logger.warning(
+                "[RPM_EXCEEDED] Error 429 throttling phone=%s msg='%s' error='%s'",
+                session.phone_number,
+                user_message[:60],
+                error_str,
+            )
         else:
-            logger.error("[LLM_ERROR] %s phone=%s", error_str[:200], session.phone_number)
+            logger.error(
+                "[LLM_ERROR] %s phone=%s",
+                error_str[:200],
+                session.phone_number,
+                exc_info=True,
+            )
         plan = session.plan_anclado if session.plan_anclado else "el plan recomendado"
         response_text = f"¿Le gustaría activar el *{plan}*?"
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
@@ -1123,13 +1420,16 @@ def run_turn(
         output_tokens = usage.get("outputTokens", "?")
         latency_ms = metadata.get("metrics", {}).get("latencyMs", "?")
 
-    logger.info("[RESPONSE_DEBUG] stop_reason=%s text_len=%d input_tokens=%s output_tokens=%s latency_ms=%s phone=%s",
-                getattr(response, "stop_reason", "?"),
-                len(response_text),
-                input_tokens,
-                output_tokens,
-                latency_ms,
-                session.phone_number)
+    logger.info(
+        "[RESPONSE_DEBUG] stop_reason=%s text_len=%d input_tokens=%s output_tokens=%s "
+        "latency_ms=%s phone=%s",
+        getattr(response, "stop_reason", "?"),
+        len(response_text),
+        input_tokens,
+        output_tokens,
+        latency_ms,
+        session.phone_number,
+    )
 
     # Tokens acumulados incluyendo tool calling
     accumulated_input = "?"
@@ -1146,26 +1446,38 @@ def run_turn(
                 cycles = response.metrics.cycle_count
             elif hasattr(response.metrics, "cycles"):
                 cycles = len(response.metrics.cycles)
-    except Exception:
-        pass
+    except (AttributeError, TypeError):
+        pass  # métricas opcionales: si Strands cambia su forma, se reportan como '?'
 
-    logger.info("[TOKENS_ACUMULADOS] input=%s output=%s cycles=%s phone=%s",
-                accumulated_input, accumulated_output, cycles, session.phone_number)
+    logger.info(
+        "[TOKENS_ACUMULADOS] input=%s output=%s cycles=%s phone=%s",
+        accumulated_input,
+        accumulated_output,
+        cycles,
+        session.phone_number,
+    )
     try:
         out_int = int(output_tokens)
         if 0 < out_int < 30:
-            logger.warning("[RESPUESTA_SOSPECHOSA] output_tokens=%s text_len=%d texto='%s' phone=%s msg='%s'",
-                          output_tokens, len(response_text),
-                          response_text[:100],
-                          session.phone_number, user_message[:60])
+            logger.warning(
+                "[RESPUESTA_SOSPECHOSA] output_tokens=%s text_len=%d texto='%s' "
+                "phone=%s msg='%s'",
+                output_tokens,
+                len(response_text),
+                response_text[:100],
+                session.phone_number,
+                user_message[:60],
+            )
     except (ValueError, TypeError):
         pass
     if hasattr(response, "message") and response.message:
-        logger.info("[RESPONSE_MESSAGE] %s phone=%s",
-                    str(response.message)[:200],
-                    session.phone_number)
+        logger.info(
+            "[RESPONSE_MESSAGE] %s phone=%s",
+            str(response.message)[:200],
+            session.phone_number,
+        )
     # Eliminar corchetes vacíos que Llama a veces emite como artefacto
-    response_text = re.sub(r'\[\s*\]', '', response_text).strip()
+    response_text = re.sub(r"\[\s*\]", "", response_text).strip()
 
     # Detectar y loggear terminaciones anómalas del modelo
     stop_reason = getattr(response, "stop_reason", None)
@@ -1173,33 +1485,32 @@ def run_turn(
     if usage:
         input_tokens = getattr(usage, "input_tokens", "?")
         output_tokens = getattr(usage, "output_tokens", "?")
-        logger.info("[TOKENS] input=%s output=%s phone=%s",
-                    input_tokens, output_tokens, session.phone_number)
+        logger.info(
+            "[TOKENS] input=%s output=%s phone=%s",
+            input_tokens,
+            output_tokens,
+            session.phone_number,
+        )
     if stop_reason == "max_tokens":
-        logger.warning("[TRUNCATED] respuesta cortada por max_tokens phone=%s msg='%s'",
-                       session.phone_number, user_message[:60])
+        logger.warning(
+            "[TRUNCATED] respuesta cortada por max_tokens phone=%s msg='%s'",
+            session.phone_number,
+            user_message[:60],
+        )
     elif stop_reason not in ("end_turn", "tool_use", None):
-        logger.warning("[STOP_REASON] terminación inesperada reason=%s phone=%s msg='%s'",
-                       stop_reason, session.phone_number, user_message[:60])
+        logger.warning(
+            "[STOP_REASON] terminación inesperada reason=%s phone=%s msg='%s'",
+            stop_reason,
+            session.phone_number,
+            user_message[:60],
+        )
 
     # Safety net — si el LLM revela lógica interna del proceso de verificación
     # reemplazar la respuesta completa con el mensaje programado de proceso
-    logger.info("[RESPONSE_TEXT_RAW]\n%s\nphone=%s", response_text, session.phone_number)
+    logger.info(
+        "[RESPONSE_TEXT_RAW]\n%s\nphone=%s", response_text, session.phone_number
+    )
 
-    _INTERNAL_LEAK_TERMS = [
-        "CONTRATACION_INICIADA",
-        "Verificación de seguridad",
-        "OTP",
-        "(OTP)",
-        "invocaré iniciar_contratacion",
-        "invocar iniciar_contratacion",
-        "flujo completo de contratación",
-        "flujo de contratación",
-        "siga el flujo",
-        "necesito seguir el proceso",
-        "el proceso establecido",
-        "recibirá las instrucciones para completar",
-    ]
     if any(t in response_text for t in _INTERNAL_LEAK_TERMS):
         if "CONTRATACION_INICIADA" in response_text:
             session.stage = "CONTRACT"
@@ -1216,13 +1527,16 @@ def run_turn(
 
     # Safety net — si estamos esperando confirmación del contrato,
     # siempre recordar al cliente que debe responder
-    if session.awaiting_contract_confirmation and response_text:
-        if not any(w in response_text.upper() for w in ["ACEPTO", "CONFIRMO"]):
-            response_text = (
-                response_text.rstrip() +
-                "\n\nPara continuar, presione *Sí, activar* para confirmar, "
-                "o *No, cancelar* para cancelar y continuar con la conversación."
-            )
+    if (
+        session.awaiting_contract_confirmation
+        and response_text
+        and not any(w in response_text.upper() for w in ["ACEPTO", "CONFIRMO"])
+    ):
+        response_text = (
+            response_text.rstrip()
+            + "\n\nPara continuar, presione *Sí, activar* para confirmar, "
+            "o *No, cancelar* para cancelar y continuar con la conversación."
+        )
 
     # Safety net — si el response_text contiene el recuadro interno
     # de iniciar_contratacion, reemplazarlo con el template correcto
@@ -1245,13 +1559,16 @@ def run_turn(
         contract_msg = build_summary_template(session)
         session.awaiting_contract_confirmation = True
         response_text = contract_msg  # reemplaza COMPLETAMENTE el response_text del LLM
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": response_text},
         ]
         if len(updated_history) > 20:
             updated_history = updated_history[-20:]
-        return _apply_debug(response_text, _tools_invoked, user_message), updated_history
+        return _apply_debug(
+            response_text, _tools_invoked, user_message
+        ), updated_history
 
     # Interceptar cualquier tool que retorne texto rígido ("RESPONDE EXACTAMENTE...")
     _rigid_text = None
@@ -1265,8 +1582,9 @@ def run_turn(
                     tool_text = tool_content[0].get("text", "")
                     if tool_text and "RESPONDE EXACTAMENTE CON ESTE TEXTO" in tool_text:
                         _rigid_text = tool_text.replace(
-                            "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n",
-                            ""
+                            "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR "
+                            "NADA:\n\n",
+                            "",
                         )
                         break
 
@@ -1275,7 +1593,8 @@ def run_turn(
             contract_msg = build_summary_template(session)
             session.awaiting_contract_confirmation = True
             _rigid_text = contract_msg
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": _rigid_text},
         ]
@@ -1292,32 +1611,32 @@ def run_turn(
             "¿Le gustaría que continuemos?"
         )
 
-    # Llama 4 Maverick a veces escribe herramientas como texto literal:
-    # "[tool_name]" o "tool_name(param='valor')" en lugar de invocarlas.
-    # Si se detecta ese patrón, se reintenta una vez con un agente fresco.
-    _TOOL_PATTERN = re.compile(
-        r'(\[[a-z_]+(?:\([^)]*\))?\]|[a-z_]+\([^)]*\)|\([a-z_]+,\s*\w+=)',
-        re.IGNORECASE
-    )
     if _TOOL_PATTERN.search(response_text):
         logger.warning(
             "[TOOL_LEAK_RETRY] patrón de tool detectado en texto, reintentando "
             "phone=%s stage=%s original='%s'",
-            session.phone_number, session.stage, response_text[:200],
+            session.phone_number,
+            session.stage,
+            response_text[:200],
         )
         agent_retry = create_agent(session, messages=prior_messages)
         try:
             with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning, module="strands")
+                warnings.filterwarnings(
+                    "ignore", category=UserWarning, module="strands"
+                )
                 response2 = agent_retry(user_message)
         except Exception:
             model_params = oci_model.config.get("params", {})
             logger.error(
                 "[LLM_ERROR] fallo en el reintento por tool-leak "
                 "phone=%s stage=%s temperature=%s max_tokens=%s msg='%s'",
-                session.phone_number, session.stage,
-                model_params.get("temperature"), model_params.get("max_tokens"),
-                user_message[:120], exc_info=True,
+                session.phone_number,
+                session.stage,
+                model_params.get("temperature"),
+                model_params.get("max_tokens"),
+                user_message[:120],
+                exc_info=True,
             )
             raise
         retry_text = ""
@@ -1325,7 +1644,7 @@ def run_turn(
             for block in response2.message.get("content", []):
                 if isinstance(block, dict) and "text" in block:
                     retry_text += block.get("text", "")
-        retry_text = _TOOL_PATTERN.sub('', retry_text).strip()
+        retry_text = _TOOL_PATTERN.sub("", retry_text).strip()
         if retry_text:
             response_text = retry_text
             logger.info(
@@ -1338,21 +1657,18 @@ def run_turn(
                 session.phone_number,
             )
 
-    REJECTION_WORDS = {
-        "no",
-        "no quiero",
-        "no me interesa",
-        "no gracias",
-        "no por ahora",
-        "paso",
-        "no aplica",
-    }
     is_rejection = user_message.strip().lower() in REJECTION_WORDS
     response_text = _check_invented_plans(response_text, session)
-    response_text = clean_response(response_text, is_rejection=is_rejection, session=session, user_message=user_message)
+    response_text = clean_response(
+        response_text,
+        is_rejection=is_rejection,
+        session=session,
+        user_message=user_message,
+    )
     response_text = _strip_incorrect_cac(response_text, user_message, session)
 
-    updated_history = history + [
+    updated_history = [
+        *history,
         {"role": "user", "content": user_message},
         {"role": "assistant", "content": response_text},
     ]
@@ -1366,26 +1682,33 @@ def run_turn(
         session.stage = "CONTRACT"
         contract_msg = build_summary_template(session)
         session.awaiting_contract_confirmation = True
-        updated_history = history + [
+        updated_history = [
+            *history,
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": contract_msg},
         ]
         if len(updated_history) > 20:
             updated_history = updated_history[-20:]
-        return _apply_debug(contract_msg, ["iniciar_contratacion"], user_message), updated_history
+        return _apply_debug(
+            contract_msg, ["iniciar_contratacion"], user_message
+        ), updated_history
 
     # Safety net — LLM generó resumen de contratación sin invocar iniciar_contratacion
-    if (session.stage == "PERSUASION" and
-        session.plan_anclado and
-        "está por confirmar el cambio de plan" in response_text and
-        "Plan actual:" in response_text and
-        "Nuevo plan:" in response_text):
+    if (
+        session.stage == "PERSUASION"
+        and session.plan_anclado
+        and "está por confirmar el cambio de plan" in response_text
+        and "Plan actual:" in response_text
+        and "Nuevo plan:" in response_text
+    ):
         session.stage = "CONTRACT"
         session.plan_selected = session.plan_anclado.removesuffix(
             f" {session.subscription_type}"
         ).strip()
         session.awaiting_contract_confirmation = True
-        logger.info("[SAFETY_CONTRACT] LLM generó resumen sin tool phone=%s",
-                    session.phone_number)
+        logger.info(
+            "[SAFETY_CONTRACT] LLM generó resumen sin tool phone=%s",
+            session.phone_number,
+        )
 
     return _apply_debug(response_text, _tools_invoked, user_message), updated_history

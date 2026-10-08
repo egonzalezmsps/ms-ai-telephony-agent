@@ -24,6 +24,7 @@ def build_post_sale_message(session: SessionState) -> str:
     # Actualizar el plan actual del cliente al plan nuevo
     if session.plan_selected:
         from app.catalog.plans import find_plan, get_price
+
         plan_obj = find_plan(session.plan_selected)
         if plan_obj:
             session.previous_plan_name = session.current_plan_name

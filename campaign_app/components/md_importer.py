@@ -29,15 +29,13 @@ content inside the answer, NOT as a new question — unless it's a section marke
 
 import re
 import unicodedata
-from typing import Optional
 
 
 def _norm(s: str) -> str:
     """Lowercase + strip accents + strip trailing colon/space."""
     s = s.lower().rstrip(":").strip()
     return "".join(
-        c for c in unicodedata.normalize("NFD", s)
-        if unicodedata.category(c) != "Mn"
+        c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
     )
 
 
@@ -55,29 +53,31 @@ def _is_skip_marker(text: str) -> bool:
     return n in _SKIP_MARKERS or any(n.startswith(p) for p in _SKIP_PREFIXES)
 
 
-def parse_faq_md(text: str,
-                 beneficio_id: Optional[int] = None,
-                 servicio_id: Optional[int] = None) -> list[dict]:
+def parse_faq_md(
+    text: str, beneficio_id: int | None = None, servicio_id: int | None = None
+) -> list[dict]:
     """
     Parse FAQ markdown text and return a list of dicts:
       {pregunta, respuesta, ambito, beneficio_id, servicio_id}
     """
     items: list[dict] = []
     current_ambito = "general"
-    current_pregunta: Optional[str] = None
+    current_pregunta: str | None = None
     current_respuesta_lines: list[str] = []
-    faq_mode = False   # True when the question came from a "## FAQ N:" heading
-    in_skip = False    # True while inside **Límites:** / **Cómo usar…** section
+    faq_mode = False  # True when the question came from a "## FAQ N:" heading
+    in_skip = False  # True while inside **Límites:** / **Cómo usar…** section
 
     def _flush():
         if current_pregunta and current_respuesta_lines:
-            items.append({
-                "pregunta": current_pregunta,
-                "respuesta": "\n".join(current_respuesta_lines).strip(),
-                "ambito": current_ambito,
-                "beneficio_id": beneficio_id,
-                "servicio_id": servicio_id,
-            })
+            items.append(
+                {
+                    "pregunta": current_pregunta,
+                    "respuesta": "\n".join(current_respuesta_lines).strip(),
+                    "ambito": current_ambito,
+                    "beneficio_id": beneficio_id,
+                    "servicio_id": servicio_id,
+                }
+            )
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -112,7 +112,7 @@ def parse_faq_md(text: str,
 
             # Special section markers — never treat as question or answer
             if _is_respuesta_marker(bold_text):
-                in_skip = False   # entering answer body
+                in_skip = False  # entering answer body
                 continue
 
             if _is_skip_marker(bold_text):
@@ -148,9 +148,10 @@ def parse_faq_md(text: str,
     return items
 
 
-def parse_faq_file(path: str,
-                   beneficio_id: Optional[int] = None,
-                   servicio_id: Optional[int] = None) -> list[dict]:
+def parse_faq_file(
+    path: str, beneficio_id: int | None = None, servicio_id: int | None = None
+) -> list[dict]:
     with open(path, encoding="utf-8") as f:
-        return parse_faq_md(f.read(), beneficio_id=beneficio_id,
-                             servicio_id=servicio_id)
+        return parse_faq_md(
+            f.read(), beneficio_id=beneficio_id, servicio_id=servicio_id
+        )

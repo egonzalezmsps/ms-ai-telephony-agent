@@ -5,18 +5,17 @@ Endpoint principal de conversación (/chat) y borrado de sesión (/session).
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.agent.reni_agent import run_turn
-from app.state.session import SessionState
-from app.state.persistence import load_session, save_session, delete_session
-from app.state.serializer import session_to_dict, dict_to_session
 from app.prompts.campaign_template import build_campaign_message
-from app.state.campaign_traceability import _maybe_update_campana_cliente
 from app.routes.deps import require_api_key
+from app.state.campaign_traceability import _maybe_update_campana_cliente
+from app.state.persistence import delete_session, load_session, save_session
+from app.state.serializer import dict_to_session, session_to_dict
+from app.state.session import SessionState
 
 logger = logging.getLogger(__name__)
 
@@ -25,24 +24,24 @@ router = APIRouter(dependencies=[Depends(require_api_key)])
 
 class ChatRequest(BaseModel):
     message: str
-    phone_number: str                          # identificador de sesión
+    phone_number: str  # identificador de sesión
     # Datos del cliente — solo necesarios en el primer turno
-    first_name: Optional[str] = "Cliente"
-    full_name: Optional[str] = ""
-    current_plan_name: Optional[str] = "Telcel Plus 150"
-    current_cost: Optional[float] = 150.0
-    current_plan_gb: Optional[float] = None
-    current_plan_cashback: Optional[float] = None
-    subscription_type: Optional[str] = "Abierto"
-    has_promotion: Optional[bool] = True
-    usage_summary: Optional[str] = None
-    is_titular: Optional[bool] = True
+    first_name: str | None = "Cliente"
+    full_name: str | None = ""
+    current_plan_name: str | None = "Telcel Plus 150"
+    current_cost: float | None = 150.0
+    current_plan_gb: float | None = None
+    current_plan_cashback: float | None = None
+    subscription_type: str | None = "Abierto"
+    has_promotion: bool | None = True
+    usage_summary: str | None = None
+    is_titular: bool | None = True
 
 
 class ChatResponse(BaseModel):
     response: str
     stage: str
-    plan_selected: Optional[str] = None
+    plan_selected: str | None = None
     turn: int = 1
 
 
@@ -101,7 +100,9 @@ def chat(request: ChatRequest):
             f"[stage={session.stage}]: {e}",
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail="Error procesando el mensaje")
+        raise HTTPException(
+            status_code=500, detail="Error procesando el mensaje"
+        ) from e
 
     # Guardar sesión actualizada en PostgreSQL
     save_session(

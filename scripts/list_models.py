@@ -1,5 +1,7 @@
 import os
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import oci
@@ -20,10 +22,10 @@ print(type(models.data))
 print(dir(models.data))
 
 # Intentar diferentes formas de acceder
-if hasattr(models.data, 'items'):
+if hasattr(models.data, "items"):
     for m in models.data.items:
         print(f"{m.display_name} | {m.id}")
-elif hasattr(models.data, 'models'):
+elif hasattr(models.data, "models"):
     for m in models.data.models:
         print(f"{m.display_name} | {m.id}")
 else:

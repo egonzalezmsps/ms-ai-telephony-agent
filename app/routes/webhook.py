@@ -5,8 +5,8 @@ Webhook de WhatsApp (Meta Cloud API): verificación (GET) y recepción de
 mensajes (POST), procesados en segundo plano.
 """
 
-import hmac
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -18,19 +18,19 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.agent.reni_agent import run_turn
-from app.state.session import SessionState
-from app.state.persistence import load_session, save_session
-from app.state.serializer import session_to_dict, dict_to_session
 from app.prompts.campaign_template import build_campaign_message, build_template_params
-from app.whatsapp.sender import send_whatsapp_message, send_whatsapp_interactive_buttons
-from app.whatsapp.command_handler import handle_command
-from app.state.campaign_traceability import (
-    _maybe_update_campana_cliente,
-    _maybe_persist_plan_change,
-    _to_linea,
-    CAMPAIGN_DB_AVAILABLE,
-)
 from app.routes.deps import require_api_key
+from app.state.campaign_traceability import (
+    CAMPAIGN_DB_AVAILABLE,
+    _maybe_persist_plan_change,
+    _maybe_update_campana_cliente,
+    _to_linea,
+)
+from app.state.persistence import load_session, save_session
+from app.state.serializer import dict_to_session, session_to_dict
+from app.state.session import SessionState
+from app.whatsapp.command_handler import handle_command
+from app.whatsapp.sender import send_whatsapp_interactive_buttons, send_whatsapp_message
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +38,10 @@ router = APIRouter()
 
 
 class ProvisioningStatusRequest(BaseModel):
-    processId: str
+    processId: str  # noqa: N815 — nombres definidos por el contrato de Telcel
     msisdn: str = Field(pattern=r"^\d{10}$")
-    statusProvisioning: str
+    statusProvisioning: str  # noqa: N815
+
 
 # IDs de mensajes ya procesados — evita duplicados por reintentos de Meta
 _processed_msg_ids: set = set()
@@ -75,7 +76,9 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
     """Procesa el mensaje en segundo plano para no bloquear el webhook."""
     lock = _get_phone_lock(phone_number)
     if not lock.acquire(blocking=False):
-        logger.warning(f"WA SKIP | {phone_number} — turno en proceso, mensaje descartado")
+        logger.warning(
+            f"WA SKIP | {phone_number} — turno en proceso, mensaje descartado"
+        )
         return
     try:
         first_name = sender_name.split()[0] if sender_name else "Cliente"
@@ -88,15 +91,22 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                 sent_with_buttons = False
                 if cmd_name in ("/seleccionar", "/select"):
                     cmd_session_data = load_session(phone_number)
-                    cmd_session = dict_to_session(cmd_session_data["session_data"]) if cmd_session_data else None
-                    if cmd_session is not None and build_template_params(cmd_session) is not None:
+                    cmd_session = (
+                        dict_to_session(cmd_session_data["session_data"])
+                        if cmd_session_data
+                        else None
+                    )
+                    if (
+                        cmd_session is not None
+                        and build_template_params(cmd_session) is not None
+                    ):
                         send_whatsapp_interactive_buttons(
                             to=phone_number,
                             body_text=cmd_response,
                             buttons=[
                                 {"id": "COMPARAR", "title": "Sí, compáralo"},
                                 {"id": "DESPUES", "title": "En otro momento"},
-                            ]
+                            ],
                         )
                         sent_with_buttons = True
                 if not sent_with_buttons:
@@ -122,12 +132,14 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                     buttons=[
                         {"id": "ACEPTO", "title": "✅ Sí, activar"},
                         {"id": "NO", "title": "❌ No, cancelar"},
-                    ]
+                    ],
                 )
             else:
                 send_whatsapp_message(phone_number, response_text)
                 _maybe_persist_plan_change(session)
-            logger.info(f"WA OUT | {phone_number} [stage={session.stage}]: {response_text[:80]}")
+            logger.info(
+                f"WA OUT | {phone_number} [stage={session.stage}]: {response_text[:80]}"
+            )
         else:
             linea = _to_linea(phone_number)
             cliente = None
@@ -135,24 +147,35 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                 try:
                     from campaign_app.db.database import get_db
                     from campaign_app.db.models import Cliente as ClienteModel
+
                     with get_db() as db:
                         cliente = db.query(ClienteModel).filter_by(linea=linea).first()
                 except Exception as e:
-                    logger.warning(f"WA | No se pudo verificar registro de {phone_number} en Cliente: {e}")
+                    logger.warning(
+                        f"WA | No se pudo verificar registro de {phone_number} "
+                        f"en Cliente: {e}",
+                        exc_info=True,
+                    )
 
             if CAMPAIGN_DB_AVAILABLE and not cliente:
-                logger.info(f"WA BLOQUEADO | {phone_number} — no está registrado en Cliente")
+                logger.info(
+                    f"WA BLOQUEADO | {phone_number} — no está registrado en Cliente"
+                )
                 send_whatsapp_message(
                     phone_number,
                     "En este momento no cuenta con promociones activas. "
-                    "Le invitamos a esperar nuestros próximos mensajes con futuras ofertas.",
+                    "Le invitamos a esperar nuestros próximos mensajes "
+                    "con futuras ofertas.",
                 )
                 return
 
             if cliente:
                 session = SessionState(
                     first_name=(cliente.nombre or first_name).split()[0].title(),
-                    full_name=f"{cliente.nombre or ''} {cliente.apellidos or ''}".strip() or sender_name,
+                    full_name=(
+                        f"{cliente.nombre or ''} {cliente.apellidos or ''}".strip()
+                        or sender_name
+                    ),
                     phone_number=phone_number,
                     api_phone_number=cliente.lineaApi,
                     current_plan_name=cliente.plan_actual_nombre or "Plan Legado",
@@ -180,7 +203,7 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
                     buttons=[
                         {"id": "COMPARAR", "title": "Sí, compáralo"},
                         {"id": "DESPUES", "title": "En otro momento"},
-                    ]
+                    ],
                 )
             else:
                 send_whatsapp_message(phone_number, campaign_msg)
@@ -194,19 +217,23 @@ def _process_whatsapp_message(phone_number: str, message_text: str, sender_name:
 
 @router.post("/webhook")
 async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
-    """Recibe mensajes de WhatsApp — responde 200 inmediatamente y procesa en segundo plano."""
+    """Recibe mensajes de WhatsApp — responde 200 inmediatamente y procesa en
+    segundo plano."""
     body_bytes = await request.body()
 
     app_secret = os.getenv("WHATSAPP_APP_SECRET", "")
     if app_secret:
         sig_header = request.headers.get("X-Hub-Signature-256", "")
-        expected = "sha256=" + hmac.new(app_secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+        expected = (
+            "sha256="
+            + hmac.new(app_secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+        )
         if not hmac.compare_digest(sig_header, expected):
             raise HTTPException(status_code=403, detail="Invalid signature")
 
     try:
         payload = json.loads(body_bytes)
-    except Exception:
+    except ValueError:  # JSON inválido o bytes no UTF-8
         return {"status": "ok"}
 
     try:
@@ -277,7 +304,9 @@ async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
         logger.info(f"WA IN  | {phone_number} ({sender_name}): {message_text}")
 
         # Procesar en segundo plano — Meta recibe 200 de inmediato
-        background_tasks.add_task(_process_whatsapp_message, phone_number, message_text, sender_name)
+        background_tasks.add_task(
+            _process_whatsapp_message, phone_number, message_text, sender_name
+        )
 
     except Exception as e:
         logger.error(f"WhatsApp webhook error: {e}", exc_info=True)
@@ -313,6 +342,7 @@ def _notify_provisioning_success(msisdn: str) -> None:
         try:
             from campaign_app.db.database import get_db
             from campaign_app.db.models import Cliente as ClienteModel
+
             with get_db() as db:
                 cliente = db.query(ClienteModel).filter_by(linea=msisdn).first()
                 if cliente:
@@ -321,7 +351,10 @@ def _notify_provisioning_success(msisdn: str) -> None:
                     if cliente.plan_seleccionado:
                         plan_nuevo = cliente.plan_seleccionado
         except Exception as e:
-            logger.warning(f"PROVISIONING | no se pudo consultar Cliente para {msisdn}: {e}")
+            logger.warning(
+                f"PROVISIONING | no se pudo consultar Cliente para {msisdn}: {e}",
+                exc_info=True,
+            )
 
     if nombre and plan_nuevo:
         message = _build_provisioning_success_message(nombre, plan_nuevo)
@@ -331,22 +364,31 @@ def _notify_provisioning_success(msisdn: str) -> None:
     try:
         send_whatsapp_message(msisdn, message)
     except Exception as e:
-        logger.error(f"PROVISIONING | envío WhatsApp a {msisdn} falló: {e}")
+        logger.error(
+            f"PROVISIONING | envío WhatsApp a {msisdn} falló: {e}", exc_info=True
+        )
 
 
 @router.post("/webhook/provisioning-status", dependencies=[Depends(require_api_key)])
-def provisioning_status_webhook(payload: ProvisioningStatusRequest, background_tasks: BackgroundTasks):
-    """Recibe la notificación de Telcel del estatus de provisioning de un cambio de plan."""
+def provisioning_status_webhook(
+    payload: ProvisioningStatusRequest, background_tasks: BackgroundTasks
+):
+    """Recibe la notificación de Telcel del estatus de provisioning de un
+    cambio de plan."""
     logger.info(
         "PROVISIONING | processId=%s msisdn=%s statusProvisioning=%s",
-        payload.processId, payload.msisdn, payload.statusProvisioning,
+        payload.processId,
+        payload.msisdn,
+        payload.statusProvisioning,
     )
 
     if payload.statusProvisioning == "COMPLETE":
         background_tasks.add_task(_notify_provisioning_success, payload.msisdn)
 
     now = datetime.now()
-    token_operation = f"ORCL-{now.strftime('%Y%m%d%H%M%S')}.{now.microsecond // 1000:03d}"
+    token_operation = (
+        f"ORCL-{now.strftime('%Y%m%d%H%M%S')}.{now.microsecond // 1000:03d}"
+    )
 
     return {
         "detailResponse": {

@@ -7,9 +7,8 @@ Maneja: confirmación verbal → OTP → autenticación → post-venta.
 
 import logging
 import uuid
-from typing import Optional
 
-from app.catalog.plans import find_plan, get_price, get_cashback, PRICE_EPSILON_MXN
+from app.catalog.plans import PRICE_EPSILON_MXN, find_plan, get_cashback, get_price
 from app.integrations.telcel_apis.client import (
     TelcelAPIError,
     call_communication_message,
@@ -26,15 +25,33 @@ _SOPORTE_TEL = "800 220 9518"
 _OTP_INVALID_CODE = "BE_MP_BPS_0040"
 
 
-
 _APPS_LIBRES = "Facebook, Instagram, WhatsApp, X, Snapchat, Uber"
 
 _VAGUE_CONFIRMATIONS = {
-    "SI", "SÍ", "SIP", "OK", "DALE", "ORALE", "VA", "CLARO",
-    "BUENO", "PERFECTO", "SALE", "VALE", "ESO", "ANDALE",
-    "SI QUIERO", "SÍ QUIERO", "QUIERO", "LO QUIERO",
-    "SI POR FAVOR", "SÍ POR FAVOR", "POR FAVOR",
-    "ADELANTE", "PROCEDE", "PROCEDER",
+    "SI",
+    "SÍ",
+    "SIP",
+    "OK",
+    "DALE",
+    "ORALE",
+    "VA",
+    "CLARO",
+    "BUENO",
+    "PERFECTO",
+    "SALE",
+    "VALE",
+    "ESO",
+    "ANDALE",
+    "SI QUIERO",
+    "SÍ QUIERO",
+    "QUIERO",
+    "LO QUIERO",
+    "SI POR FAVOR",
+    "SÍ POR FAVOR",
+    "POR FAVOR",
+    "ADELANTE",
+    "PROCEDE",
+    "PROCEDER",
 }
 
 
@@ -48,13 +65,17 @@ def _technical_failure(session) -> str:
 
 
 def _run_telcel_call(session, api_name: str, fn, *args):
-    """Ejecuta una llamada a una API Telcel; loggea y retorna (False, None) ante cualquier falla."""
+    """Ejecuta una llamada a una API Telcel; loggea y retorna (False, None) ante \
+cualquier falla."""
     try:
         return True, fn(*args)
     except Exception as exc:
         logger.error(
             "[TELCEL_API_ERROR] %s phone=%s error=%s",
-            api_name, session.phone_number, exc, exc_info=True,
+            api_name,
+            session.phone_number,
+            exc,
+            exc_info=True,
         )
         return False, None
 
@@ -64,7 +85,9 @@ def _is_otp_invalid(exc: TelcelAPIError) -> bool:
     detail = body.get("detailResponse") or {}
     if str(detail.get("code")) == _OTP_INVALID_CODE:
         return True
-    meaning = f"{detail.get('businessMeaning', '')} {detail.get('description', '')}".upper()
+    meaning = (
+        f"{detail.get('businessMeaning', '')} {detail.get('description', '')}".upper()
+    )
     return "OTP" in meaning
 
 
@@ -79,9 +102,17 @@ def build_summary_template(session) -> str:
         cashback = get_cashback(plan, modality)
         if plan.is_unlimited:
             gb_str = "Ilimitados (PUJ)"
-        elif has_promo and price > session.current_cost + PRICE_EPSILON_MXN and plan.gb_promo > plan.gb_base and plan.family == "Telcel Libre":
+        elif (
+            has_promo
+            and price > session.current_cost + PRICE_EPSILON_MXN
+            and plan.gb_promo > plan.gb_base
+            and plan.family == "Telcel Libre"
+        ):
             extra = plan.gb_promo - plan.gb_base
-            gb_str = f"{plan.gb_base:g} GB base + {extra:g} GB de promoción = {plan.gb_promo:g} GB totales"
+            gb_str = (
+                f"{plan.gb_base:g} GB base + {extra:g} GB de promoción = "
+                f"{plan.gb_promo:g} GB totales"
+            )
         else:
             gb_str = f"{plan.gb_base:g} GB"
         is_libre = plan.family == "Telcel Libre"
@@ -93,14 +124,18 @@ def build_summary_template(session) -> str:
 
     cashback_line = f"💰 Cashback ${cashback:.2f}/mes\n" if cashback > 0 else ""
     apps_line = f"📱 Apps ilimitadas: {_APPS_LIBRES}\n" if is_libre else ""
+    calls_sms = (
+        plan.calls_sms if plan else "Llamadas y SMS ilimitados a México, EUA y Canadá"
+    )
 
     return (
         f"{session.first_name}, está por confirmar el cambio de plan:\n\n"
-        f"Plan actual: {session.current_plan_name} {modality} — ${session.current_cost:.0f}/mes\n"
+        f"Plan actual: {session.current_plan_name} {modality} — "
+        f"${session.current_cost:.0f}/mes\n"
         f"Nuevo plan: {session.plan_selected} {modality} — ${price:.0f}/mes\n\n"
         f"📶 {gb_str}\n"
         f"{cashback_line}"
-        f"📞 {plan.calls_sms if plan else 'Llamadas y SMS ilimitados a México, EUA y Canadá'}\n"
+        f"📞 {calls_sms}\n"
         f"{apps_line}"
         f"🎬 Claro Video\n"
         f"💾 Claro Drive (20 GB)\n\n"
@@ -108,7 +143,7 @@ def build_summary_template(session) -> str:
     )
 
 
-def handle_contract_turn(session, user_message: str) -> Optional[str]:
+def handle_contract_turn(session, user_message: str) -> str | None:
     """
     Maneja un turno dentro del flujo de contratación.
 
@@ -150,7 +185,8 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
         if not plan or not plan.telcel_product_id:
             logger.error(
                 "[TELCEL_PRODUCT_ID_MISSING] plan=%s phone=%s",
-                session.plan_selected, session.phone_number,
+                session.plan_selected,
+                session.phone_number,
             )
             return _technical_failure(session)
 
@@ -176,13 +212,16 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
 
             logger.error(
                 "[TELCEL_API_ERROR] create_product_order phone=%s error=%s",
-                session.phone_number, exc,
+                session.phone_number,
+                exc,
             )
             return _technical_failure(session)
         except Exception as exc:
             logger.error(
                 "[TELCEL_API_ERROR] create_product_order phone=%s error=%s",
-                session.phone_number, exc, exc_info=True,
+                session.phone_number,
+                exc,
+                exc_info=True,
             )
             return _technical_failure(session)
 
@@ -209,7 +248,9 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             plan = find_plan(session.plan_selected)
             if plan:
                 new_price = get_price(plan, session.subscription_type)
-                is_same_price = abs(new_price - session.current_cost) <= PRICE_EPSILON_MXN
+                is_same_price = (
+                    abs(new_price - session.current_cost) <= PRICE_EPSILON_MXN
+                )
             else:
                 is_same_price = False
 
@@ -218,12 +259,15 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             if not plan or not plan.telcel_product_id:
                 logger.error(
                     "[TELCEL_PRODUCT_ID_MISSING] plan=%s phone=%s",
-                    session.plan_selected, session.phone_number,
+                    session.plan_selected,
+                    session.phone_number,
                 )
                 return _technical_failure(session)
 
             ok, process_result = _run_telcel_call(
-                session, "create_process", call_create_process,
+                session,
+                "create_process",
+                call_create_process,
                 session.api_phone_number or session.phone_number,
             )
             if not ok:
@@ -233,7 +277,8 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             if not process_id:
                 logger.error(
                     "[TELCEL_API_ERROR] create_process sin processId phone=%s raw=%s",
-                    session.phone_number, process_result.get("raw"),
+                    session.phone_number,
+                    process_result.get("raw"),
                 )
                 return _technical_failure(session)
 
@@ -241,8 +286,11 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
 
             if is_same_price:
                 ok, _ = _run_telcel_call(
-                    session, "create_product_order",
-                    call_create_product_order, plan.telcel_product_id, process_id,
+                    session,
+                    "create_product_order",
+                    call_create_product_order,
+                    plan.telcel_product_id,
+                    process_id,
                 )
                 if not ok:
                     return _technical_failure(session)
@@ -253,14 +301,19 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 return None  # → generar post-venta directo sin OTP
             else:
                 ok, _ = _run_telcel_call(
-                    session, "communication_message", call_communication_message, process_id,
+                    session,
+                    "communication_message",
+                    call_communication_message,
+                    process_id,
                 )
                 if not ok:
                     return _technical_failure(session)
 
                 session.awaiting_otp = True
                 session.otp_sent = True
-                phone_masked = session.phone_number[-4:] if session.phone_number else "****"
+                phone_masked = (
+                    session.phone_number[-4:] if session.phone_number else "****"
+                )
                 return (
                     f"Para verificar su identidad, le hemos enviado un código "
                     f"de verificación al número terminado en {phone_masked}.\n\n"

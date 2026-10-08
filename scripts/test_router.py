@@ -1,12 +1,14 @@
 import os
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import sys
-import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.router.semantic_router import load_reference_embeddings, classify
+from app.router.semantic_router import classify, load_reference_embeddings
 
 print("Cargando embeddings de referencia...")
 load_reference_embeddings()
@@ -47,4 +49,4 @@ print(f"{'Mensaje':<45} {'Intención':<25} {'Score'}")
 print("-" * 80)
 for msg in casos:
     intencion = classify(msg)
-    print(f"{msg:<45} {str(intencion):<25}")
+    print(f"{msg:<45} {intencion!s:<25}")

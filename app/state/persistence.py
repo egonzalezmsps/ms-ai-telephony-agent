@@ -8,27 +8,26 @@ Guarda:
 - Historial de mensajes (para que el agente recuerde el contexto)
 """
 
-import json
 import logging
 import os
 import time
 from datetime import datetime, timedelta
-from typing import Optional, List
+
+from sqlalchemy import JSON, Column, DateTime, String, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 logger = logging.getLogger(__name__)
-
-from sqlalchemy import create_engine, Column, String, Text, DateTime, JSON
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 Base = declarative_base()
 
 
 class ConversationSession(Base):
     """Sesión activa de un cliente."""
+
     __tablename__ = "conversation_sessions"
 
     phone_number = Column(String(20), primary_key=True)
-    session_data = Column(JSON, nullable=False)       # SessionState serializado
+    session_data = Column(JSON, nullable=False)  # SessionState serializado
     history = Column(JSON, nullable=False, default=list)  # historial de mensajes
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -36,6 +35,7 @@ class ConversationSession(Base):
 
 
 # ── Engine ────────────────────────────────────────────────────────────────────
+
 
 def _get_engine():
     url = os.environ.get("DATABASE_URL", "")
@@ -67,7 +67,8 @@ def _expiry() -> datetime:
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
-def load_session(phone_number: str) -> Optional[dict]:
+
+def load_session(phone_number: str) -> dict | None:
     """
     Carga la sesión de un cliente desde PostgreSQL.
     Retorna None si no existe o expiró.
@@ -76,29 +77,41 @@ def load_session(phone_number: str) -> Optional[dict]:
     logger.debug("[DB] load_session START phone=%s", phone_number)
     factory = _get_session_factory()
     with factory() as db:
-        record = db.query(ConversationSession).filter_by(
-            phone_number=phone_number
-        ).first()
+        record = (
+            db.query(ConversationSession).filter_by(phone_number=phone_number).first()
+        )
 
         if not record:
-            logger.debug("[DB] load_session NOT_FOUND phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
+            logger.debug(
+                "[DB] load_session NOT_FOUND phone=%s elapsed=%.3fs",
+                phone_number,
+                time.time() - t0,
+            )
             return None
 
         # Verificar expiración
         if record.expires_at < datetime.utcnow():
             db.delete(record)
             db.commit()
-            logger.warning("[DB] load_session EXPIRADO phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
+            logger.warning(
+                "[DB] load_session EXPIRADO phone=%s elapsed=%.3fs",
+                phone_number,
+                time.time() - t0,
+            )
             return None
 
-        logger.debug("[DB] load_session END phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
+        logger.debug(
+            "[DB] load_session END phone=%s elapsed=%.3fs",
+            phone_number,
+            time.time() - t0,
+        )
         return {
             "session_data": record.session_data,
             "history": record.history or [],
         }
 
 
-def save_session(phone_number: str, session_data: dict, history: List[dict]):
+def save_session(phone_number: str, session_data: dict, history: list[dict]):
     """
     Guarda o actualiza la sesión de un cliente en PostgreSQL.
     """
@@ -106,9 +119,9 @@ def save_session(phone_number: str, session_data: dict, history: List[dict]):
     logger.debug("[DB] save_session START phone=%s", phone_number)
     factory = _get_session_factory()
     with factory() as db:
-        record = db.query(ConversationSession).filter_by(
-            phone_number=phone_number
-        ).first()
+        record = (
+            db.query(ConversationSession).filter_by(phone_number=phone_number).first()
+        )
 
         if record:
             record.session_data = session_data
@@ -125,7 +138,9 @@ def save_session(phone_number: str, session_data: dict, history: List[dict]):
             db.add(record)
 
         db.commit()
-    logger.debug("[DB] save_session END phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
+    logger.debug(
+        "[DB] save_session END phone=%s elapsed=%.3fs", phone_number, time.time() - t0
+    )
 
 
 def delete_session(phone_number: str):
@@ -134,10 +149,12 @@ def delete_session(phone_number: str):
     logger.debug("[DB] delete_session START phone=%s", phone_number)
     factory = _get_session_factory()
     with factory() as db:
-        record = db.query(ConversationSession).filter_by(
-            phone_number=phone_number
-        ).first()
+        record = (
+            db.query(ConversationSession).filter_by(phone_number=phone_number).first()
+        )
         if record:
             db.delete(record)
             db.commit()
-    logger.debug("[DB] delete_session END phone=%s elapsed=%.3fs", phone_number, time.time() - t0)
+    logger.debug(
+        "[DB] delete_session END phone=%s elapsed=%.3fs", phone_number, time.time() - t0
+    )

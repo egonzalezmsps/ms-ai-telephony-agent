@@ -1,19 +1,25 @@
 import pytest
+from db.models import (
+    Base,
+    Beneficio,
+    Campana,
+    CampanaCliente,
+    Cliente,
+    Familia,
+    Plan,
+    PreguntaFrecuente,
+    Servicio,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from db.models import (
-    Base, Familia, Plan, Beneficio, Servicio,
-    PreguntaFrecuente, Promocion, Campana,
-    CampanaPlan, Cliente, CampanaCliente,
-)
 
 
 @pytest.fixture
 def db():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine, expire_on_commit=False)
-    session = Session()
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    session = session_factory()
     yield session
     session.close()
     Base.metadata.drop_all(engine)

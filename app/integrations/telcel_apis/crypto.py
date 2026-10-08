@@ -10,7 +10,7 @@ y validada end-to-end contra QA real para comm-msg y create-product-order
 descifrado correctamente). Portado desde apis-foraneas/telcel_apis/crypto.py.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
@@ -20,9 +20,14 @@ def _key_iv_bytes(key: str, iv: str) -> tuple[bytes, bytes]:
     key_bytes = key.encode("utf-8")
     iv_bytes = iv.encode("utf-8")
     if len(key_bytes) != 32:
-        raise ValueError(f"La llave debe representar 32 bytes UTF-8 para AES-256, tiene {len(key_bytes)}")
+        raise ValueError(
+            "La llave debe representar 32 bytes UTF-8 para AES-256, "
+            f"tiene {len(key_bytes)}"
+        )
     if len(iv_bytes) != 16:
-        raise ValueError(f"El IV debe representar 16 bytes UTF-8, tiene {len(iv_bytes)}")
+        raise ValueError(
+            f"El IV debe representar 16 bytes UTF-8, tiene {len(iv_bytes)}"
+        )
     return key_bytes, iv_bytes
 
 
@@ -43,5 +48,5 @@ def decrypt_aes256cbc(hex_ciphertext: str, key: str, iv: str) -> str:
 
 
 def build_header_token(usuario: str, key: str, iv: str) -> str:
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     return encrypt_aes256cbc(f"{usuario}@{timestamp}", key, iv)

@@ -1,20 +1,31 @@
 from datetime import datetime
+
 from sqlalchemy import (
-    Column, String, Float, Boolean, Integer,
-    DateTime, JSON, Text, ForeignKey, Table,
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
 familia_beneficio = Table(
-    "familia_beneficio", Base.metadata,
+    "familia_beneficio",
+    Base.metadata,
     Column("familia_id", Integer, ForeignKey("familias.id"), primary_key=True),
     Column("beneficio_id", Integer, ForeignKey("beneficios.id"), primary_key=True),
 )
 
 familia_servicio = Table(
-    "familia_servicio", Base.metadata,
+    "familia_servicio",
+    Base.metadata,
     Column("familia_id", Integer, ForeignKey("familias.id"), primary_key=True),
     Column("servicio_id", Integer, ForeignKey("servicios.id"), primary_key=True),
 )
@@ -26,8 +37,12 @@ class Familia(Base):
     nombre = Column(String(100), nullable=False, unique=True)
     descripcion = Column(Text, nullable=True)
     planes = relationship("Plan", back_populates="familia")
-    beneficios = relationship("Beneficio", secondary=familia_beneficio, back_populates="familias")
-    servicios = relationship("Servicio", secondary=familia_servicio, back_populates="familias")
+    beneficios = relationship(
+        "Beneficio", secondary=familia_beneficio, back_populates="familias"
+    )
+    servicios = relationship(
+        "Servicio", secondary=familia_servicio, back_populates="familias"
+    )
 
 
 class Plan(Base):
@@ -52,8 +67,12 @@ class Beneficio(Base):
     nombre = Column(String(200), nullable=False)
     descripcion = Column(Text, nullable=True)
     activo = Column(Boolean, default=True, nullable=False)
-    familias = relationship("Familia", secondary=familia_beneficio, back_populates="beneficios")
-    preguntas = relationship("PreguntaFrecuente", back_populates="beneficio", cascade="all, delete-orphan")
+    familias = relationship(
+        "Familia", secondary=familia_beneficio, back_populates="beneficios"
+    )
+    preguntas = relationship(
+        "PreguntaFrecuente", back_populates="beneficio", cascade="all, delete-orphan"
+    )
 
 
 class Servicio(Base):
@@ -64,15 +83,23 @@ class Servicio(Base):
     tipo_acceso = Column(String(20), nullable=False)
     detalle = Column(String(200), nullable=True)
     activo = Column(Boolean, default=True, nullable=False)
-    familias = relationship("Familia", secondary=familia_servicio, back_populates="servicios")
-    preguntas = relationship("PreguntaFrecuente", back_populates="servicio", cascade="all, delete-orphan")
+    familias = relationship(
+        "Familia", secondary=familia_servicio, back_populates="servicios"
+    )
+    preguntas = relationship(
+        "PreguntaFrecuente", back_populates="servicio", cascade="all, delete-orphan"
+    )
 
 
 class PreguntaFrecuente(Base):
     __tablename__ = "preguntas_frecuentes"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    beneficio_id = Column(Integer, ForeignKey("beneficios.id", ondelete="CASCADE"), nullable=True)
-    servicio_id = Column(Integer, ForeignKey("servicios.id", ondelete="CASCADE"), nullable=True)
+    beneficio_id = Column(
+        Integer, ForeignKey("beneficios.id", ondelete="CASCADE"), nullable=True
+    )
+    servicio_id = Column(
+        Integer, ForeignKey("servicios.id", ondelete="CASCADE"), nullable=True
+    )
     ambito = Column(String(20), nullable=False, default="general")
     pregunta = Column(Text, nullable=False)
     respuesta = Column(Text, nullable=False)
@@ -122,8 +149,11 @@ class Cliente(Base):
     __tablename__ = "clientes"
     linea = Column(String(20), primary_key=True)
     # quote=False: nunca citar "lineaApi" en el SQL generado (aunque tenga mayúsculas),
-    # para que coincida con la columna física creada sin comillas (Postgres la pliega a "lineaapi").
-    lineaApi = Column("lineaApi", String(20), nullable=True, quote=False)
+    # para que coincida con la columna física creada sin comillas (Postgres la pliega
+    # a "lineaapi").
+    lineaApi = Column(  # noqa: N815 — nombre de columna física
+        "lineaApi", String(20), nullable=True, quote=False
+    )
     nombre = Column(String(100), nullable=True)
     apellidos = Column(String(200), nullable=True)
     plan_actual_nombre = Column(String(200), nullable=True)

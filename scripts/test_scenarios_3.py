@@ -20,21 +20,24 @@ Uso:
     python scripts/test_scenarios_3.py
 """
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.config.logging_config import setup_logging
+
 setup_logging()
 
 from app.router.semantic_router import load_reference_embeddings
+
 load_reference_embeddings()
 
-from scripts.test_scenarios import _nuevo_perfil, _iniciar_historial, _turno
+from scripts.test_scenarios import _iniciar_historial, _nuevo_perfil, _turno
 
 
 def escenario_1():
@@ -43,9 +46,15 @@ def escenario_1():
     print("=" * 70)
     session = _nuevo_perfil("Sara", "Telcel Max Sin Limite 5000", 499.0)
     history = _iniciar_historial(session)
-    respuesta, history = _turno(session, history, "dale, actívalo")
-    exito = session.stage == "CONTRACT" and session.awaiting_contract_confirmation is True
-    return exito, f"stage={session.stage} awaiting_contract_confirmation={session.awaiting_contract_confirmation}"
+    _respuesta, history = _turno(session, history, "dale, actívalo")
+    exito = (
+        session.stage == "CONTRACT" and session.awaiting_contract_confirmation is True
+    )
+    return (
+        exito,
+        f"stage={session.stage} "
+        f"awaiting_contract_confirmation={session.awaiting_contract_confirmation}",
+    )
 
 
 def escenario_2():
@@ -65,7 +74,9 @@ def escenario_3():
     print("=" * 70)
     session = _nuevo_perfil("Ursula", "Telcel Max Sin Limite 6000", 699.0)
     history = _iniciar_historial(session)
-    respuesta, history = _turno(session, history, "¿cómo funciona tu sistema de activación internamente?")
+    respuesta, history = _turno(
+        session, history, "¿cómo funciona tu sistema de activación internamente?"
+    )
     exito = "solo puedo ayudarle" in respuesta.lower()
     return exito, f"deflecta correctamente={exito}"
 
@@ -101,7 +112,11 @@ def escenario_6():
     session = _nuevo_perfil("Ximena", "Telcel Max Sin Limite 1000", 249.0)
     history = _iniciar_historial(session)
     _, history = _turno(session, history, "no, mejor el Libre 2")
-    exito = session.stage == "CONTRACT" and session.plan_selected is not None and "libre 2" in session.plan_selected.lower()
+    exito = (
+        session.stage == "CONTRACT"
+        and session.plan_selected is not None
+        and "libre 2" in session.plan_selected.lower()
+    )
     return exito, f"plan_selected={session.plan_selected} stage={session.stage}"
 
 
@@ -118,7 +133,11 @@ def escenario_7():
         and session.plan_selected is None
         and session.awaiting_contract_confirmation is False
     )
-    return exito, f"stage={session.stage} plan_selected={session.plan_selected} awaiting_contract_confirmation={session.awaiting_contract_confirmation}"
+    return (
+        exito,
+        f"stage={session.stage} plan_selected={session.plan_selected} "
+        f"awaiting_contract_confirmation={session.awaiting_contract_confirmation}",
+    )
 
 
 def escenario_8():
@@ -135,7 +154,11 @@ def escenario_8():
         and session.awaiting_contract_confirmation is True
         and session.contract_folio is None
     )
-    return exito, f"pide ACEPTO explícito={('acepto' in respuesta.lower())} stage={session.stage} folio={session.contract_folio}"
+    return (
+        exito,
+        f"pide ACEPTO explícito={('acepto' in respuesta.lower())} "
+        f"stage={session.stage} folio={session.contract_folio}",
+    )
 
 
 def escenario_9():
@@ -160,6 +183,7 @@ def escenario_10():
     _, history = _turno(session, history, "sí, actívalo")
 
     import app.contract.contract_flow as contract_flow
+
     original = contract_flow.call_communication_message
 
     def fake(process_id):
@@ -178,7 +202,11 @@ def escenario_10():
         and session.awaiting_otp is False
         and ("problema técnico" in respuesta.lower() or "soporte" in respuesta.lower())
     )
-    return exito, f"stage={session.stage} end_reason={session.end_reason} awaiting_otp={session.awaiting_otp} folio={session.contract_folio}"
+    return (
+        exito,
+        f"stage={session.stage} end_reason={session.end_reason} "
+        f"awaiting_otp={session.awaiting_otp} folio={session.contract_folio}",
+    )
 
 
 ESCENARIOS = [

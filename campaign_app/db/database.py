@@ -1,8 +1,9 @@
 import os
 from contextlib import contextmanager
+
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -21,13 +22,14 @@ def get_engine():
 
 def init_db():
     from db.models import Base
+
     Base.metadata.create_all(get_engine())
 
 
 @contextmanager
 def get_db():
-    Session = sessionmaker(bind=get_engine(), expire_on_commit=False)
-    session = Session()
+    session_factory = sessionmaker(bind=get_engine(), expire_on_commit=False)
+    session = session_factory()
     try:
         yield session
         session.commit()

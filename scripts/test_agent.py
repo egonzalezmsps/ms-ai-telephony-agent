@@ -16,26 +16,32 @@ Comandos disponibles:
     /exit          — salir
 """
 
-import sys
 import os
+import sys
 
 # Añadir raíz del proyecto al path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.config.logging_config import setup_logging
+
 setup_logging()
 
 from app.agent.reni_agent import run_turn
-from app.tools.prospect_loader import get_prospect_list_text, select_prospect, mark_as_changed
-from app.state.session import SessionState
-from app.state.persistence import delete_session
+from app.catalog.plans import eligible_plans, find_plan, get_price, recommend_plan
 from app.prompts.campaign_template import build_campaign_message
-from app.catalog.plans import eligible_plans, recommend_plan, get_price, find_plan
-
 from app.router.semantic_router import load_reference_embeddings
+from app.state.persistence import delete_session
+from app.state.session import SessionState
+from app.tools.prospect_loader import (
+    get_prospect_list_text,
+    mark_as_changed,
+    select_prospect,
+)
+
 load_reference_embeddings()
 
 
@@ -56,7 +62,10 @@ def print_eligible_plans(session: SessionState):
     rec = recommend_plan(session.current_cost, session.subscription_type)
     modality = session.subscription_type
 
-    print(f"─── Planes elegibles ({modality}, renta actual ${session.current_cost:.0f}/mes) ─")
+    print(
+        f"─── Planes elegibles ({modality}, renta actual "
+        f"${session.current_cost:.0f}/mes) ─"
+    )
     for p in plans:
         price = get_price(p, modality)
         gb_str = "Ilimitado" if p.is_unlimited else f"{p.gb_promo:.0f} GB"
@@ -73,7 +82,7 @@ def print_session(session: SessionState):
   Plan:      {session.current_plan_name}
   Renta:     ${session.current_cost:.0f}/mes
   Modalidad: {session.subscription_type}
-  Perfil:    {session.usage_summary or 'N/D'}
+  Perfil:    {session.usage_summary or "N/D"}
 ─────────────────────────────────────────────
 """)
 
@@ -113,7 +122,10 @@ def main():
                 delete_session(session.phone_number)
                 session = None
                 history = []
-                print("Sesión eliminada de PostgreSQL. Usa /select N para cargar un perfil.")
+                print(
+                    "Sesión eliminada de PostgreSQL. Usa /select N para cargar un "
+                    "perfil."
+                )
 
         elif user_input.lower() == "/perfil":
             if session:
@@ -131,7 +143,9 @@ def main():
             session = select_prospect(n)
 
             if not session:
-                print(f"Prospecto {n} no encontrado. Usa /list para ver los disponibles.")
+                print(
+                    f"Prospecto {n} no encontrado. Usa /list para ver los disponibles."
+                )
                 continue
 
             history = []

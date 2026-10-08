@@ -1,15 +1,18 @@
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.config.logging_config import setup_logging
+
 setup_logging()
 
-from app.router.semantic_router import load_reference_embeddings
 from app.agent.reni_agent import run_turn
+from app.router.semantic_router import load_reference_embeddings
 from app.state.session import SessionState
 
 load_reference_embeddings()
@@ -61,9 +64,9 @@ for i, msg in enumerate(mensajes):
         session.awaiting_contract_confirmation = False
         session.awaiting_otp = False
         history = []
-        print(f"  [RESET] sesión reseteada\n")
+        print("  [RESET] sesión reseteada\n")
 
-    print(f"[{i+1}] '{msg}'")
+    print(f"[{i + 1}] '{msg}'")
     try:
         response, history = run_turn(session, msg, history)
         print(f"  → {response[:80]}")

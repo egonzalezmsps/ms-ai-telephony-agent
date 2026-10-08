@@ -5,18 +5,19 @@ Mensaje inicial de campaña determinístico (sin LLM).
 Replica el comportamiento del proyecto LangGraph original.
 """
 
-from typing import Optional
-from app.catalog.plans import recommend_plan, get_price, get_cashback, PRICE_EPSILON_MXN
+import datetime as _dt
+import os as _os
+from zoneinfo import ZoneInfo as _ZoneInfo
+
+from app.catalog.plans import PRICE_EPSILON_MXN, get_cashback, get_price, recommend_plan
 from app.state.session import SessionState
 
-
-import os as _os
 TEMPLATE_LIBRE = _os.environ.get("TEMPLATE_LIBRE", "template_telcel_libre")
 TEMPLATE_ULTRA = _os.environ.get("TEMPLATE_ULTRA", "template_telcel_ultra")
 
-import datetime as _dt
-from zoneinfo import ZoneInfo as _ZoneInfo
-DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now(_ZoneInfo("America/Mexico_City")).strftime("%Y-%m-%d %H:%M:%S")
+DEPLOY_TIMESTAMP = _os.environ.get("DEPLOY_TIMESTAMP") or _dt.datetime.now(
+    _ZoneInfo("America/Mexico_City")
+).strftime("%Y-%m-%d %H:%M:%S")
 OCI_MODEL_NAME = _os.environ.get("OCI_MODEL_ID", "desconocido")
 
 # Cuerpos de plantilla con marcadores {{N}} — espejo exacto de las plantillas WhatsApp
@@ -26,29 +27,34 @@ OCI_MODEL_NAME = _os.environ.get("OCI_MODEL_ID", "desconocido")
 _BODY_LIBRE = (
     "Hola, *{{1}}* 👋\n"
     "En *Telcel* queremos que disfrute de una mejor experiencia. Por ello, tenemos una "
-    "oferta especial para usted: cambie a *{{2}} Abierto* por solo *${{3}} MXN* al mes.\n\n"
+    "oferta especial para usted: cambie a *{{2}} Abierto* por solo *${{3}} MXN* al "
+    "mes.\n\n"
     "Con este plan obtendrá más conectividad y mejores beneficios para aprovechar al "
     "máximo su servicio:\n\n"
     "• 📞 *Minutos y SMS ilimitados* en México, Estados Unidos y Canadá\n"
     "• 📈 *{{4}} GB* de datos\n"
-    "• 📱 *Apps Ilimitadas* (WhatsApp, Facebook, Messenger, X, Instagram, Snapchat, Uber)\n"
+    "• 📱 *Apps Ilimitadas* (WhatsApp, Facebook, Messenger, X, Instagram, Snapchat, "
+    "Uber)\n"
     "• 💰 *Cashback de ${{5}} MXN/mes*\n"
     "• 🎬 *Claro Video y Claro Drive (20 GB)*\n\n"
-    "¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente "
+    "¿Le gustaría comparar su plan actual con esta nueva opción para conocer "
+    "exactamente "
     "qué beneficios adicionales obtendría?"
 )
 
 _BODY_ULTRA = (
     "Hola, *{{1}}* 👋\n"
     "En *Telcel* queremos que disfrute de una mejor experiencia. Por ello, tenemos una "
-    "oferta especial para usted: cambie a *{{2}} Abierto* por solo *${{3}} MXN* al mes.\n\n"
+    "oferta especial para usted: cambie a *{{2}} Abierto* por solo *${{3}} MXN* al "
+    "mes.\n\n"
     "Con este plan obtendrá más conectividad y mejores beneficios para aprovechar al "
     "máximo su servicio:\n\n"
     "• 📞 *Minutos y SMS ilimitados* en México, Estados Unidos y Canadá\n"
     "• 📈 *{{4}} GB* de datos\n"
     "• ✉️ *WhatsApp Ilimitado*\n"
     "• 🎬 *Claro Video y Claro Drive (20 GB)*\n\n"
-    "¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente "
+    "¿Le gustaría comparar su plan actual con esta nueva opción para conocer "
+    "exactamente "
     "qué beneficios adicionales obtendría?"
 )
 
@@ -61,7 +67,7 @@ def _render_template(body: str, params: list) -> str:
     return text
 
 
-def build_template_params(session: SessionState) -> Optional[dict]:
+def build_template_params(session: SessionState) -> dict | None:
     """
     Returns {"template_name": str, "params": list} for the correct WhatsApp template.
     Returns None if no eligible plan exists for this customer.
@@ -80,7 +86,11 @@ def build_template_params(session: SessionState) -> Optional[dict]:
     cashback = get_cashback(target, session.subscription_type)
     has_promo = bool(session.has_promotion)
 
-    if has_promo and target.gb_promo > target.gb_base and price > session.current_cost + PRICE_EPSILON_MXN:
+    if (
+        has_promo
+        and target.gb_promo > target.gb_base
+        and price > session.current_cost + PRICE_EPSILON_MXN
+    ):
         gb_value = target.gb_promo
     else:
         gb_value = target.gb_base
@@ -90,21 +100,21 @@ def build_template_params(session: SessionState) -> Optional[dict]:
         return {
             "template_name": TEMPLATE_LIBRE,
             "params": [
-                session.first_name,       # {{1}} nombre
-                target.plan_id,           # {{2}} plan (sin modalidad — "Abierto" es texto fijo)
-                f"{price:.0f}",           # {{3}} precio
-                gb_str,                   # {{4}} GB
-                f"{cashback:.2f}",        # {{5}} cashback
+                session.first_name,  # {{1}} nombre
+                target.plan_id,  # {{2}} plan (sin modalidad — "Abierto" es texto fijo)
+                f"{price:.0f}",  # {{3}} precio
+                gb_str,  # {{4}} GB
+                f"{cashback:.2f}",  # {{5}} cashback
             ],
         }
     else:  # Telcel Ultra
         return {
             "template_name": TEMPLATE_ULTRA,
             "params": [
-                session.first_name,       # {{1}} nombre
-                target.plan_id,           # {{2}} plan (sin modalidad — "Abierto" es texto fijo)
-                f"{price:.0f}",           # {{3}} precio
-                gb_str,                   # {{4}} GB
+                session.first_name,  # {{1}} nombre
+                target.plan_id,  # {{2}} plan (sin modalidad — "Abierto" es texto fijo)
+                f"{price:.0f}",  # {{3}} precio
+                gb_str,  # {{4}} GB
             ],
         }
 
@@ -119,7 +129,8 @@ def build_campaign_message(session: SessionState) -> str:
 
     if not result:
         msg = (
-            f"Hola, *{session.first_name}*. En *Telcel* buscamos mejorar la experiencia "
+            f"Hola, *{session.first_name}*. En *Telcel* buscamos mejorar la "
+            f"experiencia "
             f"de nuestros planes.\n\n"
             f"Por el momento no tenemos una oferta disponible para su línea. "
             f"Para más información contáctenos al *800 220 9518*."

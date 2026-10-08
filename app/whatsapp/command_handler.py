@@ -5,19 +5,21 @@ Maneja comandos enviados por WhatsApp (/lista, /seleccionar, /perfil, /reset).
 """
 
 import logging
-from typing import Optional
 
-from app.tools.prospect_loader import load_prospects, select_prospect, MODALITY_MAP
 from app.prompts.campaign_template import build_campaign_message
-from app.state.persistence import load_session, save_session, delete_session
-from app.state.serializer import session_to_dict, dict_to_session
+from app.state.persistence import delete_session, load_session, save_session
+from app.state.serializer import dict_to_session, session_to_dict
+from app.tools.prospect_loader import MODALITY_MAP, load_prospects, select_prospect
 
 logger = logging.getLogger(__name__)
 
 _KNOWN_COMMANDS = {
-    "/ayuda", "/help",
-    "/lista", "/list",
-    "/seleccionar", "/select",
+    "/ayuda",
+    "/help",
+    "/lista",
+    "/list",
+    "/seleccionar",
+    "/select",
     "/perfil",
     "/reset",
 }
@@ -66,7 +68,7 @@ def _format_perfil(session) -> str:
     )
 
 
-def handle_command(phone_number: str, text: str) -> Optional[str]:
+def handle_command(phone_number: str, text: str) -> str | None:
     """
     Procesa un mensaje que empieza con '/'.
 
@@ -110,7 +112,11 @@ def handle_command(phone_number: str, text: str) -> Optional[str]:
             history=[{"role": "assistant", "content": campaign_msg}],
         )
         logger.info(f"ADMIN | {phone_number}: /seleccionar {n} — {session.full_name}")
-        return f"Perfil cargado: {session.full_name} ({session.current_plan_name} ${session.current_cost:.0f}/mes)\n\n{campaign_msg}"
+        return (
+            f"Perfil cargado: {session.full_name} "
+            f"({session.current_plan_name} ${session.current_cost:.0f}/mes)"
+            f"\n\n{campaign_msg}"
+        )
 
     # /perfil
     if cmd == "/perfil":
