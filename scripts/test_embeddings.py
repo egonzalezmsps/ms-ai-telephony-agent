@@ -22,7 +22,7 @@ client = GenerativeAiInferenceClient(config)
 details = EmbedTextDetails(
     inputs=["hola como estas", "tienes planes mas baratos"],
     serving_mode=OnDemandServingMode(
-        model_id="cohere.embed-multilingual-v3.0"
+        model_id="cohere.embed-v4.0"
     ),
     compartment_id=os.environ["OCI_COMPARTMENT_ID"],
     input_type="SEARCH_QUERY",

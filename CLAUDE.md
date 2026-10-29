@@ -284,7 +284,7 @@ run_turn() en reni_agent.py
 ```
 
 **Nota sobre el router semántico**: no es matching de keywords — usa embeddings de
-`cohere.embed-multilingual-v3.0` vía OCI y similitud coseno contra frases de referencia
+`cohere.embed-v4.0` vía OCI (configurable con `OCI_EMBED_MODEL_ID`; v3 se retiró el 2026-09-30) y similitud coseno contra frases de referencia
 por intención, con un threshold individual por intención (`THRESHOLDS` en
 `semantic_router.py`). Si los embeddings de referencia no están cargados (o falla la
 llamada a OCI), `classify()` retorna `None` y el turno continúa a los fallbacks/LLM sin
@@ -455,7 +455,7 @@ Promoción de GB: solo aplica en Telcel Libre cuando `precio_nuevo > renta_actua
 ## Router semántico (`app/router/semantic_router.py`)
 
 Clasifica el mensaje del cliente en una de ~15 intenciones usando embeddings de
-`cohere.embed-multilingual-v3.0` (OCI Generative AI), no matching de keywords.
+`cohere.embed-v4.0` (OCI Generative AI, `OCI_EMBED_MODEL_ID`), no matching de keywords.
 
 - `INTENCIONES` — dict de `intencion → [frases de referencia en español, minúsculas, sin acentos/puntuación]`
 - `THRESHOLDS` — similitud coseno mínima por intención (0.72–0.82) para aceptar la clasificación

@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 OCI_COMPARTMENT_ID = os.environ["OCI_COMPARTMENT_ID"]
 OCI_REGION = os.environ.get("OCI_REGION", "us-chicago-1")
-EMBED_MODEL_ID = "cohere.embed-multilingual-v3.0"
+# cohere.embed-multilingual-v3.0 se retiró on-demand en OCI el 2026-09-30 (404 "Entity ... not found").
+EMBED_MODEL_ID = os.environ.get("OCI_EMBED_MODEL_ID", "cohere.embed-v4.0")
 THRESHOLDS = {
     "vigencia_promo": 0.72,
     "criterio_promo": 0.72,

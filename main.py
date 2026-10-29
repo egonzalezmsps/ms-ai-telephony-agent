@@ -43,7 +43,12 @@ def startup():
             logger.info("Tablas de campaña listas")
         except Exception as e:
             logger.warning(f"No se pudieron crear tablas de campaña: {e}")
-    load_reference_embeddings()
+    # Si OCI falla (modelo retirado, red, credenciales) el pod NO debe caerse:
+    # classify() regresa None sin embeddings y el turno sigue por fallbacks/LLM.
+    try:
+        load_reference_embeddings()
+    except Exception as e:
+        logger.error("[ROUTER] No se pudieron cargar los embeddings — router semántico deshabilitado: %s", e)
     logger.info("ReniAgent iniciado — tablas PostgreSQL listas")
 
 
