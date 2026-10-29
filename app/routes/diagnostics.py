@@ -5,11 +5,12 @@ Endpoints de diagnóstico/debug (no aparecen en el schema público): descarga
 de logs y pruebas de límites de contexto del modelo OCI.
 """
 
+import asyncio
 import os
 from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.config.logging_config import LOGS_DIR
@@ -34,6 +35,86 @@ def get_logs(api_key: Optional[str] = Query(default=None)):
         path=log_path,
         media_type="text/plain",
         filename="app.log",
+    )
+
+
+# Archivos de log que se pueden seguir en vivo (whitelist: nunca rutas arbitrarias).
+# "telcel" es el log TEMPORAL de app/integrations/telcel/debug_log.py.
+_STREAMABLE_LOGS = {
+    "app": "app.log",
+    "telcel": "telcel_debug.log",
+}
+_STREAM_POLL_SECONDS = 0.5
+
+
+def _read_last_lines(path: str, lines: int) -> tuple[str, int]:
+    """Regresa las últimas `lines` líneas del archivo y la posición final (para seguir leyendo)."""
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        content = f.readlines()
+        return "".join(content[-lines:]) if lines > 0 else "", f.tell()
+
+
+async def _follow_file(path: str, tail: int):
+    """Equivalente a `tail -f`: emite las últimas líneas y luego todo lo nuevo que se escriba.
+
+    Si el archivo rota (RotatingFileHandler) o se borra y se vuelve a crear, se
+    detecta porque su tamaño queda por debajo de lo ya leído y se reabre desde el inicio.
+    """
+    if os.path.exists(path):
+        initial, position = _read_last_lines(path, tail)
+        if initial:
+            yield initial
+    else:
+        position = 0
+        yield f"[esperando a que se cree {os.path.basename(path)}...]\n"
+
+    while True:
+        await asyncio.sleep(_STREAM_POLL_SECONDS)
+        if not os.path.exists(path):
+            continue
+        size = os.path.getsize(path)
+        if size < position:
+            position = 0
+            yield f"\n[{os.path.basename(path)} rotó, se reinicia la lectura]\n"
+        if size == position:
+            continue
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            f.seek(position)
+            chunk = f.read()
+            position = f.tell()
+        if chunk:
+            yield chunk
+
+
+@router.get("/logs/stream", include_in_schema=False)
+async def stream_logs(
+    file: str = Query(default="telcel", description="app | telcel"),
+    tail: int = Query(default=100, ge=0, le=5000),
+    api_key: Optional[str] = Query(default=None),
+    x_api_key: Optional[str] = Header(default=None),
+):
+    """Sigue un archivo de log en tiempo real (como `tail -f`) por HTTP streaming.
+
+    Ejemplos:
+        curl -N "http://localhost:8000/logs/stream?file=telcel&api_key=XXX"
+        curl -N -H "x-api-key: XXX" "http://localhost:8000/logs/stream?file=app&tail=50"
+    """
+    expected_key = os.getenv("API_KEY", "")
+    if expected_key and expected_key not in (api_key, x_api_key):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    filename = _STREAMABLE_LOGS.get(file)
+    if not filename:
+        raise HTTPException(status_code=400, detail=f"file debe ser uno de: {', '.join(_STREAMABLE_LOGS)}")
+
+    return StreamingResponse(
+        _follow_file(os.path.join(LOGS_DIR, filename), tail),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",          # que nginx/ingress no bufferee el stream
+            "X-Content-Type-Options": "nosniff",  # que el navegador lo pinte conforme llega
+        },
     )
 
 

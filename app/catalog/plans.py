@@ -27,29 +27,29 @@ class Plan:
     has_social_apps: bool          # True = Libre (7 apps), False = Ultra (solo WhatsApp)
     is_unlimited: bool             # True solo para Ultra Ilimitado
     calls_sms: str = "Llamadas y SMS ilimitados a México, EUA y Canadá"
-    telcel_product_id: Optional[str] = None  # id de catálogo Telcel para CreateProductOrder — TODO: pendiente de poblar con Telcel
+    telcel_product_id_abierto: Optional[str] = None     # id de catálogo Telcel para CreateProductOrder (modalidad Abierto)
+    telcel_product_id_controlado: Optional[str] = None  # id de catálogo Telcel para CreateProductOrder (modalidad Controlado)
 
 
 CATALOG: List[Plan] = [
     # ── Telcel Libre ─────────────────────────────────────────────────────────
-    # telcel_product_id: placeholder mock (MOCK-<plan_code>) hasta que Telcel entregue los IDs reales de catálogo.
-    Plan("TL1",    "Telcel Libre 1",          "Telcel Libre",   249,  299,  4,   6.0,  12.45,  14.95, True,  False, telcel_product_id="MOCK-TL1"),
-    Plan("TL2",    "Telcel Libre 2",          "Telcel Libre",   319,  369,  5,   7.5,  15.95,  18.45, True,  False, telcel_product_id="MOCK-TL2"),
-    Plan("TL3",    "Telcel Libre 3",          "Telcel Libre",   399,  449,  6,   9.0,  39.90,  44.90, True,  False, telcel_product_id="MOCK-TL3"),
-    Plan("TL4",    "Telcel Libre 4",          "Telcel Libre",   499,  549, 10,  15.0,  74.85,  82.35, True,  False, telcel_product_id="MOCK-TL4"),
-    Plan("TL5",    "Telcel Libre 5",          "Telcel Libre",   599,  699, 20,  30.0,  89.85, 104.85, True,  False, telcel_product_id="MOCK-TL5"),
-    Plan("TL6",    "Telcel Libre 6",          "Telcel Libre",   699,  799, 30,  45.0, 104.85, 119.85, True,  False, telcel_product_id="MOCK-TL6"),
-    Plan("TL7",    "Telcel Libre 7",          "Telcel Libre",   799,  899, 40,  60.0, 119.85, 134.85, True,  False, telcel_product_id="MOCK-TL7"),
-    Plan("TL9",    "Telcel Libre 9",          "Telcel Libre",   999, 1099, 45,  67.5, 149.85, 164.85, True,  False, telcel_product_id="MOCK-TL9"),
-    Plan("TL12",   "Telcel Libre 12",         "Telcel Libre",  1299, 1399, 55,  82.5, 194.85, 209.85, True,  False, telcel_product_id="MOCK-TL12"),
-    Plan("TLVIP",  "Telcel Libre VIP",        "Telcel Libre",  1499, 1599, 40,  60.0, 629.58, 671.58, True,  False, telcel_product_id="MOCK-TLVIP"),
+    Plan("TL1",    "Telcel Libre 1",          "Telcel Libre",   249,  299,  4,   6.0,  12.45,  14.95, True,  False, telcel_product_id_abierto="700116628", telcel_product_id_controlado="700116579"),
+    Plan("TL2",    "Telcel Libre 2",          "Telcel Libre",   319,  369,  5,   7.5,  15.95,  18.45, True,  False, telcel_product_id_abierto="700116599", telcel_product_id_controlado="700116680"),
+    Plan("TL3",    "Telcel Libre 3",          "Telcel Libre",   399,  449,  6,   9.0,  39.90,  44.90, True,  False, telcel_product_id_abierto="700116629", telcel_product_id_controlado="700116665"),
+    Plan("TL4",    "Telcel Libre 4",          "Telcel Libre",   499,  549, 10,  15.0,  74.85,  82.35, True,  False, telcel_product_id_abierto="700116641", telcel_product_id_controlado="700116700"),
+    Plan("TL5",    "Telcel Libre 5",          "Telcel Libre",   599,  699, 20,  30.0,  89.85, 104.85, True,  False, telcel_product_id_abierto="700116630", telcel_product_id_controlado="700116635"),
+    Plan("TL6",    "Telcel Libre 6",          "Telcel Libre",   699,  799, 30,  45.0, 104.85, 119.85, True,  False, telcel_product_id_abierto="700116631", telcel_product_id_controlado="700116646"),
+    Plan("TL7",    "Telcel Libre 7",          "Telcel Libre",   799,  899, 40,  60.0, 119.85, 134.85, True,  False, telcel_product_id_abierto="700116642", telcel_product_id_controlado="700116681"),
+    Plan("TL9",    "Telcel Libre 9",          "Telcel Libre",   999, 1099, 45,  67.5, 149.85, 164.85, True,  False, telcel_product_id_abierto="700116643", telcel_product_id_controlado="700116666"),
+    Plan("TL12",   "Telcel Libre 12",         "Telcel Libre",  1299, 1399, 55,  82.5, 194.85, 209.85, True,  False, telcel_product_id_abierto="700116577", telcel_product_id_controlado="700116647"),
+    Plan("TLVIP",  "Telcel Libre VIP",        "Telcel Libre",  1499, 1599, 40,  60.0, 629.58, 671.58, True,  False, telcel_product_id_abierto="700116644", telcel_product_id_controlado="700116682"),
     # ── Telcel Ultra ─────────────────────────────────────────────────────────
-    Plan("TU3",    "Telcel Ultra 3",          "Telcel Ultra",   349,  399, 15,  15.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU3"),
-    Plan("TU4",    "Telcel Ultra 4",          "Telcel Ultra",   449,  499, 25,  25.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU4"),
-    Plan("TU5",    "Telcel Ultra 5",          "Telcel Ultra",   549,  599, 40,  40.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU5"),
-    Plan("TU7",    "Telcel Ultra 7",          "Telcel Ultra",   749,  799, 60,  60.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU7"),
-    Plan("TU9",    "Telcel Ultra 9",          "Telcel Ultra",   949,  999,100, 100.0,   0.00,   0.00, False, False, telcel_product_id="MOCK-TU9"),
-    Plan("TUILIM", "Telcel Ultra Ilimitado",  "Telcel Ultra",  1349, 1399,  0,   0.0,   0.00,   0.00, False, True,  telcel_product_id="MOCK-TUILIM"),
+    Plan("TU3",    "Telcel Ultra 3",          "Telcel Ultra",   349,  399, 15,  15.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700090802", telcel_product_id_controlado="700090591"),
+    Plan("TU4",    "Telcel Ultra 4",          "Telcel Ultra",   449,  499, 25,  25.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700090677", telcel_product_id_controlado="700090638"),
+    Plan("TU5",    "Telcel Ultra 5",          "Telcel Ultra",   549,  599, 40,  40.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700089461", telcel_product_id_controlado="700090697"),
+    Plan("TU7",    "Telcel Ultra 7",          "Telcel Ultra",   749,  799, 60,  60.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700089404", telcel_product_id_controlado="700090592"),
+    Plan("TU9",    "Telcel Ultra 9",          "Telcel Ultra",   949,  999,100, 100.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700116664", telcel_product_id_controlado="700116652"),
+    Plan("TUILIM", "Telcel Ultra Ilimitado",  "Telcel Ultra",  1349, 1399,  0,   0.0,   0.00,   0.00, False, True,  telcel_product_id_abierto="700116634", telcel_product_id_controlado="700116686"),
 ]
 
 
@@ -76,6 +76,10 @@ def get_price(plan: Plan, modality: str) -> float:
 
 def get_cashback(plan: Plan, modality: str) -> float:
     return plan.cashback_controlado if modality == "Controlado" else plan.cashback_abierto
+
+
+def get_product_id(plan: Plan, modality: str) -> Optional[str]:
+    return plan.telcel_product_id_controlado if modality == "Controlado" else plan.telcel_product_id_abierto
 
 
 def eligible_plans(current_cost: float, modality: str) -> List[Plan]:

@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APIs Foráneas Telcel</title>
+<style>
+:root {
+  --bg: #f4f6fa; --surface: #ffffff; --surface-2: #eef1f6; --text: #14202e; --muted: #5f6b7a; --border: #dbe1ea;
+  --a1: #1565c0; --a1-soft: #e3eefb;   /* createProcess */
+  --a2: #7b3fc4; --a2-soft: #f0e8fb;   /* CommunicationMessage */
+  --a3: #0e8a5f; --a3-soft: #e1f4ec;   /* CreateProductOrder */
+  --lock: #c2410c; --lock-soft: #fdeee4; --warn: #a16207; --warn-soft: #fdf4d8; --err: #b42318; --err-soft: #fde8e6;
+  --code-bg: #0f1722; --code-text: #e6edf3; --shadow: 0 10px 30px rgba(20, 32, 46, .08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1017; --surface: #141b25; --surface-2: #1c2531; --text: #e8eef5; --muted: #98a4b3; --border: #2a3441;
+    --a1: #5ea4f2; --a1-soft: #13263d; --a2: #b48af0; --a2-soft: #261b3a; --a3: #45c995; --a3-soft: #0f2a20;
+    --lock: #f0884e; --lock-soft: #33200f; --warn: #e6b84a; --warn-soft: #2e2510; --err: #f47067; --err-soft: #331716;
+    --code-bg: #080c11; --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1017; --surface: #141b25; --surface-2: #1c2531; --text: #e8eef5; --muted: #98a4b3; --border: #2a3441;
+  --a1: #5ea4f2; --a1-soft: #13263d; --a2: #b48af0; --a2-soft: #261b3a; --a3: #45c995; --a3-soft: #0f2a20;
+  --lock: #f0884e; --lock-soft: #33200f; --warn: #e6b84a; --warn-soft: #2e2510; --err: #f47067; --err-soft: #331716;
+  --code-bg: #080c11; --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+* { box-sizing: border-box; }
+html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+code, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+code { font-size: .86em; background: var(--surface-2); padding: 1px 6px; border-radius: 5px; overflow-wrap: anywhere; }
+
+/* ---------- slides ---------- */
+.slide { min-height: 100vh; scroll-snap-align: start; display: flex; flex-direction: column; justify-content: center;
+  padding: 64px 16px 72px; position: relative; }
+.inner { width: 100%; max-width: 1120px; margin: 0 auto; }
+.kicker { font-size: .78rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.slide h2 { font-size: clamp(1.6rem, 3.4vw, 2.4rem); line-height: 1.15; margin: 0 0 8px; letter-spacing: -.01em; }
+.lead { font-size: clamp(1rem, 1.6vw, 1.15rem); color: var(--muted); margin: 0 0 28px; max-width: 760px; }
+.num { position: absolute; bottom: 22px; right: 24px; font-size: .8rem; color: var(--muted); }
+
+/* ---------- top bar ---------- */
+.bar { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(8px); }
+.bar .brand { font-weight: 700; font-size: .9rem; }
+.bar .brand span { color: var(--muted); font-weight: 500; }
+.bar button { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 10px; font: inherit; font-size: .8rem; cursor: pointer; }
+.progress { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--a1), var(--a2), var(--a3)); z-index: 11; width: 0; transition: width .2s; }
+.dots { position: fixed; right: 14px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 10px; z-index: 10; }
+.dots a { width: 10px; height: 10px; border-radius: 50%; background: var(--border); display: block; transition: transform .2s, background .2s; }
+.dots a.on { background: var(--text); transform: scale(1.3); }
+
+/* ---------- cover ---------- */
+.cover h1 { font-size: clamp(2.2rem, 6vw, 4rem); line-height: 1.05; margin: 0 0 14px; letter-spacing: -.02em; }
+.cover h1 b { background: linear-gradient(90deg, var(--a1), var(--a2), var(--a3)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: var(--surface);
+  border: 1px solid var(--border); font-weight: 600; font-size: .92rem; box-shadow: var(--shadow); }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.hint { margin-top: 40px; color: var(--muted); font-size: .85rem; }
+
+/* ---------- api cards ---------- */
+.apis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.api { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 22px; box-shadow: var(--shadow);
+  border-top: 5px solid var(--c); display: flex; flex-direction: column; gap: 12px; }
+.api .ico { width: 52px; height: 52px; border-radius: 14px; background: var(--cs); color: var(--c); display: grid; place-items: center; }
+.api .ico svg { width: 28px; height: 28px; }
+.api h3 { margin: 0; font-size: 1.25rem; }
+.api .what { color: var(--muted); margin: 0; min-height: 3em; }
+.io { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pill { font-family: ui-monospace, Consolas, monospace; font-size: .8rem; padding: 4px 10px; border-radius: 8px; background: var(--surface-2); }
+.pill.c { background: var(--cs); color: var(--c); font-weight: 700; }
+.arrow { color: var(--muted); }
+.route { font-family: ui-monospace, Consolas, monospace; font-size: .78rem; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 10px; }
+.badge { align-self: flex-start; font-size: .72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.b-ok { background: var(--a3-soft); color: var(--a3); }
+.b-warn { background: var(--warn-soft); color: var(--warn); }
+
+/* ---------- flow ---------- */
+.flow { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); overflow-x: auto; }
+.flow svg { width: 100%; min-width: 820px; height: auto; display: block; }
+.f-node { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.5; }
+.f-t { fill: var(--text); font-size: 14px; font-weight: 600; }
+.f-s { fill: var(--muted); font-size: 12px; }
+.f-line { stroke: var(--muted); stroke-width: 2; fill: none; }
+.f-lbl { font-size: 12px; font-weight: 700; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; font-size: .88rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------- pipeline (request anatomy) ---------- */
+.pipe { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 12px; align-items: stretch; }
+.stage { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.stage .lbl { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.stage .lbl i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font-size: .75rem; }
+.stage pre { margin: 0; background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 12px; font-size: 12.5px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-all; }
+.stage p { margin: 8px 0 0; font-size: .86rem; color: var(--muted); }
+.conn { display: grid; place-items: center; color: var(--c); }
+.conn svg { width: 34px; height: 34px; }
+.hx { color: #ffb86b; }
+.ky { color: #9ecbff; }
+.cm { color: #7d8896; }
+.lock-chip { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--lock); background: var(--lock-soft); padding: 3px 10px; border-radius: 999px; }
+.alert { margin-top: 18px; display: flex; gap: 12px; align-items: flex-start; background: var(--warn-soft); color: var(--text); border-radius: 14px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+.alert b { color: var(--warn); }
+.alert svg { flex: none; width: 22px; height: 22px; color: var(--warn); margin-top: 2px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+
+/* ---------- crypto ---------- */
+.specs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.spec { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); }
+.spec .k { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.spec .v { font-size: 1.35rem; font-weight: 800; margin: 4px 0 2px; color: var(--lock); }
+.spec .d { font-size: .82rem; color: var(--muted); }
+.chain { display: flex; align-items: stretch; gap: 10px; }
+.chain .stage { flex: 1; }
+.bytes { display: flex; flex-wrap: wrap; gap: 3px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+.bytes span { padding: 2px 4px; border-radius: 4px; background: var(--surface-2); }
+.bytes span.pd { background: var(--lock-soft); color: var(--lock); font-weight: 700; }
+.keybox { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.keybox div { flex: 1; min-width: 0; border: 1px dashed var(--lock); border-radius: 10px; padding: 8px 10px; font-size: .8rem; }
+.keybox .mono { display: block; word-break: break-all; font-size: .74rem; }
+.keybox b { color: var(--lock); display: block; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; }
+
+/* ---------- token ---------- */
+.tok { display: grid; grid-template-columns: 1fr auto 1fr auto 1.2fr auto 1.4fr; gap: 10px; align-items: center; }
+.tok .stage { text-align: center; }
+.tok .big { font-family: ui-monospace, Consolas, monospace; font-size: 1rem; font-weight: 700; word-break: break-all; }
+.tok .plus { font-size: 1.6rem; color: var(--muted); text-align: center; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+.fact { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; }
+.fact svg { flex: none; width: 26px; height: 26px; color: var(--a1); }
+.fact b { display: block; }
+.fact span { color: var(--muted); font-size: .88rem; }
+.httpcard { margin-top: 22px; background: var(--code-bg); color: var(--code-text); border-radius: 16px; padding: 18px 20px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; line-height: 1.7; overflow-x: auto; }
+.httpcard .m { color: #ff7b72; font-weight: 700; }
+.httpcard .hn { color: #7ee787; }
+
+/* ---------- status ---------- */
+.status { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.st { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px; box-shadow: var(--shadow); border-top: 5px solid var(--c); }
+.st h3 { margin: 0 0 12px; font-size: 1.1rem; }
+.st ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.st li { display: flex; gap: 10px; align-items: flex-start; font-size: .92rem; }
+.light { flex: none; width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; }
+.g { background: #22a06b; } .y { background: #e2a400; } .r { background: #e5484d; }
+.env { margin-top: 22px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+.env div { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-align: center; font-family: ui-monospace, Consolas, monospace; font-size: .8rem; }
+.env div small { display: block; font-family: system-ui, sans-serif; color: var(--muted); margin-top: 4px; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 900px) {
+  .apis, .status, .facts, .row2 { grid-template-columns: minmax(0, 1fr); }
+  .specs { grid-template-columns: 1fr 1fr; }
+  .env { grid-template-columns: 1fr 1fr; }
+  .pipe, .tok { grid-template-columns: minmax(0, 1fr); }
+  .chain { flex-direction: column; }
+  .conn { transform: rotate(90deg); }
+  .tok .plus { transform: none; }
+  .dots { display: none; }
+  html { scroll-snap-type: none; }
+  .slide { min-height: auto; padding-top: 72px; }
+}
+@media print {
+  html { scroll-snap-type: none; } .bar, .dots, .progress { display: none; }
+  .slide { page-break-after: always; min-height: auto; }
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="bar">
+  <div class="brand">APIs Foráneas Telcel <span>· ReniAgent</span></div>
+  <button id="theme" type="button" aria-label="Cambiar tema">◐ Tema</button>
+</div>
+<nav class="dots" id="dots" aria-label="Diapositivas"></nav>
+
+<!-- SVG icon sprites -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-proc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 13h6"/><circle cx="17" cy="15" r="2"/></symbol>
+  <symbol id="i-sms" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z"/><path d="M9 12h.01M12 12h.01M15 12h.01"/></symbol>
+  <symbol id="i-order" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M11 12l9-9M16 7l3 3"/></symbol>
+  <symbol id="i-no" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></symbol>
+</svg>
+
+<!-- ============ 1. PORTADA ============ -->
+<section class="slide cover" id="s1">
+  <div class="inner">
+    <p class="kicker">Integración · Flujo de contratación</p>
+    <h1>Las <b>3 APIs foráneas</b><br>de Telcel</h1>
+    <p class="lead">Qué hace cada API, en qué momento la usa el agente, qué recibe, cómo se cifra y cómo se genera el token.</p>
+    <div class="chips">
+      <span class="chip"><span class="dot" style="background:var(--a1)"></span>createProcess</span>
+      <span class="chip"><span class="dot" style="background:var(--a2)"></span>CommunicationMessage</span>
+      <span class="chip"><span class="dot" style="background:var(--a3)"></span>CreateProductOrder</span>
+      <span class="chip"><svg width="16" height="16" style="color:var(--lock)"><use href="#i-lock"/></svg>AES-256-CBC</span>
+    </div>
+    <p class="hint">Avanza con ↓ / → o con la rueda del mouse</p>
+  </div>
+  <div class="num">01</div>
+</section>
+
+<!-- ============ 2. LAS 3 APIs ============ -->
+<section class="slide" id="s2">
+  <div class="inner">
+    <p class="kicker">Panorama</p>
+    <h2>Tres llamadas, un objetivo: cambiar de plan</h2>
+    <p class="lead">Las tres son <b>POST</b> JSON con el contenido cifrado. Se encadenan mediante el <code>processId</code>.</p>
+    <div class="apis">
+      <div class="api" style="--c:var(--a1);--cs:var(--a1-soft)">
+        <div class="ico"><svg><use href="#i-proc"/></svg></div>
+        <h3>① createProcess</h3>
+        <p class="what">Abre el proceso de cambio de plan para la línea del cliente.</p>
+        <div class="io"><span class="pill">msisdn</span><span class="arrow">→</span><span class="pill c">processId</span></div>
+        <span class="badge b-ok">Siempre · primera llamada</span>
+        <div class="route">/Prod/elegibility/createProcess</div>
+      </div>
+      <div class="api" style="--c:var(--a2);--cs:var(--a2-soft)">
+        <div class="ico"><svg><use href="#i-sms"/></svg></div>
+        <h3>② CommunicationMessage</h3>
+        <p class="what">Telcel envía al cliente un SMS con el código de verificación (OTP).</p>
+        <div class="io"><span class="pill c">processId</span><span class="arrow">→</span><span class="pill">SMS con OTP</span></div>
+        <span class="badge b-warn">Solo si el precio cambia</span>
+        <div class="route">/Prod/communicationMessage</div>
+      </div>
+      <div class="api" style="--c:var(--a3);--cs:var(--a3-soft)">
+        <div class="ico"><svg><use href="#i-order"/></svg></div>
+        <h3>③ CreateProductOrder</h3>
+        <p class="what">Activa el nuevo plan. Si se envió OTP, Telcel lo valida aquí.</p>
+        <div class="io"><span class="pill">id plan</span><span class="arrow">+</span><span class="pill c">processId</span><span class="arrow">→</span><span class="pill">orden</span></div>
+        <span class="badge b-ok">Siempre · última llamada</span>
+        <div class="route">/Prod/process/productOrder</div>
+      </div>
+    </div>
+  </div>
+  <div class="num">02</div>
+</section>
+
+<!-- ============ 3. CUÁNDO SE USA ============ -->
+<section class="slide" id="s3">
+  <div class="inner">
+    <p class="kicker">Cuándo se usa cada una</p>
+    <h2>Dos caminos según el precio del plan nuevo</h2>
+    <p class="lead">Todo pasa después de que el cliente escribe <b>ACEPTO</b> o <b>CONFIRMO</b>. Es un flujo determinístico, sin LLM.</p>
+    <div class="flow" role="img" aria-label="Flujo: ACEPTO, createProcess; si mismo precio CreateProductOrder; si precio distinto CommunicationMessage, OTP y CreateProductOrder; luego plan activado">
+      <svg viewBox="0 0 1000 330" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8b97a6"/></marker>
+        </defs>
+        <!-- cliente acepta -->
+        <rect class="f-node" x="10" y="135" width="150" height="64" rx="14"/>
+        <text class="f-t" x="85" y="162" text-anchor="middle">Cliente</text>
+        <text class="f-s" x="85" y="182" text-anchor="middle">ACEPTO / CONFIRMO</text>
+        <path class="f-line" d="M160 167 H208" marker-end="url(#ah)"/>
+        <!-- createProcess -->
+        <rect x="210" y="128" width="180" height="78" rx="14" fill="var(--a1-soft)" stroke="var(--a1)" stroke-width="2"/>
+        <text class="f-t" x="300" y="160" text-anchor="middle" style="fill:var(--a1)">1 · createProcess</text>
+        <text class="f-s" x="300" y="182" text-anchor="middle">obtiene processId</text>
+        <!-- branches -->
+        <path class="f-line" d="M390 150 C 430 150, 430 70, 470 70" marker-end="url(#ah)"/>
+        <path class="f-line" d="M390 184 C 430 184, 430 262, 470 262" marker-end="url(#ah)"/>
+        <text class="f-lbl" x="300" y="116" text-anchor="middle" style="fill:var(--a3)">▲ mismo precio</text>
+        <text class="f-lbl" x="300" y="226" text-anchor="middle" style="fill:var(--a2)">▼ precio distinto</text>
+        <!-- same price lane -->
+        <rect x="472" y="34" width="230" height="72" rx="14" fill="var(--a3-soft)" stroke="var(--a3)" stroke-width="2"/>
+        <text class="f-t" x="587" y="64" text-anchor="middle" style="fill:var(--a3)">3 · CreateProductOrder</text>
+        <text class="f-s" x="587" y="86" text-anchor="middle">directo, sin OTP</text>
+        <path class="f-line" d="M702 70 C 760 70, 760 150, 818 150" marker-end="url(#ah)"/>
+        <!-- different price lane -->
+        <rect x="472" y="226" width="150" height="72" rx="14" fill="var(--a2-soft)" stroke="var(--a2)" stroke-width="2"/>
+        <text class="f-t" x="547" y="256" text-anchor="middle" style="fill:var(--a2)">2 · CommMessage</text>
+        <text class="f-s" x="547" y="278" text-anchor="middle">SMS con OTP</text>
+        <path class="f-line" d="M622 262 H640" marker-end="url(#ah)"/>
+        <rect class="f-node" x="642" y="226" width="80" height="72" rx="14"/>
+        <text class="f-t" x="682" y="258" text-anchor="middle">🔢</text>
+        <text class="f-s" x="682" y="280" text-anchor="middle">código</text>
+        <path class="f-line" d="M722 262 H740" marker-end="url(#ah)"/>
+        <rect x="742" y="226" width="78" height="72" rx="14" fill="var(--a3-soft)" stroke="var(--a3)" stroke-width="2"/>
+        <text class="f-t" x="781" y="258" text-anchor="middle" style="fill:var(--a3)">3 · Order</text>
+        <text class="f-s" x="781" y="280" text-anchor="middle">valida OTP</text>
+        <path class="f-line" d="M820 250 C 840 250, 840 200, 860 186" marker-end="url(#ah)"/>
+        <!-- done -->
+        <rect x="820" y="128" width="170" height="64" rx="32" fill="var(--a3)"/>
+        <text x="905" y="157" text-anchor="middle" fill="#fff" font-size="15" font-weight="700">✓ Plan activado</text>
+        <text x="905" y="177" text-anchor="middle" fill="#fff" font-size="12" opacity=".9">folio TC-XXXXXXXX</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><svg width="16" height="16" style="color:var(--err)"><use href="#i-no"/></svg>Si cualquier API falla: se pide al cliente llamar a Soporte 800 220 9518</span>
+      <span><svg width="16" height="16" style="color:var(--lock)"><use href="#i-lock"/></svg>OTP incorrecto (<code>BE_MP_BPS_0040</code>) 3 veces: la contratación se bloquea</span>
+    </div>
+  </div>
+  <div class="num">03</div>
+</section>
+
+<!-- ============ 4. ANATOMÍA DEL REQUEST ============ -->
+<section class="slide" id="s4">
+  <div class="inner">
+    <p class="kicker">Qué recibe cada API</p>
+    <h2>Todas comparten la misma estructura</h2>
+    <p class="lead">El JSON en claro se cifra completo y viaja como un solo texto HEX. La respuesta regresa igual, cifrada.</p>
+    <div class="pipe" style="--c:var(--a1)">
+      <div class="stage">
+        <div class="lbl"><i>1</i>JSON en claro</div>
+        <pre>{"msisdn": "5512345678", "otpAuth": true}</pre>
+        <p>Datos de negocio</p>
+      </div>
+      <div class="conn"><svg><use href="#i-arrow"/></svg></div>
+      <div class="stage">
+        <div class="lbl"><i>2</i>Cifrar AES → HEX <span class="lock-chip"><svg width="12" height="12"><use href="#i-lock"/></svg>key + IV</span></div>
+        <pre class="hx">1B09B384AB0F6302E4A0E30379F2F9F3 13E67C6199320D304E2442E4FF075EFE</pre>
+        <p>Llave e IV propios de cada API</p>
+      </div>
+      <div class="conn"><svg><use href="#i-arrow"/></svg></div>
+      <div class="stage">
+        <div class="lbl"><i>3</i>Body enviado</div>
+        <pre>{
+  <span class="ky">"createProcessRequest"</span>:
+    <span class="hx">"1B09B3…075EFE"</span>
+}</pre>
+        <p>Campo <code>&lt;api&gt;Request</code></p>
+      </div>
+    </div>
+    <div class="httpcard">
+      <span class="m">POST</span> {TELCEL_xxx_ENDPOINT}<br>
+      <span class="hn">Content-Type:</span> application/json<br>
+      <span class="hn">x-api-key:</span> {TELCEL_xxx_API_KEY}<br>
+      <span class="hn">X-amzn-waf-headertkn:</span> {token AES generado en cada llamada}<br>
+      <span class="cm"># Respuesta → { "detailResponse": {"code": "0"}, "&lt;api&gt;Response": "&lt;HEX&gt;" } → se descifra</span>
+    </div>
+  </div>
+  <div class="num">04</div>
+</section>
+
+<!-- ============ 5. BODY POR API ============ -->
+<section class="slide" id="s5">
+  <div class="inner">
+    <p class="kicker">Body por API</p>
+    <h2>Qué viaja en cada llamada</h2>
+    <p class="lead">El contenido en claro antes de cifrar y lo que regresa Telcel ya descifrado. Valores de ejemplo.</p>
+    <div class="apis">
+      <div class="api" style="--c:var(--a1);--cs:var(--a1-soft)">
+        <h3>① createProcess</h3>
+        <div class="stage" style="box-shadow:none"><div class="lbl">Envía · createProcessRequest</div><pre>{"msisdn": "5512345678", "otpAuth": true}</pre></div>
+        <div class="stage" style="box-shadow:none"><div class="lbl">Recibe · createProcessResponse</div><pre>{"processId": "PRC-0001234567"}</pre></div>
+        <span class="badge b-ok">Cifrado real activo</span>
+      </div>
+      <div class="api" style="--c:var(--a2);--cs:var(--a2-soft)">
+        <h3>② CommunicationMessage</h3>
+        <div class="stage" style="box-shadow:none"><div class="lbl">Envía · communicationMessageRequest</div><pre>{"content": true, "messageType": "SEND_OTP", "processId": "PRC-0001234567"}</pre></div>
+        <div class="stage" style="box-shadow:none"><div class="lbl">Recibe</div><pre>SMS con OTP al cliente
+{"status": "SENT"}</pre></div>
+        <span class="badge b-ok">Cifrado real activo</span>
+      </div>
+      <div class="api" style="--c:var(--a3);--cs:var(--a3-soft)">
+        <h3>③ CreateProductOrder</h3>
+        <div class="stage" style="box-shadow:none"><div class="lbl">Envía · createProductOrderRequest</div><pre>{"id": "700116629", "otpAuth": "002856",
+ "processId": "PRC-0001234567"}</pre></div>
+        <div class="stage" style="box-shadow:none"><div class="lbl">Recibe · createProductOrderResponse</div><pre>{"orderId": "ORD-98765432"}</pre></div>
+        <span class="badge b-ok">Cifrado real activo</span>
+      </div>
+    </div>
+    <div class="alert"><svg><use href="#i-warn"/></svg><div><b>El OTP no viaja en ningún body.</b> Telcel lo valida internamente al llamar CreateProductOrder. Si el código es incorrecto, responde con el error <code>BE_MP_BPS_0040</code>.</div></div>
+  </div>
+  <div class="num">05</div>
+</section>
+
+<!-- ============ 6. CIFRADO ============ -->
+<section class="slide" id="s6">
+  <div class="inner">
+    <p class="kicker">Cómo se cifra</p>
+    <h2>AES-256-CBC, de JSON a HEX</h2>
+    <p class="lead">El mismo algoritmo para requests, respuestas y token, con llave e IV propios de cada API.</p>
+    <div class="specs">
+      <div class="spec"><div class="k">Algoritmo</div><div class="v">AES-256</div><div class="d">Modo CBC</div></div>
+      <div class="spec"><div class="k">Padding</div><div class="v">PKCS7</div><div class="d">= PKCS5Padding en Java</div></div>
+      <div class="spec"><div class="k">Llave / IV</div><div class="v">32 / 16</div><div class="d">caracteres UTF-8 literales, sin base64</div></div>
+      <div class="spec"><div class="k">Salida</div><div class="v">HEX</div><div class="d">en MAYÚSCULAS</div></div>
+    </div>
+    <div class="chain" style="--c:var(--lock)">
+      <div class="stage">
+        <div class="lbl"><i>1</i>Texto</div>
+        <pre>{"msisdn": "5512345678", "otpAuth": true}</pre>
+        <p>26 bytes</p>
+      </div>
+      <div class="conn"><svg><use href="#i-arrow"/></svg></div>
+      <div class="stage">
+        <div class="lbl"><i>2</i>Padding a 32 bytes</div>
+        <div class="bytes">
+          <span>7B</span><span>22</span><span>6D</span><span>73</span><span>69</span><span>73</span><span>64</span><span>6E</span><span>22</span><span>3A</span><span>20</span><span>22</span><span>35</span><span>32</span><span>35</span><span>35</span><span>31</span><span>32</span><span>33</span><span>34</span><span>35</span><span>36</span><span>37</span><span>38</span><span>22</span><span>7D</span><span class="pd">06</span><span class="pd">06</span><span class="pd">06</span><span class="pd">06</span><span class="pd">06</span><span class="pd">06</span>
+        </div>
+        <p>Faltan 6 bytes, así que se agregan seis <code>06</code></p>
+      </div>
+      <div class="conn"><svg><use href="#i-arrow"/></svg></div>
+      <div class="stage">
+        <div class="lbl"><i>3</i>AES-256-CBC</div>
+        <div class="keybox">
+          <div><b><svg width="12" height="12"><use href="#i-key"/></svg> ENC_KEY</b><span class="mono">0123456789ABCDEF0123456789ABCDEF</span></div>
+          <div><b>ENC_IV</b><span class="mono">ABCDEF0123456789</span></div>
+        </div>
+      </div>
+      <div class="conn"><svg><use href="#i-arrow"/></svg></div>
+      <div class="stage">
+        <div class="lbl"><i>4</i>HEX final</div>
+        <pre class="hx">1B09B384AB0F6302E4A0E30379F2F9F313E67C6199320D304E2442E4FF075EFE</pre>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="stage">
+        <div class="lbl">Python · crypto.py</div>
+<pre><span class="ky">cipher</span> = AES.new(key.encode(), AES.MODE_CBC, iv.encode())
+<span class="ky">hex</span> = cipher.encrypt(pad(text.encode(), 16)).hex().upper()</pre>
+      </div>
+      <div class="stage">
+        <div class="lbl">Java · referencia Telcel</div>
+<pre>Cipher.getInstance(<span class="hx">"AES/CBC/PKCS5Padding"</span>)
+  .init(ENCRYPT_MODE, new SecretKeySpec(key,"AES"), new IvParameterSpec(iv))</pre>
+      </div>
+    </div>
+    <p style="color:var(--muted);font-size:.82rem;margin-top:12px">La llave y el IV mostrados son ficticios, solo para el ejemplo. Los reales están en <code>TELCEL_xxx_ENC_KEY</code> / <code>TELCEL_xxx_ENC_IV</code>.</p>
+  </div>
+  <div class="num">06</div>
+</section>
+
+<!-- ============ 7. TOKEN ============ -->
+<section class="slide" id="s7">
+  <div class="inner">
+    <p class="kicker">Cómo se saca el token</p>
+    <h2>Sin OAuth: el token se genera en cada llamada</h2>
+    <p class="lead">Se cifra <code>usuario@fecha-hora</code> con la misma AES de la API y se manda en el header <code>X-amzn-waf-headertkn</code>.</p>
+    <div class="tok" style="--c:var(--a1)">
+      <div class="stage"><div class="lbl" style="justify-content:center">Usuario</div><div class="big">usuario_qa</div><p>TELCEL_xxx_USER</p></div>
+      <div class="plus">@</div>
+      <div class="stage"><div class="lbl" style="justify-content:center">Fecha UTC</div><div class="big">20261026153000</div><p>yyyyMMddHHmmss</p></div>
+      <div class="conn" style="--c:var(--muted)"><svg><use href="#i-arrow"/></svg></div>
+      <div class="stage" style="border-color:var(--lock)"><div class="lbl" style="justify-content:center"><span class="lock-chip"><svg width="12" height="12"><use href="#i-lock"/></svg>AES-256-CBC</span></div><div class="big" style="font-size:.85rem">usuario_qa@20261026153000</div><p>key + IV de la API</p></div>
+      <div class="conn" style="--c:var(--muted)"><svg><use href="#i-arrow"/></svg></div>
+      <div class="stage" style="border-color:var(--a1)"><div class="lbl" style="justify-content:center">Token</div><div class="big hx" style="font-size:.78rem;color:var(--lock)">BB787458C61873406C8D54DA17863091B2977BF6C2CE0A8DF3F2557CA11EE071</div></div>
+    </div>
+    <div class="facts">
+      <div class="fact"><svg><use href="#i-clock"/></svg><div><b>Nuevo en cada request</b><span>No se guarda ni se reutiliza. La vigencia del timestamp la valida Telcel.</span></div></div>
+      <div class="fact"><svg><use href="#i-key"/></svg><div><b>Va con la API key</b><span><code>x-api-key</code> es fija y el token cambia en cada llamada.</span></div></div>
+      <div class="fact"><svg style="color:var(--err)"><use href="#i-no"/></svg><div><b>Token viejo = 403</b><span>El WAF de AWS lo rechaza. El reloj del servidor debe estar en UTC correcto.</span></div></div>
+    </div>
+    <div class="httpcard">
+      <span class="cm"># crypto.py · build_header_token()</span><br>
+      timestamp = datetime.now(timezone.utc).strftime(<span class="hx">"%Y%m%d%H%M%S"</span>)<br>
+      token&nbsp;&nbsp;&nbsp;&nbsp; = encrypt_aes256cbc(<span class="hx">f"{usuario}@{timestamp}"</span>, key, iv)
+    </div>
+  </div>
+  <div class="num">07</div>
+</section>
+
+<!-- ============ 8. ESTADO ============ -->
+<section class="slide" id="s8">
+  <div class="inner">
+    <p class="kicker">Estado actual</p>
+    <h2>Qué está listo y qué falta</h2>
+    <p class="lead">Las tres APIs pueden simularse con <code>TELCEL_xxx_MOCK=true</code> mientras Telcel confirma los datos pendientes.</p>
+    <div class="status">
+      <div class="st" style="--c:var(--a1)">
+        <h3>① createProcess</h3>
+        <ul>
+          <li><span class="light g"></span>Payload cifrado real</li>
+          <li><span class="light g"></span>Headers con token</li>
+          <li><span class="light y"></span>Sin especificación formal de la respuesta</li>
+        </ul>
+      </div>
+      <div class="st" style="--c:var(--a2)">
+        <h3>② CommunicationMessage</h3>
+        <ul>
+          <li><span class="light g"></span>Cifrado validado en QA</li>
+          <li><span class="light r"></span>Hoy se envían body y headers vacíos</li>
+          <li><span class="light y"></span>El WAF responde a veces 200 y a veces 403</li>
+        </ul>
+      </div>
+      <div class="st" style="--c:var(--a3)">
+        <h3>③ CreateProductOrder</h3>
+        <ul>
+          <li><span class="light g"></span>Headers con token, validados en QA</li>
+          <li><span class="light r"></span>Hoy se envía el body vacío</li>
+          <li><span class="light r"></span>IDs de plan pendientes (MOCK-*)</li>
+        </ul>
+      </div>
+    </div>
+    <p class="kicker" style="margin-top:26px">Variables por API (<code>TELCEL_CREATE_PROCESS_*</code> · <code>TELCEL_COMM_MSG_*</code> · <code>TELCEL_CREATE_PRODUCT_ORDER_*</code>)</p>
+    <div class="env">
+      <div>_ENDPOINT<small>URL</small></div>
+      <div>_API_KEY<small>header x-api-key</small></div>
+      <div>_ENC_KEY<small>llave 32</small></div>
+      <div>_ENC_IV<small>IV 16</small></div>
+      <div>_USER<small>para el token</small></div>
+    </div>
+  </div>
+  <div class="num">08</div>
+</section>
+
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var dots = document.getElementById('dots');
+  slides.forEach(function (s, i) {
+    var a = document.createElement('a');
+    a.href = '#' + s.id; a.setAttribute('aria-label', 'Diapositiva ' + (i + 1));
+    dots.appendChild(a);
+  });
+  var links = dots.querySelectorAll('a');
+  var current = 0;
+  function mark(i) {
+    current = i;
+    links.forEach(function (l, j) { l.classList.toggle('on', j === i); });
+    document.getElementById('progress').style.width = ((i + 1) / slides.length * 100) + '%';
+  }
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) mark(slides.indexOf(e.target)); });
+    }, { threshold: 0.55 });
+    slides.forEach(function (s) { io.observe(s); });
+  }
+  mark(0);
+  document.addEventListener('keydown', function (e) {
+    var n = null;
+    if (['ArrowDown', 'ArrowRight', 'PageDown', ' '].indexOf(e.key) >= 0) n = Math.min(current + 1, slides.length - 1);
+    if (['ArrowUp', 'ArrowLeft', 'PageUp'].indexOf(e.key) >= 0) n = Math.max(current - 1, 0);
+    if (e.key === 'Home') n = 0;
+    if (e.key === 'End') n = slides.length - 1;
+    if (n !== null) { e.preventDefault(); slides[n].scrollIntoView({ behavior: 'smooth' }); }
+  });
+
+  var root = document.documentElement;
+  try { var t = localStorage.getItem('telcel-doc-theme'); if (t) root.dataset.theme = t; } catch (e) {}
+  document.getElementById('theme').addEventListener('click', function () {
+    var dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('telcel-doc-theme', root.dataset.theme); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

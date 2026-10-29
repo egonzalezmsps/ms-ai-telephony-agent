@@ -64,10 +64,10 @@ def _turno(session: SessionState, history: list, mensaje: str):
 
 
 def _aceptar_y_completar(session: SessionState, history: list):
-    """Envía ACEPTO y, si el flujo pide OTP, responde T12345. Retorna history actualizado."""
+    """Envía ACEPTO y, si el flujo pide OTP, responde 123456. Retorna history actualizado."""
     _, history = _turno(session, history, "ACEPTO")
     if session.awaiting_otp:
-        _, history = _turno(session, history, "T12345")
+        _, history = _turno(session, history, "123456")
     return history
 
 
@@ -191,9 +191,9 @@ def escenario_8():
 # ── Escenarios 9-10: OTP determinista (sin LLM) ─────────────────────────────
 
 def _falla_otp_simulada():
-    """TelcelAPIError con el código de negocio que _is_otp_invalid() reconoce como OTP incorrecto."""
+    """TelcelApiError con el código de negocio que TelcelApiError.is_invalid_otp reconoce como OTP incorrecto."""
     import app.contract.contract_flow as contract_flow
-    return contract_flow.TelcelAPIError(
+    return contract_flow.TelcelApiError(
         400, {"detailResponse": {"code": "BE_MP_BPS_0040"}}, "OTP inválido (simulado)"
     )
 
@@ -203,7 +203,7 @@ def escenario_9():
     print("Escenario 9 — OTP fallido 2 veces, luego correcto")
     print("=" * 70)
     print("(TELCEL_CREATE_PRODUCT_ORDER_MOCK=true siempre simula éxito, así que")
-    print(" se monkeypatchea call_create_product_order para forzar 2 fallas primero)")
+    print(" se monkeypatchea create_product_order para forzar 2 fallas primero)")
     session = _nuevo_perfil(
         "Irene", "Telcel Max Sin Limite 3000", 449.0,
         stage="CONTRACT", awaiting_otp=True, otp_sent=True,
@@ -212,22 +212,22 @@ def escenario_9():
     history = [{"role": "assistant", "content": "Le hemos enviado un código de verificación."}]
 
     import app.contract.contract_flow as contract_flow
-    original = contract_flow.call_create_product_order
+    original = contract_flow.create_product_order
     intentos = {"n": 0}
 
-    def fake(id_plan, process_id):
+    def fake(id_plan, process_id, otp_code=None):
         intentos["n"] += 1
         if intentos["n"] <= 2:
             raise _falla_otp_simulada()
-        return original(id_plan, process_id)
+        return original(id_plan, process_id, otp_code)
 
-    contract_flow.call_create_product_order = fake
+    contract_flow.create_product_order = fake
     try:
         _, history = _turno(session, history, "111111")
         _, history = _turno(session, history, "222222")
-        _, history = _turno(session, history, "T12345")
+        _, history = _turno(session, history, "123456")
     finally:
-        contract_flow.call_create_product_order = original
+        contract_flow.create_product_order = original
 
     exito = bool(session.contract_folio) and session.stage == "END" and session.otp_attempt_count == 2
     return exito, f"folio={session.contract_folio} stage={session.stage} intentos={session.otp_attempt_count}"
@@ -245,18 +245,18 @@ def escenario_10():
     history = [{"role": "assistant", "content": "Le hemos enviado un código de verificación."}]
 
     import app.contract.contract_flow as contract_flow
-    original = contract_flow.call_create_product_order
+    original = contract_flow.create_product_order
 
-    def fake(id_plan, process_id):
+    def fake(id_plan, process_id, otp_code=None):
         raise _falla_otp_simulada()
 
-    contract_flow.call_create_product_order = fake
+    contract_flow.create_product_order = fake
     try:
         _, history = _turno(session, history, "111111")
         _, history = _turno(session, history, "222222")
         respuesta, history = _turno(session, history, "333333")
     finally:
-        contract_flow.call_create_product_order = original
+        contract_flow.create_product_order = original
 
     exito = (
         session.authentication_locked is True

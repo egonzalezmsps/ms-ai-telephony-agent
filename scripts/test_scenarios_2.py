@@ -150,16 +150,16 @@ def escenario_9():
     _, history = _turno(session, history, "sí, actívalo")
 
     import app.contract.contract_flow as contract_flow
-    original = contract_flow.call_create_process
+    original = contract_flow.create_process
 
-    def fake(msisdn):
+    def fake(msisdn, otp_auth):
         raise Exception("Timeout simulado de la API Telcel")
 
-    contract_flow.call_create_process = fake
+    contract_flow.create_process = fake
     try:
         respuesta, history = _turno(session, history, "ACEPTO")
     finally:
-        contract_flow.call_create_process = original
+        contract_flow.create_process = original
 
     exito = (
         session.stage == "END"
@@ -192,7 +192,7 @@ def escenario_10():
     pidio_otp = session_b.awaiting_otp is True and session_b.contract_folio is None
     con_otp_ok = pidio_otp
     if pidio_otp:
-        _, history_b = _turno(session_b, history_b, "T12345")
+        _, history_b = _turno(session_b, history_b, "123456")
         con_otp_ok = bool(session_b.contract_folio) and session_b.stage == "END"
 
     exito = sin_otp_ok and con_otp_ok

@@ -160,16 +160,16 @@ def escenario_10():
     _, history = _turno(session, history, "sí, actívalo")
 
     import app.contract.contract_flow as contract_flow
-    original = contract_flow.call_communication_message
+    original = contract_flow.send_otp
 
     def fake(process_id):
         raise Exception("Timeout simulado al enviar el OTP")
 
-    contract_flow.call_communication_message = fake
+    contract_flow.send_otp = fake
     try:
         respuesta, history = _turno(session, history, "ACEPTO")
     finally:
-        contract_flow.call_communication_message = original
+        contract_flow.send_otp = original
 
     exito = (
         session.stage == "END"

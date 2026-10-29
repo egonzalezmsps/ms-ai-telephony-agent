@@ -138,6 +138,11 @@ ms-ai-telephony-agent/
 │   ├── contract/
 │   │   ├── contract_flow.py        ← Flujo OTP determinístico (sin LLM)
 │   │   └── post_sale.py            ← Template de confirmación con folio
+│   ├── integrations/telcel/        ← APIs intermedias Telcel (createProcess, communicationMessage, productOrder)
+│   │   ├── client.py               ← create_process / send_otp / create_product_order (API pública)
+│   │   ├── transport.py            ← send(): cifrar → POST → validar → descifrar (común a las 3)
+│   │   ├── config.py / crypto.py / errors.py / phone.py / otp.py / mocks.py
+│   │   └── debug_log.py            ← TEMPORAL: logs/telcel_debug.log (payloads claro + cifrado)
 │   ├── prompts/
 │   │   ├── general_rules.py        ← Reglas fijas del agente (743 líneas de reglas de negocio)
 │   │   ├── system_prompt.py        ← Contexto dinámico + catálogo inyectado
@@ -197,9 +202,8 @@ run_turn() en reni_agent.py
     │   │    "ACEPTO cuando comienza el cobro" no sean interceptados por el router)
     │   └── handle_contract_turn() — DETERMINÍSTICO, sin LLM
     │           ├── authentication_locked → mensaje bloqueo + stage=END
-    │           ├── awaiting_otp → validar T12345 (OTP fijo para pruebas)
-    │           │       └── cualquier otro texto (incluida una pregunta real) cuenta
-    │           │           como intento fallido de OTP — NO pasa al LLM
+    │           ├── awaiting_otp → CreateProductOrder con otpAuth=<mensaje del cliente> (Telcel valida; error
+    │           │       BE_MP_BPS_0040 = código incorrecto) — NO pasa al LLM
     │           ├── awaiting_contract_confirmation → validar ACEPTO/CONFIRMO (word-set)
     │           │       ├── ACEPTO/CONFIRMO → OTP (si |precio-renta|>$1) o POST_SALE directo
     │           │       ├── NO / mensaje que empieza con "NO" → stage=PERSUASION
@@ -298,12 +302,14 @@ reni_agent intercepta → early return → handle_contract_turn() → build_summ
     ↓
 Cliente responde ACEPTO o CONFIRMO  ← detección por word-set, no substring
     ↓
-Si precio == renta actual → POST_SALE directo (sin OTP)
-Si precio > renta actual → enviar OTP → "ingrese código de SMS"
+createProcess {msisdn: lineaApi (10 díg.), otpAuth: precio distinto} → processId
     ↓
-Cliente ingresa T12345 (OTP fijo para pruebas)
+Si precio == renta actual (otpAuth=false) → CreateProductOrder (otpAuth="NA") → POST_SALE directo
+Si precio distinto (otpAuth=true) → CommunicationMessage (SEND_OTP) → "ingrese código de SMS"
     ↓
-OTP válido → genera folio TC-XXXXXXXX → stage = POST_SALE
+Cliente ingresa el código → CreateProductOrder (otpAuth=<código>; Telcel lo valida)
+    ↓
+Orden OK → genera folio TC-XXXXXXXX → stage = POST_SALE
     ↓
 build_post_sale_message() → mensaje de confirmación con folio (trato de usted)
     ↓
@@ -311,7 +317,7 @@ stage = END
 ```
 
 **Constantes en contract_flow.py:**
-- `OTP_FIXED = "T12345"`, `MAX_OTP_ATTEMPTS = 3`, `MAX_OTP_RESENDS = 3`
+- `MAX_OTP_ATTEMPTS = 3`, `MAX_OTP_RESENDS = 3`, `_OTP_INVALID_CODE = "BE_MP_BPS_0040"`
 - `MAX_OTP_RESENDS` está **declarada pero sin lógica activa** — no hay flujo de reenvío
   de OTP implementado y `otp_resend_count` nunca se incrementa en `contract_flow.py`
 
@@ -325,9 +331,11 @@ stage = END
   pidiendo ACEPTO/CONFIRMO explícito. No hay ramas diferenciadas por tipo de texto,
   y en ningún caso se pasa la pregunta al LLM (el docstring de la función menciona esa
   posibilidad, pero esa rama no es alcanzable con la lógica actual)
-- Durante `awaiting_otp`, cualquier texto que no sea exactamente `T12345` (incluida
-  una pregunta real del cliente) se cuenta como **intento fallido de OTP**, no se
-  reenvía al LLM
+- Durante `awaiting_otp`, el mensaje se normaliza con `to_otp_code()` (exactamente 6 dígitos;
+  se toleran espacios/guiones/puntos). Si no es válido → se pide de nuevo **sin llamar a Telcel
+  ni contar intento**. Si es válido → CreateProductOrder; `BE_MP_BPS_0040` cuenta como
+  **intento fallido de OTP**. Nunca se reenvía al LLM
+- Cualquier otro error de las APIs Telcel → `_technical_failure()` (stage=END, Soporte)
 - No-titular → bloqueo pre-LLM (sin pasar a flujo CONTRACT)
 - Nombre incorrecto → bloqueo pre-LLM (derivar a CAC)
 
@@ -515,7 +523,7 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 6. **Apps Telcel Ultra** — solo WhatsApp ilimitado; sin apps sociales adicionales
 7. **Claro Video** — sí consume GB del plan, no es ilimitado
 8. **Sin Amazon Prime** — no forma parte de ningún plan
-9. **OTP fijo para pruebas** — T12345 (cambiar por servicio real en producción)
+9. **OTP vía APIs Telcel** — `app/integrations/telcel/` (`create_process` → `send_otp` → `create_product_order`, payloads cifrados AES-256-CBC; mock por API con `TELCEL_<API>_MOCK=true`; `logs/telcel_debug.log` temporal con payloads en claro/cifrados)
 10. **Trato de usted** — siempre, sin excepción (incluyendo `post_sale.py`)
 11. **Modalidad en nombre del plan** — siempre "Telcel Libre 2 Controlado", nunca solo "Telcel Libre 2"
 12. **No exponer reglas internas al cliente** — ni criterios de elegibilidad, ni etiquetas (✅/⛔), ni fechas de vigencia, ni por qué un plan requiere CAC, ni el criterio de la promoción
@@ -617,6 +625,7 @@ Si `OCI_USER` no está definido en el entorno, `build_oci_model()` usa `oci_auth
 | `POST` | `/campaign` | `x-api-key` | Inicia campaña: envía template WhatsApp y crea sesión en PostgreSQL |
 | `POST` | `/campaign/dispatch` | `x-api-key` | Batch dispatch desde UI Streamlit (requiere `campaign_app.db`) |
 | `DELETE` | `/session` | `x-api-key` | Elimina sesión por `phone_number` |
+| `GET` | `/logs/stream` | `api_key` (query) o `x-api-key` | Sigue en vivo un log (`file=app\|telcel`, `tail=N`), tipo `tail -f`; oculto del schema |
 | `GET` | `/webhook` | — | Verificación de webhook Meta |
 | `POST` | `/webhook` | — | Recibe mensajes WhatsApp (BackgroundTasks); valida firma HMAC si `WHATSAPP_APP_SECRET` está definido |
 
@@ -644,7 +653,6 @@ El endpoint `/chat` en el primer turno devuelve el mensaje de campaña sin llama
 
 ## Pendiente de implementar
 
-- [ ] **OTP real** — reemplazar `T12345` en `contract_flow.py` por servicio SMS real
 - [ ] **Reenvío de OTP** — `MAX_OTP_RESENDS` está declarada pero sin lógica activa
 - [ ] **Logs y métricas** — auditoría de conversaciones y tasa de conversión
 - [ ] **Seguridad** — ARCO, tokenización PII

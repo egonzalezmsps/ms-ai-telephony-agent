@@ -9,12 +9,14 @@ import logging
 import uuid
 from typing import Optional
 
-from app.catalog.plans import find_plan, get_price, get_cashback, PRICE_EPSILON_MXN
-from app.integrations.telcel_apis.client import (
-    TelcelAPIError,
-    call_communication_message,
-    call_create_process,
-    call_create_product_order,
+from app.catalog.plans import find_plan, get_price, get_cashback, get_product_id, PRICE_EPSILON_MXN
+from app.integrations.telcel import (
+    OTP_LENGTH,
+    TelcelApiError,
+    create_process,
+    create_product_order,
+    send_otp,
+    to_otp_code,
 )
 
 logger = logging.getLogger(__name__)
@@ -23,9 +25,6 @@ MAX_OTP_ATTEMPTS = 3
 MAX_OTP_RESENDS = 3
 
 _SOPORTE_TEL = "800 220 9518"
-_OTP_INVALID_CODE = "BE_MP_BPS_0040"
-
-
 
 _APPS_LIBRES = "Facebook, Instagram, WhatsApp, X, Snapchat, Uber"
 
@@ -57,15 +56,6 @@ def _run_telcel_call(session, api_name: str, fn, *args):
             api_name, session.phone_number, exc, exc_info=True,
         )
         return False, None
-
-
-def _is_otp_invalid(exc: TelcelAPIError) -> bool:
-    body = exc.raw_body if isinstance(exc.raw_body, dict) else {}
-    detail = body.get("detailResponse") or {}
-    if str(detail.get("code")) == _OTP_INVALID_CODE:
-        return True
-    meaning = f"{detail.get('businessMeaning', '')} {detail.get('description', '')}".upper()
-    return "OTP" in meaning
 
 
 def build_summary_template(session) -> str:
@@ -142,22 +132,31 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
         session.end_reason = "blocked"
         return None
 
-    # 2. Esperando OTP — CreateProductOrder valida el código implícitamente
-    # del lado de Telcel (ningún request de las 3 APIs tiene un campo de OTP;
-    # el error de negocio BE_MP_BPS_0040 es la señal de "código incorrecto").
+    # 2. Esperando OTP — el mensaje del cliente es el código; se manda en
+    # CreateProductOrder (otpAuth) junto con el processId de createProcess y
+    # Telcel lo valida (el error de negocio BE_MP_BPS_0040 = "código incorrecto").
     if session.awaiting_otp:
         plan = find_plan(session.plan_selected)
-        if not plan or not plan.telcel_product_id:
+        product_id = get_product_id(plan, session.subscription_type) if plan else None
+        if not product_id:
             logger.error(
                 "[TELCEL_PRODUCT_ID_MISSING] plan=%s phone=%s",
                 session.plan_selected, session.phone_number,
             )
             return _technical_failure(session)
 
+        # Si no es un código de 6 dígitos no se llama a Telcel ni cuenta como intento.
+        otp_code = to_otp_code(user_message)
+        if not otp_code:
+            return (
+                f"El código debe ser de {OTP_LENGTH} dígitos. "
+                f"Por favor, ingrese el código que recibió por SMS."
+            )
+
         try:
-            call_create_product_order(plan.telcel_product_id, session.process_id_api)
-        except TelcelAPIError as exc:
-            if _is_otp_invalid(exc):
+            create_product_order(product_id, session.process_id_api, otp_code)
+        except TelcelApiError as exc:
+            if exc.is_invalid_otp:
                 session.otp_attempt_count += 1
                 if session.otp_attempt_count >= MAX_OTP_ATTEMPTS:
                     session.authentication_locked = True
@@ -215,26 +214,20 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
 
             session.awaiting_contract_confirmation = False
 
-            if not plan or not plan.telcel_product_id:
+            product_id = get_product_id(plan, session.subscription_type) if plan else None
+            if not product_id:
                 logger.error(
                     "[TELCEL_PRODUCT_ID_MISSING] plan=%s phone=%s",
                     session.plan_selected, session.phone_number,
                 )
                 return _technical_failure(session)
 
-            ok, process_result = _run_telcel_call(
-                session, "create_process", call_create_process,
+            ok, process_id = _run_telcel_call(
+                session, "create_process", create_process,
                 session.api_phone_number or session.phone_number,
+                not is_same_price,  # otpAuth: solo se pide OTP cuando cambia el precio
             )
             if not ok:
-                return _technical_failure(session)
-
-            process_id = (process_result.get("decrypted") or {}).get("processId")
-            if not process_id:
-                logger.error(
-                    "[TELCEL_API_ERROR] create_process sin processId phone=%s raw=%s",
-                    session.phone_number, process_result.get("raw"),
-                )
                 return _technical_failure(session)
 
             session.process_id_api = process_id
@@ -242,7 +235,7 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             if is_same_price:
                 ok, _ = _run_telcel_call(
                     session, "create_product_order",
-                    call_create_product_order, plan.telcel_product_id, process_id,
+                    create_product_order, product_id, process_id,
                 )
                 if not ok:
                     return _technical_failure(session)
@@ -253,7 +246,7 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 return None  # → generar post-venta directo sin OTP
             else:
                 ok, _ = _run_telcel_call(
-                    session, "communication_message", call_communication_message, process_id,
+                    session, "send_otp", send_otp, process_id,
                 )
                 if not ok:
                     return _technical_failure(session)
