@@ -58,3 +58,8 @@ def log_exchange(
         http_status, _pretty(response_body),
         _pretty(response_payload),
     )
+
+
+def log_plan_change(context: dict) -> None:
+    """Datos del cambio de plan (modalidad, código de producto, precios) antes de llamar a Telcel."""
+    _logger.info("\n========== PLAN_CHANGE ==========\n%s\n", _pretty(context))

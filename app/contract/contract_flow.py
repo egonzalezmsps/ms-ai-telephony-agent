@@ -18,6 +18,7 @@ from app.integrations.telcel import (
     send_otp,
     to_otp_code,
 )
+from app.integrations.telcel.debug_log import log_plan_change
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,25 @@ def _run_telcel_call(session, api_name: str, fn, *args):
             api_name, session.phone_number, exc, exc_info=True,
         )
         return False, None
+
+
+def _log_plan_change(session, plan, product_id: Optional[str], otp_required: bool) -> None:
+    """Loggea modalidad y código de producto que se mandarán a Telcel (app.log + telcel_debug.log)."""
+    modality = session.subscription_type
+    context = {
+        "phone_whatsapp": session.phone_number,
+        "msisdn_api": session.api_phone_number or session.phone_number,
+        "tipo_suscripcion": modality,
+        "product_id_tipo": "controlado" if modality == "Controlado" else "abierto",
+        "plan_actual": session.current_plan_name,
+        "renta_actual": session.current_cost,
+        "plan_nuevo": f"{plan.plan_id} {modality}" if plan else session.plan_selected,
+        "precio_nuevo": get_price(plan, modality) if plan else None,
+        "product_id": product_id,
+        "otpAuth": otp_required,
+    }
+    logger.info("[TELCEL_PLAN_CHANGE] %s", context)
+    log_plan_change(context)
 
 
 def build_summary_template(session) -> str:
@@ -215,6 +235,7 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             session.awaiting_contract_confirmation = False
 
             product_id = get_product_id(plan, session.subscription_type) if plan else None
+            _log_plan_change(session, plan, product_id, not is_same_price)
             if not product_id:
                 logger.error(
                     "[TELCEL_PRODUCT_ID_MISSING] plan=%s phone=%s",

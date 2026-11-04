@@ -221,3 +221,65 @@ def format_plan_for_agent(plan: Plan, modality: str, has_promo: bool = True) -> 
         lines.append(f"\n🎁 Promoción vigente hasta el {PROMO_VIGENCIA} · GB extra durante {PROMO_TERM_MONTHS} meses")
 
     return "\n".join(lines)
+
+
+# ── Tabla de productos Telcel (código de oferta, nombre, precio) ─────────────
+# Copia literal de la tabla entregada por Telcel. Independiente de CATALOG.
+# Nota: 700090698 aparece en ULTRA CONTROLADO 4 y en ULTRA CONTROLADO ILIMITADO.
+
+@dataclass(frozen=True)
+class TelcelProduct:
+    codigo: str
+    nombre: str
+    precio: float
+
+
+TELCEL_PRODUCTS: List[TelcelProduct] = [
+    TelcelProduct("700116628", "TELCEL LIBRE 1",                   249),
+    TelcelProduct("700116599", "TELCEL LIBRE 2",                   319),
+    TelcelProduct("700116629", "TELCEL LIBRE 3",                   399),
+    TelcelProduct("700116641", "TELCEL LIBRE 4",                   499),
+    TelcelProduct("700116630", "TELCEL LIBRE 5",                   599),
+    TelcelProduct("700116631", "TELCEL LIBRE 6",                   699),
+    TelcelProduct("700116642", "TELCEL LIBRE 7",                   799),
+    TelcelProduct("700116643", "TELCEL LIBRE 9",                   999),
+    TelcelProduct("700116577", "TELCEL LIBRE 12",                 1299),
+    TelcelProduct("700116644", "TELCEL LIBRE VIP",                1499),
+    TelcelProduct("700116579", "TELCEL LIBRE CONTROLADO 1",        299),
+    TelcelProduct("700116680", "TELCEL LIBRE CONTROLADO 2",        369),
+    TelcelProduct("700116665", "TELCEL LIBRE CONTROLADO 3",        449),
+    TelcelProduct("700116700", "TELCEL LIBRE CONTROLADO 4",        549),
+    TelcelProduct("700116635", "TELCEL LIBRE CONTROLADO 5",        699),
+    TelcelProduct("700116646", "TELCEL LIBRE CONTROLADO 6",        799),
+    TelcelProduct("700116681", "TELCEL LIBRE CONTROLADO 7",        899),
+    TelcelProduct("700116666", "TELCEL LIBRE CONTROLADO 9",       1099),
+    TelcelProduct("700116647", "TELCEL LIBRE CONTROLADO 12",      1399),
+    TelcelProduct("700116682", "TELCEL LIBRE CONTROLADO VIP",     1599),
+    TelcelProduct("700090802", "TELCEL ULTRA 3",                   349),
+    TelcelProduct("700090677", "TELCEL ULTRA 4",                   449),
+    TelcelProduct("700090678", "TELCEL ULTRA 5",                   549),
+    TelcelProduct("700090679", "TELCEL ULTRA 7",                   749),
+    TelcelProduct("700090680", "TELCEL ULTRA 9",                   999),
+    TelcelProduct("700090697", "TELCEL ULTRA ILIMITADO",          1349),
+    TelcelProduct("700090801", "TELCEL ULTRA CONTROLADO 3",        399),
+    TelcelProduct("700090698", "TELCEL ULTRA CONTROLADO 4",        499),
+    TelcelProduct("700090699", "TELCEL ULTRA CONTROLADO 5",        599),
+    TelcelProduct("700090700", "TELCEL ULTRA CONTROLADO 7",        799),
+    TelcelProduct("700090701", "TELCEL ULTRA CONTROLADO 9",       1049),
+    TelcelProduct("700090698", "TELCEL ULTRA CONTROLADO ILIMITADO", 1399),
+]
+
+
+def get_telcel_product_by_name(nombre: str) -> Optional[TelcelProduct]:
+    """Busca un producto por nombre exacto (sin importar mayúsculas/espacios extra)."""
+    key = " ".join(nombre.upper().split())
+    for p in TELCEL_PRODUCTS:
+        if p.nombre == key:
+            return p
+    return None
+
+
+def get_telcel_products_by_code(codigo: str) -> List[TelcelProduct]:
+    """Productos con ese código de oferta (puede haber más de uno, ver nota de 700090698)."""
+    codigo = codigo.strip()
+    return [p for p in TELCEL_PRODUCTS if p.codigo == codigo]
