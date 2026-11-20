@@ -16,7 +16,11 @@ from app.integrations.telcel.config import (
 
 def mock_response(api: TelcelApi) -> dict:
     if api == CREATE_PROCESS:
-        return {"processId": f"MOCK-{uuid.uuid4().hex[:10].upper()}"}
+        # Misma forma que la respuesta real de Telcel (processId en process.id)
+        return {
+            "subscription": {"msisdn": "0000000000", "subscriberName": "MOCK"},
+            "process": {"id": f"MOCK-{uuid.uuid4().hex[:10].upper()}"},
+        }
     if api == COMMUNICATION_MESSAGE:
         return {"status": "SENT"}
     if api == CREATE_PRODUCT_ORDER:

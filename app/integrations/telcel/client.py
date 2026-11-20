@@ -9,6 +9,7 @@ Operaciones de negocio sobre las APIs intermedias Telcel. Flujo de cambio de pla
 
 Payloads (cifrados por transport.send):
 - createProcess:        {"msisdn": "<10 dígitos>", "otpAuth": <bool>}
+                        → respuesta: {"subscription": {...}, "process": {"id": "<processId>"}}
 - communicationMessage: {"content": true, "messageType": "SEND_OTP", "processId": "..."}
 - createProductOrder:   {"id": "<id Telcel según modalidad>", "processId": "...", "otpAuth": "<6 dígitos> | NA"}
 """
@@ -25,13 +26,27 @@ _MESSAGE_TYPE_SEND_OTP = "SEND_OTP"
 _NO_OTP = "NA"  # valor de otpAuth en createProductOrder cuando no se pidió OTP
 
 
+def _extract_process_id(data: Optional[dict]) -> Optional[str]:
+    """processId de la respuesta descifrada de createProcess.
+
+    Telcel lo regresa anidado: {"subscription": {...}, "process": {"id": "<processId>"}}.
+    Se tolera también "processId" plano por compatibilidad.
+    """
+    if not isinstance(data, dict):
+        return None
+    process = data.get("process")
+    if isinstance(process, dict) and process.get("id"):
+        return str(process["id"])
+    return data.get("processId")
+
+
 def create_process(phone_number: str, otp_required: bool) -> str:
     """Abre el proceso de cambio de plan para la línea y regresa el processId.
 
     otp_required=True cuando el precio del plan nuevo es distinto a la renta actual.
     """
     response = send(CREATE_PROCESS, {"msisdn": to_msisdn(phone_number), "otpAuth": otp_required})
-    process_id = (response.data or {}).get("processId")
+    process_id = _extract_process_id(response.data)
     if not process_id:
         raise TelcelApiError(200, response.raw, "createProcess no regresó processId")
     return process_id
