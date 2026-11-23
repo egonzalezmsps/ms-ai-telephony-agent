@@ -23,7 +23,7 @@ load_dotenv()
 from app.agent.reni_agent import run_turn
 from app.tools.prospect_loader import select_prospect
 from app.prompts.campaign_template import build_campaign_message
-from app.catalog.plans import get_price, get_cashback, find_plan
+from app.catalog.plans import get_price, get_cashback, find_plan, PRICE_EPSILON_MXN
 
 # ── Casos de prueba ───────────────────────────────────────────────────────────
 # expected: valor numérico exacto del catálogo
@@ -35,19 +35,19 @@ TEST_CASES = [
         "question": "cuánto cuesta el Telcel Libre 1 Controlado?",
         "label":    "Telcel Libre 1 Controlado — precio",
         "kind":     "price",
-        "expected": get_price(find_plan("Telcel Libre 1"), "Controlado"),   # 299
+        "expected": get_price(find_plan("Telcel Libre 1"), "Controlado"),   # 315
     },
     {
         "question": "cuánto cuesta el Telcel Libre 2 Controlado?",
         "label":    "Telcel Libre 2 Controlado — precio",
         "kind":     "price",
-        "expected": get_price(find_plan("Telcel Libre 2"), "Controlado"),   # 369
+        "expected": get_price(find_plan("Telcel Libre 2"), "Controlado"),   # 379
     },
     {
         "question": "cuánto cuesta el Telcel Libre 3 Controlado?",
         "label":    "Telcel Libre 3 Controlado — precio",
         "kind":     "price",
-        "expected": get_price(find_plan("Telcel Libre 3"), "Controlado"),   # 449
+        "expected": get_price(find_plan("Telcel Libre 3"), "Controlado"),   # 479
     },
     {
         "question": "cuánto cuesta el Telcel Ultra 3 Controlado?",
@@ -71,12 +71,12 @@ TEST_CASES = [
         "question": "cuántos GB tiene el Telcel Libre 5 Controlado?",
         "label":    "Telcel Libre 5 Controlado — GB (con promo)",
         "kind":     "gb",
-        "expected": 30.0,  # GB promo (Carlos tiene promo activa y precio 699 > 230)
+        "expected": 30.0,  # GB promo (Carlos tiene promo activa y precio 729 > 230)
         "accepted": [20.0], # GB base también aceptable si el modelo no aplica promo
     },
 ]
 
-TOLERANCE = 1.0  # diferencia máxima aceptable para precios enteros
+TOLERANCE = PRICE_EPSILON_MXN  # misma tolerancia que el catálogo (0.005)
 
 
 # ── Extracción de números de la respuesta ─────────────────────────────────────

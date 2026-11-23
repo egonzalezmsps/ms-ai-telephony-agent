@@ -38,7 +38,7 @@ setup_logging()
 from app.router.semantic_router import load_reference_embeddings
 load_reference_embeddings()
 
-from app.catalog.plans import CATALOG, find_plan, get_price
+from app.catalog.plans import CATALOG, PRICE_EPSILON_MXN, find_plan, get_price
 from app.agent.reni_agent import _check_invented_plans
 from app.state.session import SessionState
 from scripts.test_scenarios import _nuevo_perfil, _iniciar_historial, _turno
@@ -54,7 +54,7 @@ def auditar_respuesta(texto: str):
     """Revisa un texto de respuesta del bot buscando:
     1. Menciones de "Telcel Libre/Ultra N" que no existen en el catálogo.
     2. Precios ($NNN) en la misma línea que un plan real, que no coinciden
-       con NINGUNA de sus dos modalidades (tolerancia $1).
+       con NINGUNA de sus dos modalidades (tolerancia PRICE_EPSILON_MXN).
     Retorna (ok: bool, hallazgos: list[str])."""
     hallazgos = []
     menciones = _PLAN_MENTION_RE.findall(texto)
@@ -71,7 +71,7 @@ def auditar_respuesta(texto: str):
                 continue
             for precio_str in _PRICE_RE.findall(linea):
                 precio = float(precio_str.replace(",", ""))
-                if abs(precio - precio_abierto) > 1.0 and abs(precio - precio_controlado) > 1.0:
+                if abs(precio - precio_abierto) > PRICE_EPSILON_MXN and abs(precio - precio_controlado) > PRICE_EPSILON_MXN:
                     hallazgos.append(
                         f"PRECIO INCORRECTO: '{mencion}' junto a ${precio_str} "
                         f"(catálogo real: Abierto=${precio_abierto:.0f}, Controlado=${precio_controlado:.0f})"
@@ -90,7 +90,7 @@ def parte_a_check_invented_plans():
     casos = [
         ("Le recomendamos el *Telcel Libre 20 Abierto* a $850/mes.", True),   # plan inventado
         ("¿Qué le parece el *Telcel Ultra 15 Abierto*?", True),               # plan inventado
-        ("El *Telcel Libre 5 Abierto* cuesta $599/mes con 20 GB.", False),    # plan real, no debe tocarse
+        ("El *Telcel Libre 5 Abierto* cuesta $629/mes con 20 GB.", False),    # plan real, no debe tocarse
         ("Le ofrecemos el *Telcel Libre VIP Abierto* con todos los beneficios.", False),  # plan real (VIP)
     ]
 

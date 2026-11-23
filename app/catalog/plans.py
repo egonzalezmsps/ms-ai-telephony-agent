@@ -33,23 +33,23 @@ class Plan:
 
 CATALOG: List[Plan] = [
     # ── Telcel Libre ─────────────────────────────────────────────────────────
-    Plan("TL1",    "Telcel Libre 1",          "Telcel Libre",   249,  299,  4,   6.0,  12.45,  14.95, True,  False, telcel_product_id_abierto="700116628", telcel_product_id_controlado="700116579"),
-    Plan("TL2",    "Telcel Libre 2",          "Telcel Libre",   319,  369,  5,   7.5,  15.95,  18.45, True,  False, telcel_product_id_abierto="700116599", telcel_product_id_controlado="700116680"),
-    Plan("TL3",    "Telcel Libre 3",          "Telcel Libre",   399,  449,  6,   9.0,  39.90,  44.90, True,  False, telcel_product_id_abierto="700116629", telcel_product_id_controlado="700116665"),
-    Plan("TL4",    "Telcel Libre 4",          "Telcel Libre",   499,  549, 10,  15.0,  74.85,  82.35, True,  False, telcel_product_id_abierto="700116641", telcel_product_id_controlado="700116700"),
-    Plan("TL5",    "Telcel Libre 5",          "Telcel Libre",   599,  699, 20,  30.0,  89.85, 104.85, True,  False, telcel_product_id_abierto="700116630", telcel_product_id_controlado="700116635"),
-    Plan("TL6",    "Telcel Libre 6",          "Telcel Libre",   699,  799, 30,  45.0, 104.85, 119.85, True,  False, telcel_product_id_abierto="700116631", telcel_product_id_controlado="700116646"),
-    Plan("TL7",    "Telcel Libre 7",          "Telcel Libre",   799,  899, 40,  60.0, 119.85, 134.85, True,  False, telcel_product_id_abierto="700116642", telcel_product_id_controlado="700116681"),
-    Plan("TL9",    "Telcel Libre 9",          "Telcel Libre",   999, 1099, 45,  67.5, 149.85, 164.85, True,  False, telcel_product_id_abierto="700116643", telcel_product_id_controlado="700116666"),
-    Plan("TL12",   "Telcel Libre 12",         "Telcel Libre",  1299, 1399, 55,  82.5, 194.85, 209.85, True,  False, telcel_product_id_abierto="700116577", telcel_product_id_controlado="700116647"),
-    Plan("TLVIP",  "Telcel Libre VIP",        "Telcel Libre",  1499, 1599, 40,  60.0, 629.58, 671.58, True,  False, telcel_product_id_abierto="700116644", telcel_product_id_controlado="700116682"),
+    Plan("TL1",    "Telcel Libre 1",          "Telcel Libre",   265,  315,  4,   6.0,  12.45,  14.95, True,  False, telcel_product_id_abierto="700116628", telcel_product_id_controlado="700116579"),
+    Plan("TL2",    "Telcel Libre 2",          "Telcel Libre",   329,  379,  5,   7.5,  15.95,  18.45, True,  False, telcel_product_id_abierto="700116599", telcel_product_id_controlado="700116680"),
+    Plan("TL3",    "Telcel Libre 3",          "Telcel Libre",   429,  479,  7,   9.0,  39.90,  44.90, True,  False, telcel_product_id_abierto="700116629", telcel_product_id_controlado="700116665"),
+    Plan("TL4",    "Telcel Libre 4",          "Telcel Libre",   529,  579, 10,  15.0,  74.85,  82.35, True,  False, telcel_product_id_abierto="700116641", telcel_product_id_controlado="700116700"),
+    Plan("TL5",    "Telcel Libre 5",          "Telcel Libre",   629,  729, 20,  30.0,  89.85, 104.85, True,  False, telcel_product_id_abierto="700116630", telcel_product_id_controlado="700116635"),
+    Plan("TL6",    "Telcel Libre 6",          "Telcel Libre",   729,  829, 30,  45.0, 104.85, 119.85, True,  False, telcel_product_id_abierto="700116631", telcel_product_id_controlado="700116646"),
+    Plan("TL7",    "Telcel Libre 7",          "Telcel Libre",   839,  939, 45,  60.0, 119.85, 134.85, True,  False, telcel_product_id_abierto="700116642", telcel_product_id_controlado="700116681"),
+    Plan("TL9",    "Telcel Libre 9",          "Telcel Libre",  1039 , 1139, 50,  67.5, 149.85, 164.85, True,  False, telcel_product_id_abierto="700116643", telcel_product_id_controlado="700116666"),
+    Plan("TL12",   "Telcel Libre 12",         "Telcel Libre",  1349, 1449, 55,  82.5, 194.85, 209.85, True,  False, telcel_product_id_abierto="700116577", telcel_product_id_controlado="700116647"),
+    Plan("TLVIP",  "Telcel Libre VIP",        "Telcel Libre",  1589, 1689, 50,  60.0, 629.58, 671.58, True,  False, telcel_product_id_abierto="700116644", telcel_product_id_controlado="700116682"),
     # ── Telcel Ultra ─────────────────────────────────────────────────────────
     Plan("TU3",    "Telcel Ultra 3",          "Telcel Ultra",   349,  399, 15,  15.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700090802", telcel_product_id_controlado="700090591"),
     Plan("TU4",    "Telcel Ultra 4",          "Telcel Ultra",   449,  499, 25,  25.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700090677", telcel_product_id_controlado="700090638"),
     Plan("TU5",    "Telcel Ultra 5",          "Telcel Ultra",   549,  599, 40,  40.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700089461", telcel_product_id_controlado="700090697"),
     Plan("TU7",    "Telcel Ultra 7",          "Telcel Ultra",   749,  799, 60,  60.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700089404", telcel_product_id_controlado="700090592"),
-    Plan("TU9",    "Telcel Ultra 9",          "Telcel Ultra",   949,  999,100, 100.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700116664", telcel_product_id_controlado="700116652"),
-    Plan("TUILIM", "Telcel Ultra Ilimitado",  "Telcel Ultra",  1349, 1399,  0,   0.0,   0.00,   0.00, False, True,  telcel_product_id_abierto="700116634", telcel_product_id_controlado="700116686"),
+    Plan("TU9",    "Telcel Ultra 9",          "Telcel Ultra",   999,  1049,120, 120.0,   0.00,   0.00, False, False, telcel_product_id_abierto="700116664", telcel_product_id_controlado="700116652"),
+    Plan("TUILIM", "Telcel Ultra Ilimitado",  "Telcel Ultra",  1399, 1449,  0,   0.0,   0.00,   0.00, False, True,  telcel_product_id_abierto="700116634", telcel_product_id_controlado="700116686"),
 ]
 
 
@@ -124,6 +124,9 @@ LEGACY_PLANS_GB: dict = {
     "TELCEL PLUS 12": 45.0,
     "TELCEL PLUS 14": 60.0,
     "TELCEL PLUS VIP": 35.0,
+    "TELCEL PLUS VIP": 35.0,
+    "TELCEL LIBRE  2": 5.0,
+    "TELCEL LIBRE 12": 55.0,
     # Telcel Plus — abreviación TP (variante CSV)
     "TP1":   3.0,
     "TP1.5": 3.5,
@@ -224,8 +227,9 @@ def format_plan_for_agent(plan: Plan, modality: str, has_promo: bool = True) -> 
 
 
 # ── Tabla de productos Telcel (código de oferta, nombre, precio) ─────────────
-# Copia literal de la tabla entregada por Telcel. Independiente de CATALOG.
-# Nota: 700090698 aparece en ULTRA CONTROLADO 4 y en ULTRA CONTROLADO ILIMITADO.
+# Copia de la tabla entregada por Telcel (IDs de Ultra corregidos 2026-11-22).
+# NO la usa el bot: precios e IDs para CreateProductOrder salen de CATALOG.
+# Debe mantenerse idéntica a CATALOG en código y precio.
 
 @dataclass(frozen=True)
 class TelcelProduct:
@@ -235,38 +239,38 @@ class TelcelProduct:
 
 
 TELCEL_PRODUCTS: List[TelcelProduct] = [
-    TelcelProduct("700116628", "TELCEL LIBRE 1",                   249),
-    TelcelProduct("700116599", "TELCEL LIBRE 2",                   319),
-    TelcelProduct("700116629", "TELCEL LIBRE 3",                   399),
-    TelcelProduct("700116641", "TELCEL LIBRE 4",                   499),
-    TelcelProduct("700116630", "TELCEL LIBRE 5",                   599),
-    TelcelProduct("700116631", "TELCEL LIBRE 6",                   699),
-    TelcelProduct("700116642", "TELCEL LIBRE 7",                   799),
-    TelcelProduct("700116643", "TELCEL LIBRE 9",                   999),
-    TelcelProduct("700116577", "TELCEL LIBRE 12",                 1299),
-    TelcelProduct("700116644", "TELCEL LIBRE VIP",                1499),
-    TelcelProduct("700116579", "TELCEL LIBRE CONTROLADO 1",        299),
-    TelcelProduct("700116680", "TELCEL LIBRE CONTROLADO 2",        369),
-    TelcelProduct("700116665", "TELCEL LIBRE CONTROLADO 3",        449),
-    TelcelProduct("700116700", "TELCEL LIBRE CONTROLADO 4",        549),
-    TelcelProduct("700116635", "TELCEL LIBRE CONTROLADO 5",        699),
-    TelcelProduct("700116646", "TELCEL LIBRE CONTROLADO 6",        799),
-    TelcelProduct("700116681", "TELCEL LIBRE CONTROLADO 7",        899),
-    TelcelProduct("700116666", "TELCEL LIBRE CONTROLADO 9",       1099),
-    TelcelProduct("700116647", "TELCEL LIBRE CONTROLADO 12",      1399),
-    TelcelProduct("700116682", "TELCEL LIBRE CONTROLADO VIP",     1599),
+    TelcelProduct("700116628", "TELCEL LIBRE 1",                   265),
+    TelcelProduct("700116599", "TELCEL LIBRE 2",                   329),
+    TelcelProduct("700116629", "TELCEL LIBRE 3",                   429),
+    TelcelProduct("700116641", "TELCEL LIBRE 4",                   529),
+    TelcelProduct("700116630", "TELCEL LIBRE 5",                   629),
+    TelcelProduct("700116631", "TELCEL LIBRE 6",                   729),
+    TelcelProduct("700116642", "TELCEL LIBRE 7",                   839),
+    TelcelProduct("700116643", "TELCEL LIBRE 9",                   1039),
+    TelcelProduct("700116577", "TELCEL LIBRE 12",                 1349),
+    TelcelProduct("700116644", "TELCEL LIBRE VIP",                1589),
+    TelcelProduct("700116579", "TELCEL LIBRE CONTROLADO 1",        315),
+    TelcelProduct("700116680", "TELCEL LIBRE CONTROLADO 2",        379),
+    TelcelProduct("700116665", "TELCEL LIBRE CONTROLADO 3",        479),
+    TelcelProduct("700116700", "TELCEL LIBRE CONTROLADO 4",        579),
+    TelcelProduct("700116635", "TELCEL LIBRE CONTROLADO 5",        729),
+    TelcelProduct("700116646", "TELCEL LIBRE CONTROLADO 6",        829),
+    TelcelProduct("700116681", "TELCEL LIBRE CONTROLADO 7",        939),
+    TelcelProduct("700116666", "TELCEL LIBRE CONTROLADO 9",       1139),
+    TelcelProduct("700116647", "TELCEL LIBRE CONTROLADO 12",      1449),
+    TelcelProduct("700116682", "TELCEL LIBRE CONTROLADO VIP",     1689),
     TelcelProduct("700090802", "TELCEL ULTRA 3",                   349),
     TelcelProduct("700090677", "TELCEL ULTRA 4",                   449),
-    TelcelProduct("700090678", "TELCEL ULTRA 5",                   549),
-    TelcelProduct("700090679", "TELCEL ULTRA 7",                   749),
-    TelcelProduct("700090680", "TELCEL ULTRA 9",                   999),
-    TelcelProduct("700090697", "TELCEL ULTRA ILIMITADO",          1349),
-    TelcelProduct("700090801", "TELCEL ULTRA CONTROLADO 3",        399),
-    TelcelProduct("700090698", "TELCEL ULTRA CONTROLADO 4",        499),
-    TelcelProduct("700090699", "TELCEL ULTRA CONTROLADO 5",        599),
-    TelcelProduct("700090700", "TELCEL ULTRA CONTROLADO 7",        799),
-    TelcelProduct("700090701", "TELCEL ULTRA CONTROLADO 9",       1049),
-    TelcelProduct("700090698", "TELCEL ULTRA CONTROLADO ILIMITADO", 1399),
+    TelcelProduct("700089461", "TELCEL ULTRA 5",                   549),
+    TelcelProduct("700089404", "TELCEL ULTRA 7",                   749),
+    TelcelProduct("700116664", "TELCEL ULTRA 9",                   999),
+    TelcelProduct("700116634", "TELCEL ULTRA ILIMITADO",          1399),
+    TelcelProduct("700090591", "TELCEL ULTRA CONTROLADO 3",        399),
+    TelcelProduct("700090638", "TELCEL ULTRA CONTROLADO 4",        499),
+    TelcelProduct("700090697", "TELCEL ULTRA CONTROLADO 5",        599),
+    TelcelProduct("700090592", "TELCEL ULTRA CONTROLADO 7",        799),
+    TelcelProduct("700116652", "TELCEL ULTRA CONTROLADO 9",       1049),
+    TelcelProduct("700116686", "TELCEL ULTRA CONTROLADO ILIMITADO", 1449),
 ]
 
 
@@ -280,6 +284,6 @@ def get_telcel_product_by_name(nombre: str) -> Optional[TelcelProduct]:
 
 
 def get_telcel_products_by_code(codigo: str) -> List[TelcelProduct]:
-    """Productos con ese código de oferta (puede haber más de uno, ver nota de 700090698)."""
+    """Productos con ese código de oferta."""
     codigo = codigo.strip()
     return [p for p in TELCEL_PRODUCTS if p.codigo == codigo]

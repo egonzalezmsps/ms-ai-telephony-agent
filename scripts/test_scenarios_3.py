@@ -96,7 +96,7 @@ def escenario_6():
     print("\n" + "=" * 70)
     print("Escenario 6 — Redirige a un plan específico distinto al recomendado")
     print("=" * 70)
-    # Renta baja para que "Libre 2" ($319) sea elegible (no está por debajo de
+    # Renta baja para que "Libre 2" ($329) sea elegible (no está por debajo de
     # la renta actual) aunque no sea el plan recomendado por defecto.
     session = _nuevo_perfil("Ximena", "Telcel Max Sin Limite 1000", 249.0)
     history = _iniciar_historial(session)

@@ -31,7 +31,7 @@ casos.append({
 casos.append({
     "desc": "Plan real, precio correcto en Controlado",
     "session": make_session("Controlado", 699.0),
-    "text": "El *Telcel Libre 5 Controlado* a $699/mes incluye 20 GB y cashback.",
+    "text": "El *Telcel Libre 5 Controlado* a $729/mes incluye 20 GB y cashback.",
     "debe_interceptar": False,
 })
 
@@ -39,7 +39,7 @@ casos.append({
 casos.append({
     "desc": "Plan real, precio correcto en Abierto",
     "session": make_session("Abierto", 699.0),
-    "text": "El *Telcel Libre 5 Abierto* a $599/mes incluye 20 GB y cashback.",
+    "text": "El *Telcel Libre 5 Abierto* a $629/mes incluye 20 GB y cashback.",
     "debe_interceptar": False,
 })
 
@@ -55,7 +55,7 @@ casos.append({
 casos.append({
     "desc": "Cliente Controlado, LLM menciona precio Abierto correctamente",
     "session": make_session("Controlado", 699.0),
-    "text": "El *Telcel Libre 6 Abierto* tiene un precio de $699/mes en modalidad Abierto.",
+    "text": "El *Telcel Libre 6 Abierto* tiene un precio de $729/mes en modalidad Abierto.",
     "debe_interceptar": False,
 })
 
@@ -79,7 +79,7 @@ casos.append({
 casos.append({
     "desc": "Telcel Ultra Ilimitado precio correcto Controlado",
     "session": make_session("Controlado", 1099.0),
-    "text": "El *Telcel Ultra Ilimitado Controlado* a $1399/mes tiene datos ilimitados.",
+    "text": "El *Telcel Ultra Ilimitado Controlado* a $1449/mes tiene datos ilimitados.",
     "debe_interceptar": False,
 })
 
@@ -95,7 +95,7 @@ casos.append({
 casos.append({
     "desc": "Telcel Libre VIP precio correcto Abierto",
     "session": make_session("Abierto", 1449.0),
-    "text": "El *Telcel Libre VIP Abierto* a $1499/mes incluye 60 GB y cashback.",
+    "text": "El *Telcel Libre VIP Abierto* a $1589/mes incluye 60 GB y cashback.",
     "debe_interceptar": False,
 })
 
@@ -104,7 +104,7 @@ casos.append({
     "desc": "Múltiples planes, uno inventado",
     "session": make_session("Controlado", 699.0),
     "text": (
-        "• *Telcel Libre 5 Controlado*: $699/mes · 20 GB\n"
+        "• *Telcel Libre 5 Controlado*: $729/mes · 20 GB\n"
         "• *Telcel Ultra 15 Controlado*: $999/mes · 200 GB\n"
     ),
     "debe_interceptar": True,

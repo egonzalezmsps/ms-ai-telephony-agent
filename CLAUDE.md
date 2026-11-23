@@ -205,7 +205,7 @@ run_turn() en reni_agent.py
     │           ├── awaiting_otp → CreateProductOrder con otpAuth=<mensaje del cliente> (Telcel valida; error
     │           │       BE_MP_BPS_0040 = código incorrecto) — NO pasa al LLM
     │           ├── awaiting_contract_confirmation → validar ACEPTO/CONFIRMO (word-set)
-    │           │       ├── ACEPTO/CONFIRMO → OTP (si |precio-renta|>$1) o POST_SALE directo
+    │           │       ├── ACEPTO/CONFIRMO → OTP (si |precio-renta|>0.005) o POST_SALE directo
     │           │       ├── NO / mensaje que empieza con "NO" → stage=PERSUASION
     │           │       └── cualquier otro texto (afirmación vaga, "acep", pregunta) →
     │           │             cae en el mismo catch-all → recordatorio fijo pidiendo
@@ -356,10 +356,8 @@ Todas se crean como closures en `make_tools(state)` para acceder al estado de se
 
 ### `iniciar_contratacion(plan_id)`
 - Valida existencia del plan en catálogo
-- Valida `precio >= renta_actual - $1.0` (de lo contrario retorna error al LLM). El `1.0`
-  está **hardcodeado como literal** en `telcel_tools.py` (10+ veces en el archivo), no
-  importado desde `PRICE_TOLERANCE_MXN` (`plans.py:11`) — riesgo de desincronización
-  si la tolerancia del catálogo cambia
+- Valida `precio >= renta_actual - PRICE_EPSILON_MXN` (de lo contrario retorna error al LLM).
+  Todo el código importa `PRICE_EPSILON_MXN` desde `plans.py` — no hay literales de tolerancia
 - Actualiza: `session.plan_selected`, `session.stage = "CONTRACT"`, resetea flags de contrato
 - Retorna el marcador `"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\nCONTRATACION_INICIADA"`
   — reni_agent.py detecta el string `"CONTRATACION_INICIADA"` y lo **reemplaza** con
@@ -377,7 +375,7 @@ Todas se crean como closures en `make_tools(state)` para acceder al estado de se
 - `tipo="mas_barato"`: retorna texto rígido con hasta 3 planes más baratos + cierre con plan anclado
 - `tipo="ultra"` / `"libre"` / `"mas_gb"`: actualiza `session.plan_anclado` al más cercano elegible
 - `tipo="especifico"`: busca por nombre, precio o GB; si no es activable → info + derivar a Soporte
-- `tipo="mismo_precio"`: planes con `|precio - renta| <= $1`
+- `tipo="mismo_precio"`: planes con `|precio - renta| <= PRICE_EPSILON_MXN`
 - Si `tipo` no está en la whitelist válida, o si `criterio` es puramente numérico con un
   `tipo` distinto de vacío/`"general"`, la función redirige automáticamente a `"especifico"`
 - Detecta si el cliente pide modalidad diferente a la suya → texto rígido de derivación al CAC
@@ -412,7 +410,7 @@ El modelo NO necesita herramientas para consultar precios, GB ni beneficios.
 
 El bloque incluye:
 - **Tabla de activables** con columna `Canal`:
-  - `✅ ESTE CANAL` — planes con `precio >= current_cost - 1.0` (activables aquí)
+  - `✅ ESTE CANAL` — planes con `precio >= current_cost - PRICE_EPSILON_MXN` (activables aquí)
 - **Plan informativo más económico** — solo 1 plan (el más barato entre los no elegibles), con nota de que el resto no se menciona
 - **Precios en modalidad alternativa** — tabla separada sin columna Canal (todos requieren CAC)
 - Sin fechas de vigencia de promoción — solo "24 meses desde la activación"
@@ -423,32 +421,23 @@ El bloque incluye:
 
 ## Catálogo actual (plans.py)
 
-| Plan | Precio Abierto | Precio Controlado | GB Base | GB Promo | Cashback Ctrl |
-|---|---|---|---|---|---|
-| Telcel Libre 1 | $249 | $299 | 4 GB | 6 GB | $14.95 |
-| Telcel Libre 2 | $319 | $369 | 5 GB | 7.5 GB | $18.45 |
-| Telcel Libre 3 | $399 | $449 | 6 GB | 9 GB | $44.90 |
-| Telcel Libre 4 | $499 | $549 | 10 GB | 15 GB | $82.35 |
-| Telcel Libre 5 | $599 | $699 | 20 GB | 30 GB | $104.85 |
-| Telcel Libre 6 | $699 | $799 | 30 GB | 45 GB | $119.85 |
-| Telcel Libre 7 | $799 | $899 | 40 GB | 60 GB | $134.85 |
-| Telcel Libre 9 | $999 | $1,099 | 45 GB | 67.5 GB | $164.85 |
-| Telcel Libre 12 | $1,299 | $1,399 | 55 GB | 82.5 GB | $209.85 |
-| Telcel Libre VIP | $1,499 | $1,599 | 40 GB | 60 GB | $671.58 |
-| Telcel Ultra 3 | $349 | $399 | 15 GB | — | — |
-| Telcel Ultra 4 | $449 | $499 | 25 GB | — | — |
-| Telcel Ultra 5 | $549 | $599 | 40 GB | — | — |
-| Telcel Ultra 7 | $749 | $799 | 60 GB | — | — |
-| Telcel Ultra 9 | $949 | $999 | 100 GB | — | — |
-| Telcel Ultra Ilimitado | $1,349 | $1,399 | Ilimitado (PUJ) | — | — |
+**La fuente de verdad es `CATALOG` en `app/catalog/plans.py`** — no se copian precios, GB ni
+IDs aquí para que no se desactualicen. Consultar ese archivo directamente.
+
+- 16 planes: Telcel Libre 1/2/3/4/5/6/7/9/12/VIP y Telcel Ultra 3/4/5/7/9/Ilimitado
+- Cada `Plan` tiene precio, cashback y `telcel_product_id` por modalidad (Abierto/Controlado);
+  el `telcel_product_id_*` es el que se envía a `CreateProductOrder`
+- `TELCEL_PRODUCTS` (mismo archivo) es una copia de referencia de la tabla de Telcel —
+  **no la usa el bot**; debe mantenerse idéntica a `CATALOG` en código y precio
 
 **Constantes del catálogo:**
-- `PRICE_TOLERANCE_MXN = 1.0`
+- `PRICE_EPSILON_MXN = 0.005` — margen técnico (medio centavo) para errores de precisión float;
+  **no es una tolerancia de negocio**: un plan $1 más barato que la renta NO es activable
 - `PROMO_VIGENCIA = "30/05/2026"` (usado internamente, no se muestra al cliente)
 - `PROMO_TERM_MONTHS = 24`
 - `LEGACY_PLANS_GB` — mapea nombres de planes anteriores (ej. "Max Sin Límite", "Plus", "TP") a GB para clientes históricos
 
-Promoción de GB: solo aplica en Telcel Libre cuando `precio_nuevo > renta_actual + $1`.
+Promoción de GB: solo aplica en Telcel Libre cuando `precio_nuevo > renta_actual + PRICE_EPSILON_MXN`.
 
 ---
 
@@ -518,7 +507,7 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 1. **Modalidad fija** — mismo Controlado/Abierto que el plan actual. Cambio → CAC
 2. **No activar por debajo de renta** — planes más baratos son informativos, no activables aquí
 3. **Familia Libre como recomendación** — `recommend_plan()` filtra solo Telcel Libre
-4. **Promoción de GB** — solo aplica cuando `precio_nuevo > renta_actual + $1`; sin fechas al cliente
+4. **Promoción de GB** — solo aplica cuando `precio_nuevo > renta_actual` (margen `PRICE_EPSILON_MXN`); sin fechas al cliente
 5. **Apps ilimitadas Telcel Libre** — exactamente: Facebook, WhatsApp, Messenger, X, Instagram, Snapchat, Uber. YouTube, TikTok y otras NO están incluidas
 6. **Apps Telcel Ultra** — solo WhatsApp ilimitado; sin apps sociales adicionales
 7. **Claro Video** — sí consume GB del plan, no es ilimitado
@@ -527,7 +516,7 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 10. **Trato de usted** — siempre, sin excepción (incluyendo `post_sale.py`)
 11. **Modalidad en nombre del plan** — siempre "Telcel Libre 2 Controlado", nunca solo "Telcel Libre 2"
 12. **No exponer reglas internas al cliente** — ni criterios de elegibilidad, ni etiquetas (✅/⛔), ni fechas de vigencia, ni por qué un plan requiere CAC, ni el criterio de la promoción
-13. **Tolerancia de precio $1** — `precio >= current_cost - 1.0` cubre planes al precio exacto del cliente
+13. **Tolerancia de precio 0.005** (`PRICE_EPSILON_MXN`) — `precio >= current_cost - 0.005`: solo cubre el precio exacto del cliente (absorbe errores de float), no planes más baratos
 
 ---
 

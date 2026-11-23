@@ -33,7 +33,7 @@ print(f"\nProbando con historial creciente...\n")
 
 # Mensajes de historial simulados
 all_messages = [
-    {"role": "assistant", "content": [{"text": "Hola Pedro, le ofrecemos el Telcel Libre 4 Abierto a $499/mes. ¿Le gustaría activarlo?"}]},
+    {"role": "assistant", "content": [{"text": "Hola Pedro, le ofrecemos el Telcel Libre 4 Abierto a $529/mes. ¿Le gustaría activarlo?"}]},
     {"role": "user", "content": [{"text": "que beneficios tiene?"}]},
     {"role": "assistant", "content": [{"text": "Lo que gana con el cambio: 10 GB, cashback $74.85/mes, apps ilimitadas. ¿Le gustaría activarlo?"}]},
     {"role": "user", "content": [{"text": "cuanto cuesta el cashback?"}]},
