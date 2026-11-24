@@ -44,6 +44,15 @@ def build_oci_model() -> LiteLLMModel:
         "top_p": 0.9,
     }
 
+    # Razonamiento interno de modelos como Gemini 2.5: sus tokens se descuentan del
+    # mismo max_tokens y, con 600, dejaban respuestas cortadas o vacías (OCI además
+    # reporta finish_reason="stop", así que no se detecta como truncado). "none" lo
+    # desactiva. Valores: none | low | medium | high; vacío = no enviar el parámetro.
+    # Nota: en Gemini vía OCI, "low"/"medium" no reducen el razonamiento (medido).
+    reasoning_effort = os.environ.get("LLM_REASONING_EFFORT", "none").strip()
+    if reasoning_effort:
+        params["reasoning_effort"] = reasoning_effort
+
     # Si hay credenciales de API key, úsalas
     oci_user = os.environ.get("OCI_USER")
     auth_mode = "instance_principal"
@@ -73,9 +82,10 @@ def build_oci_model() -> LiteLLMModel:
         raise
     logger.info(
         "[OCI] Modelo listo en %.2fs model_id=%s region=%s auth=%s "
-        "temperature=%.1f max_tokens=%d top_p=%.2f",
+        "temperature=%.1f max_tokens=%d top_p=%.2f reasoning_effort=%s",
         time.time() - t0, model_id, region, auth_mode,
         params["temperature"], params["max_tokens"], params["top_p"],
+        params.get("reasoning_effort", "(no enviado)"),
     )
     return model
 

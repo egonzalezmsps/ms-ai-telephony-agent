@@ -83,6 +83,8 @@ OCI_KEY_FILE=./.oci/oci_api_key.pem
 # LLM params
 LLM_TEMPERATURE=0.3
 LLM_MAX_TOKENS=600
+LLM_REASONING_EFFORT=none          # opcional, default none. Gemini 2.5 gasta tokens de razonamiento del
+                                   # mismo max_tokens (cortaba respuestas); vacío = no enviar el parámetro
 
 # FastAPI
 API_KEY=tu-api-key
@@ -256,6 +258,8 @@ run_turn() en reni_agent.py
     │           → bypasea clean_response
     │
     ├── ── INTERCEPTAR texto rígido ("RESPONDE EXACTAMENTE...") ─────────────
+    │   │   (los listados de catálogo de presentar_planes ya NO llegan con este prefijo
+    │   │    al agente: llegan como datos — ver presentar_planes; las derivaciones sí)
     │   └── Si algún toolResult contiene ese prefijo:
     │           → response_text reemplazado con texto rígido de la herramienta
     │           → early return, bypasea clean_response
@@ -381,6 +385,12 @@ Todas se crean como closures en `make_tools(state)` para acceder al estado de se
   `tipo` distinto de vacío/`"general"`, la función redirige automáticamente a `"especifico"`
 - Detecta si el cliente pide modalidad diferente a la suya → texto rígido de derivación al CAC
 - Para tipos con un solo plan elegible → retorna JSON para que el LLM lo redacte (no texto rígido)
+- **Modo datos para el LLM** (`make_tools(state, catalog_as_data=True)`, solo en `create_agent`):
+  los listados rígidos de catálogo se entregan al LLM como datos + instrucción de responder la
+  pregunta concreta (`_catalogo_como_datos()`), para que no se pierda la respuesta a la pregunta
+  del cliente (caso "¿incluye equipo?" / "¿y en modalidad abierta?"). Las derivaciones a
+  CAC/Soporte siguen rígidas. El router semántico llama `make_tools(session)` y sigue recibiendo
+  el texto rígido (sin cambio)
 
 ### `informar_plan_actual()`
 - Compara plan actual con plan anclado (o recommend_plan() si no hay anclado)
@@ -400,7 +410,7 @@ Todas se crean como closures en `make_tools(state)` para acceder al estado de se
 - Si plan es activable: actualiza `plan_anclado`, cierra con pregunta de activación
 - Si plan no es activable: info + deriva a Soporte, mantiene `plan_anclado` previo
 
-**Texto rígido**: cuando una herramienta retorna `"RESPONDE EXACTAMENTE CON ESTE TEXTO..."`, `reni_agent.py` intercepta ese resultado y lo envía directamente al cliente sin pasar por el LLM ni por `clean_response`.
+**Texto rígido**: cuando una herramienta retorna `"RESPONDE EXACTAMENTE CON ESTE TEXTO..."`, `reni_agent.py` intercepta ese resultado y lo envía directamente al cliente sin pasar por el LLM ni por `clean_response`. Excepción: los listados de catálogo de `presentar_planes` cuando la llama el LLM (modo datos, ver arriba).
 
 ---
 

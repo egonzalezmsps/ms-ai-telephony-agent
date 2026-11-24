@@ -30,8 +30,42 @@ def quitar_tildes(texto: str) -> str:
 logger = logging.getLogger(__name__)
 
 
-def make_tools(state):
-    """Fabrica las herramientas de acción para una sesión específica."""
+# ── Catálogo como DATOS para el LLM ──────────────────────────────────────────
+# Cuando el LLM llama a presentar_planes, el listado de catálogo se le entrega
+# como datos para que redacte la respuesta a la pregunta concreta del cliente
+# (antes era texto rígido que reemplazaba toda su respuesta, y la pregunta
+# quedaba sin contestar). Las derivaciones a otro canal (CAC / Soporte) son
+# guiones de negocio y se mantienen rígidas. Las llamadas directas desde el
+# router semántico (sin LLM) no cambian: siguen recibiendo el texto rígido.
+_TEXTO_RIGIDO = "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+_CANALES_DERIVACION = ("Centro de Atención", "800 220 9518")
+_INSTRUCCION_DATOS_CATALOGO = (
+    "DATOS DEL CATÁLOGO PARA ESTE CLIENTE (exactos — copia nombres de plan, precios, GB y cashback tal cual):\n\n"
+    "{datos}\n\n"
+    "INSTRUCCIÓN: responde la pregunta concreta del cliente usando SOLO estos datos. "
+    "Si su pregunta no requiere la lista completa o ya la vio, no la repitas: contesta directo y menciona solo lo necesario. "
+    "Termina con la pregunta de activación que aparece al final de los datos."
+)
+
+
+def _catalogo_como_datos(resultado: str) -> str:
+    """Convierte un listado rígido de catálogo en datos para que el LLM redacte.
+    Deja intactos los resultados que no son texto rígido (JSON) y las derivaciones."""
+    if not resultado.startswith(_TEXTO_RIGIDO):
+        return resultado
+    datos = resultado[len(_TEXTO_RIGIDO):]
+    if any(canal in datos for canal in _CANALES_DERIVACION):
+        return resultado
+    return _INSTRUCCION_DATOS_CATALOGO.format(datos=datos)
+
+
+def make_tools(state, catalog_as_data: bool = False):
+    """Fabrica las herramientas de acción para una sesión específica.
+
+    catalog_as_data=True solo para las herramientas que recibe el agente LLM:
+    presentar_planes entrega los listados de catálogo como datos (ver
+    _catalogo_como_datos). El router semántico usa el valor por defecto.
+    """
 
     @tool
     def iniciar_contratacion(plan_id: str) -> str:
@@ -205,8 +239,7 @@ def make_tools(state):
 
         return RESPUESTAS.get(tema, RESPUESTAS["plan"])
 
-    @tool
-    def presentar_planes(criterio: str, tipo: str = "general") -> str:
+    def _presentar_planes(criterio: str, tipo: str = "general") -> str:
         """
         Busca y presenta planes o información de apps según la intención del cliente.
 
@@ -643,7 +676,7 @@ def make_tools(state):
             # Si el criterio es un precio numérico, redirigir a especifico
             _precio_en_criterio = re.search(r'^\d{3,4}$', criterio.strip())
             if _precio_en_criterio:
-                return presentar_planes(criterio=criterio, tipo="especifico")
+                return _presentar_planes(criterio=criterio, tipo="especifico")
             planes = [p for p in eligible if p.family == "Telcel Libre"]
             if not planes:
                 return no_plans_found()
@@ -783,7 +816,7 @@ def make_tools(state):
         elif criterio not in ("", "general") and re.search(r'^\d+$', criterio.strip()):
             # El LLM pasó un precio numérico como criterio con cualquier tipo —
             # redirigir siempre a especifico para buscar el plan más cercano
-            return presentar_planes(criterio=criterio, tipo="especifico")
+            return _presentar_planes(criterio=criterio, tipo="especifico")
 
         elif tipo == "mas_gb":
             # Comparar contra GB del plan anclado (el que se le está ofreciendo)
@@ -820,9 +853,9 @@ def make_tools(state):
             # intentar extraer precio o GB del criterio y redirigir a especifico
             _precio_match = re.search(r'\b(\d{3,4})\b', criterio)
             if _precio_match:
-                return presentar_planes(criterio=_precio_match.group(1), tipo="especifico")
+                return _presentar_planes(criterio=_precio_match.group(1), tipo="especifico")
             else:
-                return presentar_planes(criterio=criterio, tipo="especifico")
+                return _presentar_planes(criterio=criterio, tipo="especifico")
 
         else:  # "general"
             if eligible:
@@ -844,6 +877,14 @@ def make_tools(state):
                     f"¿Le gustaría activar el *{plan_rec}*?"
                 )
             return no_plans_found()
+
+    def _presentar_planes_tool(criterio: str, tipo: str = "general") -> str:
+        resultado = _presentar_planes(criterio=criterio, tipo=tipo)
+        return _catalogo_como_datos(resultado) if catalog_as_data else resultado
+
+    # Misma descripción y parámetros que ve el LLM (el docstring de _presentar_planes)
+    _presentar_planes_tool.__doc__ = _presentar_planes.__doc__
+    presentar_planes = tool(_presentar_planes_tool, name="presentar_planes")
 
     @tool
     def informar_plan_actual() -> str:

@@ -445,7 +445,9 @@ def create_agent(session: SessionState, messages: List[Dict] = None) -> Agent:
     return Agent(
         model=oci_model,
         system_prompt=build_system_prompt(session),
-        tools=make_tools(session),
+        # catalog_as_data: los listados de presentar_planes llegan al LLM como datos
+        # para que responda la pregunta concreta (el router sigue usando texto rígido)
+        tools=make_tools(session, catalog_as_data=True),
         callback_handler=None,
         messages=messages or [],
     )
