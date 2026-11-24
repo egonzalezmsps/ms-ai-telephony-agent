@@ -363,15 +363,21 @@ def make_tools(state, catalog_as_data: bool = False):
         has_promo = bool(state.has_promotion)
         eligible = eligible_plans(current_cost, modality)
 
-        # Detectar si el cliente pide planes de modalidad diferente
-        criterio_lower = criterio.lower()
-        alt_modality = "Abierto" if modality == "Controlado" else "Controlado"
+        # El LLM a veces manda la modalidad en `tipo` (tipo="abierto") en lugar de
+        # `criterio`. Antes caía en la redirección de tipo inválido → "especifico"
+        # con criterio="general" y se perdía: respondía "no contamos con planes…".
+        # Se incorpora al criterio y se trata como listado general.
+        if quitar_tildes(tipo.lower()).startswith(("abiert", "controlad")):
+            criterio = f"{criterio} {tipo}"
+            tipo = "general"
 
-        pide_modalidad_diferente = (
-            alt_modality.lower() in criterio_lower or
-            (modality == "Abierto" and "controlado" in criterio_lower) or
-            (modality == "Controlado" and "abierto" in criterio_lower)
-        )
+        # Detectar si el cliente pide planes de modalidad diferente
+        # (por raíz, para cubrir abierto/abierta/abiertos y controlado/controlada)
+        criterio_lower = quitar_tildes(criterio.lower())
+        alt_modality = "Abierto" if modality == "Controlado" else "Controlado"
+        _raiz_alt = "abiert" if alt_modality == "Abierto" else "controlad"
+
+        pide_modalidad_diferente = _raiz_alt in criterio_lower
 
         if pide_modalidad_diferente:
             return (
