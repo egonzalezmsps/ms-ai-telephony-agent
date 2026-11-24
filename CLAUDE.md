@@ -346,6 +346,9 @@ stage = END
   se toleran espacios/guiones/puntos). Si no es válido → se pide de nuevo **sin llamar a Telcel
   ni contar intento**. Si es válido → CreateProductOrder; `BE_MP_BPS_0040` cuenta como
   **intento fallido de OTP**. Nunca se reenvía al LLM
+- Telcel responde HTTP 200 con el error de negocio dentro del payload descifrado
+  (`errorList: [{code: "BE_MP_BPS_0040", businessMeaning: "OTP INVALID"}]`) —
+  `transport._raise_for_payload_error()` lo convierte en `TelcelApiError`
 - Cualquier otro error de las APIs Telcel → `_technical_failure()` (stage=END, Soporte)
 - No-titular → bloqueo pre-LLM (sin pasar a flujo CONTRACT)
 - Nombre incorrecto → bloqueo pre-LLM (derivar a CAC)

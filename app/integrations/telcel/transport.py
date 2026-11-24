@@ -63,6 +63,20 @@ def _raise_for_error(response: requests.Response, body: Any) -> None:
         )
 
 
+def _raise_for_payload_error(response: requests.Response, data: Any) -> None:
+    """Telcel puede responder HTTP 200 con el error de negocio dentro del payload
+    descifrado: {"errorList": [{"code": "BE_MP_BPS_0040", "businessMeaning": "OTP INVALID"}]}."""
+    error_list = data.get("errorList") if isinstance(data, dict) else None
+    if error_list:
+        first = error_list[0] if isinstance(error_list[0], dict) else {}
+        raise TelcelApiError(
+            response.status_code,
+            data,
+            f"Error de negocio code={first.get('code')} "
+            f"({str(first.get('businessMeaning', '')).strip()}): {first.get('description')}",
+        )
+
+
 def _decrypt_payload(api: TelcelApi, config: TelcelApiConfig, body: Any) -> Optional[dict]:
     encrypted = body.get(api.response_field) if isinstance(body, dict) else None
     if not encrypted:
@@ -96,6 +110,7 @@ def send(api: TelcelApi, payload: dict) -> TelcelResponse:
     try:
         _raise_for_error(response, body)
         data = _decrypt_payload(api, config, body)
+        _raise_for_payload_error(response, data)
     finally:
         logger.info(
             "[TELCEL_%s] status=%s request=%s response=%s decrypted=%s",

@@ -19,13 +19,15 @@ _NO_OTP = "NA"
 
 
 def _invalid_otp_error() -> TelcelApiError:
-    """Misma forma que el error real de Telcel para que is_invalid_otp lo reconozca."""
+    """Misma forma que el error real de Telcel (errorList en el payload descifrado)."""
     body = {
-        "detailResponse": {
+        "errorList": [{
             "code": INVALID_OTP_CODE,
-            "businessMeaning": "OTP invalido",
-            "description": "Codigo OTP incorrecto (mock)",
-        }
+            "severityLevel": 1,
+            "description": "Business Error",
+            "actor": "System",
+            "businessMeaning": "OTP INVALID ",
+        }]
     }
     return TelcelApiError(200, body, f"Error de negocio code={INVALID_OTP_CODE} (OTP invalido) [mock]")
 

@@ -10,7 +10,7 @@ INVALID_OTP_CODE = "BE_MP_BPS_0040"
 
 
 class TelcelApiError(Exception):
-    """HTTP no-2xx o detailResponse.code != "0"."""
+    """HTTP no-2xx, detailResponse.code != "0" o errorList no vacío en el payload descifrado."""
 
     def __init__(self, http_status: int, raw_body: Any, message: str):
         super().__init__(message)
@@ -19,8 +19,15 @@ class TelcelApiError(Exception):
 
     @property
     def detail(self) -> dict:
+        """Error de negocio: detailResponse del body crudo, o el primer elemento de
+        errorList del payload descifrado (Telcel responde HTTP 200 con el error ahí)."""
         body = self.raw_body if isinstance(self.raw_body, dict) else {}
-        return body.get("detailResponse") or {}
+        if body.get("detailResponse"):
+            return body["detailResponse"]
+        error_list = body.get("errorList")
+        if isinstance(error_list, list) and error_list and isinstance(error_list[0], dict):
+            return error_list[0]
+        return {}
 
     @property
     def business_code(self) -> Optional[str]:
