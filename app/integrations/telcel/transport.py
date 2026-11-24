@@ -73,7 +73,12 @@ def _decrypt_payload(api: TelcelApi, config: TelcelApiConfig, body: Any) -> Opti
 def send(api: TelcelApi, payload: dict) -> TelcelResponse:
     """Envía `payload` cifrado a `api` y regresa la respuesta descifrada. Lanza TelcelApiError."""
     if is_mock_enabled(api):
-        data = mock_response(api)
+        try:
+            data = mock_response(api, payload)
+        except TelcelApiError as exc:
+            logger.info("[TELCEL_%s_MOCK] request=%s error=%s", api.name, payload, exc.raw_body)
+            log_exchange(api.name, "(mock)", payload, None, exc.http_status, exc.raw_body, None, mock=True)
+            raise
         logger.info("[TELCEL_%s_MOCK] request=%s response=%s", api.name, payload, data)
         log_exchange(api.name, "(mock)", payload, None, None, None, data, mock=True)
         return TelcelResponse(raw={"mock": True}, data=data)

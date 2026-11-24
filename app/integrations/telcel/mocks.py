@@ -10,11 +10,28 @@ from app.integrations.telcel.config import (
     COMMUNICATION_MESSAGE,
     CREATE_PROCESS,
     CREATE_PRODUCT_ORDER,
+    MOCK_OTP_CODE,
     TelcelApi,
 )
+from app.integrations.telcel.errors import INVALID_OTP_CODE, TelcelApiError
+
+_NO_OTP = "NA"
 
 
-def mock_response(api: TelcelApi) -> dict:
+def _invalid_otp_error() -> TelcelApiError:
+    """Misma forma que el error real de Telcel para que is_invalid_otp lo reconozca."""
+    body = {
+        "detailResponse": {
+            "code": INVALID_OTP_CODE,
+            "businessMeaning": "OTP invalido",
+            "description": "Codigo OTP incorrecto (mock)",
+        }
+    }
+    return TelcelApiError(200, body, f"Error de negocio code={INVALID_OTP_CODE} (OTP invalido) [mock]")
+
+
+def mock_response(api: TelcelApi, payload: dict) -> dict:
+    """Respuesta simulada. Para createProductOrder valida el OTP contra TELCEL_MOCK_OTP_CODE."""
     if api == CREATE_PROCESS:
         # Misma forma que la respuesta real de Telcel (processId en process.id)
         return {
@@ -24,5 +41,8 @@ def mock_response(api: TelcelApi) -> dict:
     if api == COMMUNICATION_MESSAGE:
         return {"status": "SENT"}
     if api == CREATE_PRODUCT_ORDER:
+        otp = str(payload.get("otpAuth", _NO_OTP))
+        if otp != _NO_OTP and otp != MOCK_OTP_CODE:
+            raise _invalid_otp_error()
         return {"orderId": f"MOCK-ORDER-{uuid.uuid4().hex[:8].upper()}"}
     raise ValueError(f"Sin mock definido para {api.name}")

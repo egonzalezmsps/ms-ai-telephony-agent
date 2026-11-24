@@ -44,6 +44,11 @@ class TelcelApiConfig:
     user: str
 
 
+# Único OTP que acepta el mock de createProductOrder; cualquier otro código simula
+# el error de Telcel BE_MP_BPS_0040 (código incorrecto).
+MOCK_OTP_CODE = os.environ.get("TELCEL_MOCK_OTP_CODE", "123456").strip()
+
+
 def is_mock_enabled(api: TelcelApi) -> bool:
     return os.environ.get(f"{api.env_prefix}_MOCK", "false").strip().lower() == "true"
 

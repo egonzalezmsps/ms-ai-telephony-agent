@@ -1,0 +1,555 @@
+<title>Validación Cambio de Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: inicio = solo las 6 líneas; al abrir una, tríptico de 3 paneles plegados (conversación | caso y reglas | hallazgos y log) */
+:root {
+  --bg: #E9EDF1; --paper: #FFFFFF; --paper-2: #F7F9FB; --ink: #142130; --muted: #5B6B7C; --line: #D8DFE6; --fold: rgba(20,33,48,.10);
+  --accent: #0A5BAA; --accent-soft: #E3EEF9;
+  --ok: #1B8553; --ok-soft: #E2F4EA; --warn: #A86A12; --warn-soft: #FBF0DC; --crit: #BC3B26; --crit-soft: #FBE6E1;
+  --chat-bg: #EDE5DB; --chat-head: #F0F2F5; --bubble-in: #FFFFFF; --bubble-out: #D9FDD3; --chat-ink: #111B21; --chat-meta: #667781; --chat-btn: #027EB5;
+  --code-bg: #F2F5F8; --code-ink: #1F2B37; --code-key: #0A5BAA; --code-dim: #7A8896;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0A1015; --paper: #151F29; --paper-2: #111A23; --ink: #E5ECF2; --muted: #93A3B3; --line: #26333F; --fold: rgba(0,0,0,.45);
+  --accent: #5DA4EE; --accent-soft: #16304A;
+  --ok: #4CC38A; --ok-soft: #12321F; --warn: #E2AA4D; --warn-soft: #3A2B12; --crit: #F07C66; --crit-soft: #3D1C16;
+  --chat-bg: #0B141A; --chat-head: #202C33; --bubble-in: #202C33; --bubble-out: #005C4B; --chat-ink: #E9EDEF; --chat-meta: #8696A0; --chat-btn: #53BDEB;
+  --code-bg: #0A1016; --code-ink: #D3DDE6; --code-key: #7CB8F2; --code-dim: #6B7A88;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0A1015; --paper: #151F29; --paper-2: #111A23; --ink: #E5ECF2; --muted: #93A3B3; --line: #26333F; --fold: rgba(0,0,0,.45);
+  --accent: #5DA4EE; --accent-soft: #16304A;
+  --ok: #4CC38A; --ok-soft: #12321F; --warn: #E2AA4D; --warn-soft: #3A2B12; --crit: #F07C66; --crit-soft: #3D1C16;
+  --chat-bg: #0B141A; --chat-head: #202C33; --bubble-in: #202C33; --bubble-out: #005C4B; --chat-ink: #E9EDEF; --chat-meta: #8696A0; --chat-btn: #53BDEB;
+  --code-bg: #0A1016; --code-ink: #D3DDE6; --code-key: #7CB8F2; --code-dim: #6B7A88;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-block: 32px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.label { font-size: 11.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+
+/* ── Inicio: solo las 6 líneas ── */
+#home { min-height: calc(100vh - 80px); display: grid; place-items: center; }
+.numbers { width: 100%; max-width: 1040px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.num { all: unset; box-sizing: border-box; cursor: pointer; position: relative; display: grid; gap: 10px; align-content: center; justify-items: center;
+  aspect-ratio: 16 / 10; max-width: 100%; border-radius: 12px; background: var(--paper); border: 1px solid var(--line);
+  transition: transform .18s ease, border-color .18s, box-shadow .18s; }
+.num:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 10px 24px -14px var(--fold); }
+.num:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.num .digits { font-family: var(--f-display); font-weight: 800; font-size: clamp(26px, 3.4vw, 40px); letter-spacing: .02em; font-variant-numeric: tabular-nums; line-height: 1; }
+.num .digits .area { color: var(--muted); font-weight: 600; }
+.num .n { position: absolute; top: 12px; left: 14px; font: 500 12px var(--f-mono); color: var(--muted); }
+.num .dot { position: absolute; top: 15px; right: 15px; width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+.num .dot.pend { background: var(--warn); }
+
+/* ── Tríptico ── */
+#case[hidden], #home[hidden] { display: none !important; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 18px; }
+.bar button { font: 600 13px var(--f-body); padding: 7px 13px; border-radius: 7px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
+.bar button:hover { border-color: var(--accent); color: var(--accent); }
+.bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bar button:disabled { opacity: .35; cursor: default; }
+.bar .spacer { flex: 1; }
+.bar .pos { font: 500 13px var(--f-mono); color: var(--muted); }
+
+.tri { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); border-radius: 6px;
+  box-shadow: 0 24px 48px -28px var(--fold), 0 2px 6px -2px var(--fold); }
+.leaf { background: var(--paper); min-width: 0; height: 780px; display: flex; flex-direction: column; position: relative; }
+.leaf:first-child { border-radius: 6px 0 0 6px; }
+.leaf:last-child { border-radius: 0 6px 6px 0; }
+.leaf + .leaf { border-left: 1px solid var(--line); }
+.leaf + .leaf::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 22px; pointer-events: none;
+  background: linear-gradient(to right, var(--fold), transparent); opacity: .55; }
+.leaf-head { padding: 18px 22px 12px; display: grid; gap: 2px; border-bottom: 1px solid var(--line); }
+.leaf-head h3 { font-size: 17px; font-weight: 700; }
+.leaf-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 22px 22px; display: grid; gap: 20px; align-content: start; }
+
+/* Panel 1 · chat */
+.leaf.chatleaf .leaf-body { padding: 0; display: flex; flex-direction: column; gap: 0; }
+.chat-head { display: flex; gap: 10px; align-items: center; padding: 9px 14px; background: var(--chat-head); color: var(--chat-ink); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font: 700 13px var(--f-display); flex: none; }
+.chat-head b { display: block; font-size: 14.5px; font-weight: 600; }
+.chat-head small { display: block; font-size: 11.5px; color: var(--chat-meta); }
+.chat { flex: 1; overflow-y: auto; padding: 12px 10px 16px; display: flex; flex-direction: column; gap: 6px; background-color: var(--chat-bg);
+  background-image: radial-gradient(color-mix(in srgb, var(--chat-meta) 12%, transparent) 1px, transparent 1px); background-size: 18px 18px; }
+.day { align-self: center; font-size: 11.5px; padding: 3px 10px; border-radius: 7px; background: var(--bubble-in); color: var(--chat-meta); margin-bottom: 4px; }
+.msg { max-width: 88%; padding: 7px 9px 5px; border-radius: 9px; color: var(--chat-ink); font-size: 13.5px; line-height: 1.42;
+  white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 0 1px .5px rgba(11,20,26,.13); }
+.msg.in { align-self: flex-start; background: var(--bubble-in); border-top-left-radius: 2px; }
+.msg.out { align-self: flex-end; background: var(--bubble-out); border-top-right-radius: 2px; }
+.msg .time { display: block; text-align: right; font-size: 11px; color: var(--chat-meta); margin-top: 2px; white-space: nowrap; }
+.msg.out .time::after { content: " ✓✓"; color: var(--chat-btn); }
+.msg .flag { display: block; margin-top: 6px; padding: 4px 7px; border-radius: 5px; font: 500 11.5px/1.35 var(--f-body); white-space: normal; background: var(--warn-soft); color: var(--warn); }
+.msg .flag.ok { background: var(--ok-soft); color: var(--ok); }
+.btns { align-self: flex-start; width: 88%; display: grid; gap: 2px; margin-top: -3px; }
+.btns span { background: var(--bubble-in); color: var(--chat-btn); text-align: center; padding: 7px; font-size: 13.5px; font-weight: 500; border-radius: 7px; box-shadow: 0 1px .5px rgba(11,20,26,.13); }
+.reply-tag { display: block; font-size: 11px; color: var(--chat-meta); margin-bottom: 2px; }
+
+/* Panel 2 · caso y reglas */
+.hero-num { font-family: var(--f-display); font-weight: 800; font-size: clamp(30px, 3vw, 38px); line-height: 1; letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+.verdict { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--ok-soft); color: var(--ok); justify-self: start; }
+.verdict::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.verdict.pend { background: var(--warn-soft); color: var(--warn); }
+.move { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: stretch; }
+.move .box { padding: 12px 14px; border-radius: 8px; background: var(--paper-2); border: 1px solid var(--line); display: grid; gap: 3px; min-width: 0; }
+.move .box.to { border-color: var(--accent); background: var(--accent-soft); }
+.move .box b { font-size: 14.5px; line-height: 1.3; }
+.move .box span:last-child { font: 600 18px var(--f-display); font-variant-numeric: tabular-nums; }
+.move .arrow { align-self: center; color: var(--muted); font-size: 20px; }
+.facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.facts div { background: var(--paper); padding: 10px 12px; display: grid; gap: 1px; min-width: 0; }
+.facts dt { font-size: 11.5px; color: var(--muted); }
+.facts dd { margin: 0; font: 500 14px var(--f-mono); overflow-wrap: anywhere; }
+dl { margin: 0; }
+.rules { list-style: none; margin: 0; padding: 0; display: grid; }
+.rules li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rules li:last-child { border-bottom: 0; }
+.tick { width: 22px; height: 22px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+.rules b { display: block; font-size: 14px; font-weight: 600; }
+.rules code { font: 12.5px var(--f-mono); color: var(--muted); overflow-wrap: anywhere; }
+
+/* Panel 3 · hallazgos y log */
+.finds { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.finds li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14px; }
+.sev { font: 600 10.5px var(--f-body); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 5px; margin-top: 2px; white-space: nowrap; }
+.sev.alta { background: var(--crit-soft); color: var(--crit); }
+.sev.media { background: var(--warn-soft); color: var(--warn); }
+.sev.baja { background: var(--accent-soft); color: var(--accent); }
+.sev.ok { background: var(--ok-soft); color: var(--ok); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.steps li { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-bottom: 1px dashed var(--line); }
+.steps li:last-child { border-bottom: 0; }
+.steps .t { font: 500 12px var(--f-mono); color: var(--muted); padding-top: 1px; }
+.steps .k { display: block; font: 600 12.5px var(--f-mono); color: var(--code-key); }
+.steps .v { display: block; font: 12px/1.5 var(--f-mono); color: var(--code-ink); background: var(--code-bg); padding: 5px 7px; border-radius: 5px; margin-top: 3px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+/* CSV cargado */
+.csv { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.csv-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; background: var(--paper-2); border-bottom: 1px solid var(--line); }
+.csv-head button { font: 600 12px var(--f-body); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
+.csv-head button:hover { border-color: var(--accent); color: var(--accent); }
+.csv-head button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.csv-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); margin: 0; }
+.csv-fields dt, .csv-fields dd { padding: 6px 12px; border-bottom: 1px solid var(--line); font: 12.5px var(--f-mono); margin: 0; }
+.csv-fields dt { color: var(--muted); }
+.csv-fields dd { overflow-wrap: anywhere; }
+.csv-fields .key { color: var(--accent); font-weight: 600; }
+.csv-raw { margin: 0; padding: 10px 12px; font: 11.5px/1.55 var(--f-mono); color: var(--code-ink); background: var(--code-bg); overflow-x: auto; white-space: pre; }
+
+@media (max-width: 1060px) {
+  .tri { grid-template-columns: minmax(0, 1fr); box-shadow: none; gap: 14px; }
+  .leaf { height: auto; border-radius: 8px !important; border: 1px solid var(--line) !important; }
+  .leaf::before { display: none; }
+  .leaf-body { overflow: visible; }
+  .leaf.chatleaf { height: 680px; }
+  .leaf.chatleaf .leaf-body { overflow: hidden; }
+}
+@media (max-width: 760px) { .numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 460px) {
+  .numbers { grid-template-columns: minmax(0, 1fr); }
+  .num { aspect-ratio: auto; padding-block: 34px; }
+  .facts { grid-template-columns: minmax(0, 1fr); }
+  .move { grid-template-columns: minmax(0, 1fr); }
+  .move .arrow { justify-self: center; transform: rotate(90deg); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <section id="home" aria-label="Líneas probadas"><div class="numbers" id="numbers"></div></section>
+  <section id="case" hidden></section>
+</div>
+
+<script>
+const APPS_ALL = "Facebook, WhatsApp, Messenger, X, Instagram, Snapchat y Uber (no consumen GB).";
+const APPS_SUM = "Facebook, Instagram, WhatsApp, X, Snapchat, Uber";
+
+const libreTpl = (plan, price, gb, cb) =>
+`Hola, Enoc 👋
+En Telcel queremos que disfrute de una mejor experiencia. Por ello, tenemos una oferta especial para usted: cambie a ${plan} Abierto por solo $${price} MXN al mes.
+
+Con este plan obtendrá más conectividad y mejores beneficios para aprovechar al máximo su servicio:
+
+• 📞 Minutos y SMS ilimitados en México, Estados Unidos y Canadá
+• 📈 ${gb} GB de datos
+• 📱 Apps Ilimitadas (WhatsApp, Facebook, Messenger, X, Instagram, Snapchat, Uber)
+• 💰 Cashback de $${cb}MXN/mes
+• 🎬 Claro Video y Claro Drive (20 GB)
+
+¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente qué beneficios adicionales obtendría?`;
+
+const ultraTpl = (plan, price, gb) =>
+`Hola,Enoc 👋
+En Telcel queremos que disfrute de una mejor experiencia. Por ello, tenemos una oferta especial para usted: cambie a ${plan}Abierto por solo $${price} MXN al mes.
+
+Con este plan obtendrá más conectividad y mejores beneficios para aprovechar al máximo su servicio:
+
+• 📞 Minutos y SMS ilimitados en México, Estados Unidos y Canadá
+• 📈 ${gb} GB de datos
+• ✉️ WhatsApp Ilimitado
+• 🎬 Claro Video y Claro Drive (20 GB)
+
+¿Le gustaría comparar su plan actual con esta nueva opción para conocer exactamente qué beneficios adicionales obtendría?`;
+
+const compareLibre = (plan, gb, price, cb) =>
+`Lo que gana con el cambio al ${plan}:
+
+📶 Datos: ${gb} GB incluidos.
+💰 Precio: mantiene su renta de $${price}/mes.
+💳 Cashback: gana $${cb}/mes para usar en servicios Telcel.
+📱 Apps ilimitadas: ${APPS_ALL}
+📞 Llamadas y SMS ilimitados a México, EUA y Canadá
+
+¿Le gustaría activar el ${plan}?`;
+
+const compareUltra = (plan, gb, price) =>
+`Lo que gana con el cambio al ${plan}:
+
+📶 Datos: ${gb} GB incluidos.
+💰 Precio: mantiene su renta de $${price}/mes.
+📞 Llamadas y SMS ilimitados a México, EUA y Canadá
+
+¿Le gustaría activar el ${plan}?`;
+
+const summary = (actual, rent, nuevo, price, gbLine, cb) =>
+`Enoc, está por confirmar el cambio de plan:
+
+Plan actual: ${actual} — $${rent}/mes
+Nuevo plan: ${nuevo} — $${price}/mes
+
+📶 ${gbLine}
+💰 Cashback $${cb}/mes
+📞 Llamadas y SMS ilimitados a México, EUA y Canadá
+📱 Apps ilimitadas: ${APPS_SUM}
+🎬 Claro Video
+💾 Claro Drive (20 GB)
+
+⚠️ Este cambio es definitivo y no podrá revertirse al plan anterior.`;
+
+const otpMsg = (plan) =>
+`Para verificar su identidad, le hemos enviado un código de verificación al número terminado en 8978.
+
+Por favor, ingrese el código para confirmar la activación del ${plan}.`;
+
+const finalMsg = (prev, nuevo) =>
+`🔄 Estamos procesando su cambio de plan.
+
+📱 Su número: 5664828978
+
+🔄 Detalle del cambio:
+- Plan anterior: ${prev}
+- Plan nuevo: ${nuevo}
+
+⚠️ Aviso importante:
+Este cambio es definitivo y no podrá revertirse al plan anterior.
+
+En breve nos contactaremos para dar seguimiento a su cambio.
+
+Gracias por su preferencia, Enoc. ¡Es un placer servirle!
+Telcel, siempre conectándote.`;
+
+const F = {
+  abierto: "La plantilla dice “Abierto” fijo; precio y cashback sí son de Controlado.",
+  mismo: "Ofrece el mismo plan que la línea ya tiene.",
+  espacios: "Plantilla Ultra sin espacios: “Hola,Enoc” y “4Abierto”.",
+  dup: "Modalidad repetida en “Plan actual”.",
+  sinMod: "El plan sale sin modalidad.",
+  wa: "Muestra el WhatsApp, no la línea que cambia; sin folio.",
+};
+const BTN_SUM = ["✅ Sí, activar", "❌ No, cancelar"];
+
+const CASES = [
+  { n: 1, msisdn: "5564942268", tipo: "MIXTO", mod: "Controlado",
+    fromPlan: "Telcel Libre Controlado 2", fromPrice: 369, toPlan: "Telcel Libre 3 Controlado", toPrice: 449, data: "9 GB (6 + 3 promo)", cb: "$44.90",
+    pid: "700116665", otp: true, code: "345678", proc: "MOCK-CA0F61D044", order: "MOCK-ORDER-1BFB5024", fam: false,
+    chat: [
+      { s: "in", t: "12:25", m: libreTpl("Telcel Libre 2", 369, 5, "18.45"), btn: ["Sí, compáralo"], f: F.abierto + " " + F.mismo },
+      { s: "out", t: "12:27", m: "Sí, compáralo", reply: true },
+      { s: "in", t: "12:27", m: compareLibre("Telcel Libre 2 Controlado", 5, 369, "18.45") },
+      { s: "out", t: "12:29", m: "quiero el Telcel Libre 3 Controlado" },
+      { s: "in", t: "12:29", m: summary("TELCEL LIBRE CONTROLADO 2 Controlado", 369, "Telcel Libre 3 Controlado", 449, "6 GB base + 3 GB de promoción = 9 GB totales", "44.90"), btn: BTN_SUM, f: F.dup + " Sin Messenger en apps.", ok: "Precio, GB y cashback correctos." },
+      { s: "out", t: "12:30", m: "✅ Sí, activar", reply: true },
+      { s: "in", t: "12:30", m: otpMsg("Telcel Libre 3"), f: F.sinMod },
+      { s: "out", t: "12:31", m: "345678" },
+      { s: "in", t: "12:31", m: finalMsg("TELCEL LIBRE CONTROLADO 2", "Telcel Libre 3"), f: F.wa },
+    ],
+    log: [
+      ["18:30:49", "PLAN_CHANGE", "msisdn_api=5564942268 tipo=Controlado\nproduct_id=700116665 renta=369 precio=449 otpAuth=True"],
+      ["18:30:49", "createProcess", "{msisdn: 5564942268, otpAuth: true}\n→ processId MOCK-CA0F61D044"],
+      ["18:30:49", "communicationMessage", "{SEND_OTP, processId: MOCK-CA0F61D044} → SENT"],
+      ["18:31:03", "createProductOrder", "{id: 700116665, processId: MOCK-CA0F61D044, otpAuth: 345678}\n→ orderId MOCK-ORDER-1BFB5024"],
+    ],
+    finds: [["alta", "Recomienda su mismo plan (Libre 2 Controlado)."], ["media", "Plantilla Libre dice “Abierto” a un cliente Controlado."], ["media", "Mensaje final con el WhatsApp en lugar de la línea, sin modalidad ni folio."], ["baja", "Resumen: “CONTROLADO 2 Controlado” y apps sin Messenger."]],
+  },
+  { n: 2, msisdn: "5564952590", tipo: "POSTPAGO", mod: "Abierto",
+    fromPlan: "Telcel Libre 12", fromPrice: 1299, toPlan: "Telcel Libre VIP Abierto", toPrice: 1499, data: "60 GB (40 + 20 promo)", cb: "$629.58",
+    pid: "700116644", otp: true, code: "908787", proc: "MOCK-B653AEC8FA", order: "MOCK-ORDER-A7E394CE", fam: false,
+    chat: [
+      { s: "in", t: "12:38", m: libreTpl("Telcel Libre 12", 1299, 55, "194.85"), btn: ["Sí, compáralo"], f: F.mismo },
+      { s: "out", t: "12:38", m: "Sí, compáralo", reply: true },
+      { s: "in", t: "12:38", m: compareLibre("Telcel Libre 12 Abierto", 55, 1299, "194.85") },
+      { s: "out", t: "12:40", m: "quiero el Telcel Libre VIP Abierto" },
+      { s: "in", t: "12:40", m: summary("TELCEL LIBRE 12 Abierto", 1299, "Telcel Libre VIP Abierto", 1499, "40 GB base + 20 GB de promoción = 60 GB totales", "629.58"), btn: BTN_SUM, ok: "Precio, GB y cashback correctos." },
+      { s: "out", t: "12:40", m: "✅ Sí, activar", reply: true },
+      { s: "in", t: "12:40", m: otpMsg("Telcel Libre VIP"), f: F.sinMod },
+      { s: "out", t: "12:41", m: "908787" },
+      { s: "in", t: "12:41", m: finalMsg("TELCEL LIBRE 12", "Telcel Libre VIP"), f: F.wa },
+    ],
+    log: [
+      ["18:40:56", "PLAN_CHANGE", "msisdn_api=5564952590 tipo=Abierto\nproduct_id=700116644 renta=1299 precio=1499 otpAuth=True"],
+      ["18:40:56", "createProcess", "{msisdn: 5564952590, otpAuth: true}\n→ processId MOCK-B653AEC8FA"],
+      ["18:40:56", "communicationMessage", "{SEND_OTP, processId: MOCK-B653AEC8FA} → SENT"],
+      ["18:41:06", "createProductOrder", "{id: 700116644, processId: MOCK-B653AEC8FA, otpAuth: 908787}\n→ orderId MOCK-ORDER-A7E394CE"],
+    ],
+    finds: [["alta", "Recomienda su mismo plan (Libre 12 Abierto)."], ["media", "Mensaje final con el WhatsApp en lugar de la línea, sin modalidad ni folio."], ["baja", "Resumen: apps sin Messenger."]],
+  },
+  { n: 3, msisdn: "5564955562", tipo: "POSTPAGO", mod: "Abierto",
+    fromPlan: "Telcel Ultra 4", fromPrice: 449, toPlan: "Telcel Libre 4 Abierto", toPrice: 499, data: "15 GB (10 + 5 promo)", cb: "$74.85",
+    pid: "700116641", otp: true, code: "098789", proc: "MOCK-3041B3704D", order: "MOCK-ORDER-B246AF7E", fam: true,
+    chat: [
+      { s: "in", t: "12:44", m: ultraTpl("Telcel Ultra 4", 449, 25), btn: ["Sí, compáralo"], f: F.espacios + " " + F.mismo },
+      { s: "out", t: "12:44", m: "Sí, compáralo", reply: true },
+      { s: "in", t: "12:44", m: compareUltra("Telcel Ultra 4 Abierto", 25, 449) },
+      { s: "out", t: "12:45", m: "quiero el Telcel Libre 4 Abierto" },
+      { s: "in", t: "12:45", m: summary("TELCEL ULTRA 4 Abierto", 449, "Telcel Libre 4 Abierto", 499, "10 GB base + 5 GB de promoción = 15 GB totales", "74.85"), btn: BTN_SUM, ok: "Cambio de Ultra a Libre. Precio, GB y cashback correctos." },
+      { s: "out", t: "12:45", m: "✅ Sí, activar", reply: true },
+      { s: "in", t: "12:46", m: otpMsg("Telcel Libre 4"), f: F.sinMod },
+      { s: "out", t: "12:46", m: "098789" },
+      { s: "in", t: "12:46", m: finalMsg("TELCEL ULTRA 4", "Telcel Libre 4"), f: F.wa },
+    ],
+    log: [
+      ["18:45:49", "ROUTER", "'quiero el Telcel Libre 4 Abierto' → planes_libre\n(0.689, bajo umbral) → LLM"],
+      ["18:45:51", "TOOL", "iniciar_contratacion('Telcel Libre 4 Abierto')\n→ stage=CONTRACT"],
+      ["18:45:53", "LLM", "“En un momento recibirá un SMS…”\n→ descartado, se envía el resumen fijo"],
+      ["18:45:59", "PLAN_CHANGE", "msisdn_api=5564955562 tipo=Abierto\nproduct_id=700116641 renta=449 precio=499 otpAuth=True"],
+      ["18:45:59", "createProcess", "{msisdn: 5564955562, otpAuth: true}\n→ processId MOCK-3041B3704D"],
+      ["18:45:59", "communicationMessage", "{SEND_OTP, processId: MOCK-3041B3704D} → SENT"],
+      ["18:46:08", "createProductOrder", "{id: 700116641, processId: MOCK-3041B3704D, otpAuth: 098789}\n→ orderId MOCK-ORDER-B246AF7E"],
+    ],
+    finds: [["alta", "Recomienda su mismo plan (Ultra 4 Abierto)."], ["media", "Mensaje final con el WhatsApp en lugar de la línea, sin modalidad ni folio."], ["baja", "Plantilla Ultra sin espacios (“Hola,Enoc”, “Ultra 4Abierto”)."], ["ok", "El texto del LLM que prometía un SMS se descartó; el cliente recibió el resumen fijo."]],
+  },
+  { n: 4, msisdn: "5564981086", tipo: "MIXTO", mod: "Controlado",
+    fromPlan: "Telcel Ultra Controlado Ilimitado", fromPrice: 1399, toPlan: "Telcel Libre 12 Controlado", toPrice: 1399, data: "55 GB (sin promo)", cb: "$209.85",
+    pid: "700116647", otp: false, code: null, proc: "MOCK-A98D3A357A", order: "MOCK-ORDER-E0BDD6E1", fam: true,
+    chat: [
+      { s: "in", t: "", m: libreTpl("Telcel Libre 12", 1399, 55, "209.85"), btn: ["Sí, compáralo"], f: F.abierto },
+      { s: "out", t: "", m: "Sí, compáralo", reply: true },
+      { s: "in", t: "", m: compareLibre("Telcel Libre 12 Controlado", 55, 1399, "209.85"), f: "Su plan actual tiene datos ilimitados; pasar a 55 GB no se menciona." },
+      { s: "out", t: "12:52", m: "si me gustaria" },
+      { s: "in", t: "12:52", m: summary("TELCEL ULTRA CONTROLADO ILIMITADO Controlado", 1399, "Telcel Libre 12 Controlado", 1399, "55 GB", "209.85"), btn: BTN_SUM, ok: "55 GB sin promoción: el precio no sube." },
+      { s: "out", t: "12:52", m: "✅ Sí, activar", reply: true },
+      { s: "in", t: "12:52", m: finalMsg("TELCEL ULTRA CONTROLADO ILIMITADO", "Telcel Libre 12"), ok: "Sin código SMS: mismo precio, va directo a la orden.", f: F.wa },
+    ],
+    log: [
+      ["18:52:38", "ROUTER", "'si me gustaria' → confirmacion_activacion\n(0.532, bajo umbral) → LLM"],
+      ["18:52:39", "TOOL", "iniciar_contratacion('Telcel Libre 12 Controlado')\n→ stage=CONTRACT"],
+      ["18:52:40", "LLM", "“En breve recibirá un mensaje de texto con un código…”\n→ descartado"],
+      ["18:52:47", "PLAN_CHANGE", "msisdn_api=5564981086 tipo=Controlado\nproduct_id=700116647 renta=1399 precio=1399 otpAuth=False"],
+      ["18:52:47", "createProcess", "{msisdn: 5564981086, otpAuth: false}\n→ processId MOCK-A98D3A357A"],
+      ["—", "communicationMessage", "no se llama (sin código SMS)"],
+      ["18:52:47", "createProductOrder", "{id: 700116647, processId: MOCK-A98D3A357A, otpAuth: NA}\n→ orderId MOCK-ORDER-E0BDD6E1"],
+    ],
+    finds: [["alta", "Cliente con datos ilimitados recibe oferta de 55 GB al mismo precio; la comparación no lo advierte."], ["media", "Plantilla Libre dice “Abierto” a un cliente Controlado."], ["media", "Mensaje final con el WhatsApp en lugar de la línea, sin modalidad ni folio."], ["ok", "El LLM prometió un código que no existe; el texto se descartó y no llegó al cliente."]],
+  },
+  { n: 5, msisdn: "5564995146", tipo: "MIXTO", mod: "Controlado",
+    fromPlan: "Telcel Libre Controlado 2", fromPrice: 369, toPlan: "Telcel Libre 3 Controlado", toPrice: 449, data: "9 GB (6 + 3 promo)", cb: "$44.90",
+    pid: "700116665", otp: true, code: "098543", proc: "MOCK-43D84F4719", order: "MOCK-ORDER-DE5B4686", fam: false, pending: "Falta validar el rechazo por adeudo con la API real",
+    chat: [
+      { s: "in", t: "12:56", m: libreTpl("Telcel Libre 2", 369, 5, "18.45"), btn: ["Sí, compáralo"], f: F.abierto + " " + F.mismo },
+      { s: "out", t: "12:57", m: "Sí, compáralo", reply: true },
+      { s: "in", t: "12:57", m: compareLibre("Telcel Libre 2 Controlado", 5, 369, "18.45") },
+      { s: "out", t: "12:58", m: "quiero el Telcel Libre 3 Controlado" },
+      { s: "in", t: "12:58", m: summary("TELCEL LIBRE CONTROLADO 2 Controlado", 369, "Telcel Libre 3 Controlado", 449, "6 GB base + 3 GB de promoción = 9 GB totales", "44.90"), btn: BTN_SUM, f: F.dup, ok: "Precio, GB y cashback correctos." },
+      { s: "out", t: "12:59", m: "✅ Sí, activar", reply: true },
+      { s: "in", t: "12:59", m: otpMsg("Telcel Libre 3"), f: F.sinMod },
+      { s: "out", t: "12:59", m: "098543" },
+      { s: "in", t: "12:59", m: finalMsg("TELCEL LIBRE CONTROLADO 2", "Telcel Libre 3"), f: "En modo simulado se activa; con la API real se espera rechazo por adeudo." },
+    ],
+    log: [
+      ["18:58:44", "ROUTER", "'quiero el Telcel Libre 3 Controlado' → comparar_beneficios\n(0.644, bajo umbral) → LLM"],
+      ["18:58:46", "TOOL", "iniciar_contratacion('Telcel Libre 3 Controlado')\n→ stage=CONTRACT"],
+      ["18:59:20", "PLAN_CHANGE", "msisdn_api=5564995146 tipo=Controlado\nproduct_id=700116665 renta=369 precio=449 otpAuth=True"],
+      ["18:59:20", "createProcess", "{msisdn: 5564995146, otpAuth: true}\n→ processId MOCK-43D84F4719"],
+      ["18:59:20", "communicationMessage", "{SEND_OTP, processId: MOCK-43D84F4719} → SENT"],
+      ["18:59:30", "createProductOrder", "{id: 700116665, processId: MOCK-43D84F4719, otpAuth: 098543}\n→ orderId MOCK-ORDER-DE5B4686"],
+    ],
+    finds: [["alta", "Pendiente: QA marcó la línea con adeudo; validar el rechazo con la API real."], ["alta", "Recomienda su mismo plan (Libre 2 Controlado)."], ["media", "Plantilla Libre dice “Abierto” a un cliente Controlado."], ["media", "Mensaje final con el WhatsApp en lugar de la línea, sin modalidad ni folio."]],
+  },
+  { n: 6, msisdn: "5565249848", tipo: "POSTPAGO", mod: "Abierto",
+    fromPlan: "Telcel Ultra 3", fromPrice: 349, toPlan: "Telcel Libre 3 Abierto", toPrice: 399, data: "9 GB (6 + 3 promo)", cb: "$39.90",
+    pid: "700116629", otp: true, code: "987456", proc: "MOCK-46D60A2F18", order: "MOCK-ORDER-A2C38247", fam: true, pending: "Falta validar el rechazo por orden pendiente con la API real",
+    chat: [
+      { s: "in", t: "13:01", m: ultraTpl("Telcel Ultra 3", 349, 15), btn: ["Sí, compáralo"], f: "Plantilla Ultra sin espacios. " + F.mismo },
+      { s: "out", t: "13:01", m: "Sí, compáralo", reply: true },
+      { s: "in", t: "13:01", m: compareUltra("Telcel Ultra 3 Abierto", 15, 349) },
+      { s: "out", t: "13:02", m: "quiero el Telcel Libre 3 Abierto" },
+      { s: "in", t: "13:02", m: summary("TELCEL ULTRA 3 Abierto", 349, "Telcel Libre 3 Abierto", 399, "6 GB base + 3 GB de promoción = 9 GB totales", "39.90"), btn: BTN_SUM, ok: "Cambio de Ultra a Libre. Precio, GB y cashback correctos." },
+      { s: "out", t: "13:02", m: "✅ Sí, activar", reply: true },
+      { s: "in", t: "13:02", m: otpMsg("Telcel Libre 3"), f: F.sinMod },
+      { s: "out", t: "13:02", m: "987456" },
+      { s: "in", t: "13:02", m: finalMsg("TELCEL ULTRA 3", "Telcel Libre 3"), f: "En modo simulado se activa; con la API real se espera rechazo por orden pendiente." },
+    ],
+    log: [
+      ["19:02:33", "ROUTER", "'quiero el Telcel Libre 3 Abierto' → planes_libre\n(0.687, bajo umbral) → LLM"],
+      ["19:02:35", "TOOL", "iniciar_contratacion('Telcel Libre 3 Abierto')\n→ stage=CONTRACT"],
+      ["19:02:36", "LLM", "“Le enviaremos un mensaje de texto (SMS)…”\n→ descartado"],
+      ["19:02:42", "PLAN_CHANGE", "msisdn_api=5565249848 tipo=Abierto\nproduct_id=700116629 renta=349 precio=399 otpAuth=True"],
+      ["19:02:42", "createProcess", "{msisdn: 5565249848, otpAuth: true}\n→ processId MOCK-46D60A2F18"],
+      ["19:02:42", "communicationMessage", "{SEND_OTP, processId: MOCK-46D60A2F18} → SENT"],
+      ["19:02:50", "createProductOrder", "{id: 700116629, processId: MOCK-46D60A2F18, otpAuth: 987456}\n→ orderId MOCK-ORDER-A2C38247"],
+    ],
+    finds: [["alta", "Pendiente: QA marcó orden pendiente; validar el rechazo con la API real."], ["alta", "Recomienda su mismo plan (Ultra 3 Abierto)."], ["media", "Mensaje final con el WhatsApp en lugar de la línea, sin modalidad ni folio."], ["baja", "Plantilla Ultra sin espacios (“Hola,Enoc”, “Ultra 3Abierto”)."]],
+  },
+];
+
+const CSV_HEAD = "linea,nombre,apellidos,plan,tiposuscripcion,rentaplan,estado,nuevoplan,lineaApi";
+const CSV_PLAN = { 1: ["TELCEL LIBRE CONTROLADO 2", "369.0"], 2: ["TELCEL LIBRE 12", "1299.0"], 3: ["TELCEL ULTRA 4", "449.0"],
+  4: ["TELCEL ULTRA CONTROLADO ILIMITADO", "1399.0"], 5: ["TELCEL LIBRE CONTROLADO 2", "369.0"], 6: ["TELCEL ULTRA 3", "349.0"] };
+const csvRow = (c) => ["5664828978", "Enoc", "SPS", CSV_PLAN[c.n][0], c.tipo, CSV_PLAN[c.n][1], "REGISTRADO", "nuevo", c.msisdn];
+const CSV_NOTE = { linea: "WhatsApp del tester", plan: "plan actual de la línea", tiposuscripcion: "define la modalidad", rentaplan: "renta actual", lineaApi: "línea que cambia en Telcel" };
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const money = (v) => "$" + v.toLocaleString("en-US");
+const sevLabel = { alta: "Alta", media: "Media", baja: "Baja", ok: "OK" };
+const split = (m) => [m.slice(0, 2), m.slice(2, 6), m.slice(6)];
+
+function renderHome() {
+  document.getElementById("numbers").innerHTML = CASES.map((c) => {
+    const [a, b, d] = split(c.msisdn);
+    return `<button class="num" type="button" data-n="${c.n}" aria-label="Caso ${c.n}: línea ${c.msisdn}">
+      <span class="n">${c.n}</span><span class="dot${c.pending ? " pend" : ""}"></span>
+      <span class="digits"><span class="area">${a}</span> ${b} ${d}</span>
+    </button>`;
+  }).join("");
+}
+
+function bubble(b) {
+  const time = `<span class="time">${b.t || "&nbsp;"}</span>`;
+  const notes = (b.ok ? `<span class="flag ok">✓ ${esc(b.ok)}</span>` : "") + (b.f ? `<span class="flag">⚑ ${esc(b.f)}</span>` : "");
+  const tag = b.reply ? `<span class="reply-tag">Botón de respuesta</span>` : "";
+  let html = `<div class="msg ${b.s}">${tag}${esc(b.m)}${notes}${time}</div>`;
+  if (b.btn) html += `<div class="btns">${b.btn.map((x) => `<span>${esc(x)}</span>`).join("")}</div>`;
+  return html;
+}
+
+function rulesFor(c) {
+  const r = [
+    ["Modalidad tomada del CSV", `${c.tipo} → ${c.mod}`],
+    ["Línea enviada a Telcel (lineaApi)", `msisdn: ${c.msisdn}`],
+    [c.otp ? "Pide código porque el precio sube" : "Sin código: precio igual a la renta", c.otp ? `otpAuth: true · SEND_OTP enviado` : `otpAuth: false · sin SEND_OTP`],
+    [`Código de producto ${c.mod}`, `id: ${c.pid}`],
+    ["Mismo proceso en API 1 y API 3", c.proc],
+    [c.otp ? "Código del cliente en la orden" : "Orden sin código", `otpAuth: ${c.otp ? c.code : "NA"}`],
+  ];
+  if (c.fam) r.splice(2, 0, ["Cambio de familia Ultra → Libre", "aceptado"]);
+  return r;
+}
+
+function renderCase(n) {
+  const c = CASES.find((x) => x.n === n);
+  const rules = rulesFor(c);
+  const el = document.getElementById("case");
+  el.innerHTML = `
+    <div class="bar">
+      <button type="button" id="back">← Las 6 líneas</button>
+      <span class="spacer"></span>
+      <span class="pos">Caso ${c.n} de 6</span>
+      <button type="button" id="prev" ${c.n === 1 ? "disabled" : ""} aria-label="Caso anterior">←</button>
+      <button type="button" id="next" ${c.n === 6 ? "disabled" : ""} aria-label="Caso siguiente">→</button>
+    </div>
+    <div class="tri">
+      <article class="leaf chatleaf" aria-label="Conversación">
+        <div class="leaf-head"><span class="label">Panel 1</span><h3>La conversación</h3></div>
+        <div class="leaf-body">
+          <div class="chat-head"><div class="avatar">SD</div><div><b>Sps Demos</b><small>WhatsApp 5664828978 · línea QA ${c.msisdn}</small></div></div>
+          <div class="chat"><span class="day">4 de noviembre de 2026</span>${c.chat.map(bubble).join("")}</div>
+        </div>
+      </article>
+      <article class="leaf" aria-label="Caso y reglas">
+        <div class="leaf-head"><span class="label">Panel 2</span><h3>El cambio y sus reglas</h3></div>
+        <div class="leaf-body">
+          <div style="display:grid;gap:10px">
+            <div class="hero-num">${split(c.msisdn).join(" ")}</div>
+            <span class="verdict${c.pending ? " pend" : ""}">${c.pending ? "Pasó · falta API real" : "Pasó"}</span>
+          </div>
+          <div class="move">
+            <div class="box"><span class="label">Plan actual</span><b>${esc(c.fromPlan)}</b><span>${money(c.fromPrice)}</span></div>
+            <span class="arrow" aria-hidden="true">→</span>
+            <div class="box to"><span class="label">Plan nuevo</span><b>${esc(c.toPlan)}</b><span>${money(c.toPrice)}</span></div>
+          </div>
+          <dl class="facts">
+            <div><dt>Modalidad</dt><dd>${c.tipo} → ${c.mod}</dd></div>
+            <div><dt>product_id</dt><dd>${c.pid}</dd></div>
+            <div><dt>Datos</dt><dd>${esc(c.data)}</dd></div>
+            <div><dt>Cashback</dt><dd>${c.cb}</dd></div>
+            <div><dt>Código SMS</dt><dd>${c.otp ? "Sí · " + c.code : "No · NA"}</dd></div>
+            <div><dt>Orden</dt><dd>${c.order}</dd></div>
+          </dl>
+          <div style="display:grid;gap:6px">
+            <span class="label">CSV cargado en la campaña</span>
+            <div class="csv">
+              <div class="csv-head"><span class="mono" style="font-size:12px;color:var(--muted)">1 fila · 9 columnas</span><button type="button" id="copycsv">Copiar CSV</button></div>
+              <dl class="csv-fields">${CSV_HEAD.split(",").map((k, i) => `<dt>${k}</dt><dd${CSV_NOTE[k] ? ' class="key"' : ""}>${esc(csvRow(c)[i])}${CSV_NOTE[k] ? ` <span style="color:var(--muted);font-weight:400">· ${CSV_NOTE[k]}</span>` : ""}</dd>`).join("")}</dl>
+              <pre class="csv-raw" id="csvraw">${esc(CSV_HEAD + "\n" + csvRow(c).join(","))}</pre>
+            </div>
+          </div>
+          <div style="display:grid;gap:6px">
+            <span class="label">Reglas aplicadas · ${rules.length} de ${rules.length} correctas</span>
+            <ul class="rules">${rules.map(([a, b]) => `<li><span class="tick" aria-label="Correcto">✓</span><span><b>${esc(a)}</b><code>${esc(b)}</code></span></li>`).join("")}</ul>
+          </div>
+        </div>
+      </article>
+      <article class="leaf" aria-label="Hallazgos y log">
+        <div class="leaf-head"><span class="label">Panel 3</span><h3>Hallazgos y log</h3></div>
+        <div class="leaf-body">
+          <div style="display:grid;gap:10px">
+            <span class="label">Hallazgos · ${c.finds.length}</span>
+            <ul class="finds">${c.finds.map(([s, t]) => `<li><span class="sev ${s}">${sevLabel[s]}</span><span>${esc(t)}</span></li>`).join("")}</ul>
+          </div>
+          <div style="display:grid;gap:6px">
+            <span class="label">Log del ambiente · UTC · APIs simuladas</span>
+            <ol class="steps">${c.log.map(([t, k, v]) => `<li><span class="t">${esc(t)}</span><span><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></span></li>`).join("")}</ol>
+          </div>
+          ${c.pending ? `<p class="note">⚑ ${esc(c.pending)}.</p>` : ""}
+        </div>
+      </article>
+    </div>`;
+  const copyBtn = el.querySelector("#copycsv");
+  copyBtn.onclick = () => {
+    const text = CSV_HEAD + "\n" + csvRow(c).join(",");
+    const done = () => { copyBtn.textContent = "Copiado"; setTimeout(() => { copyBtn.textContent = "Copiar CSV"; }, 1600); };
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents(el.querySelector("#csvraw")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copyBtn.textContent = "Texto seleccionado"; };
+    try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+  };
+  el.querySelector("#back").onclick = () => { location.hash = ""; };
+  el.querySelector("#prev").onclick = () => { location.hash = "caso-" + (c.n - 1); };
+  el.querySelector("#next").onclick = () => { location.hash = "caso-" + (c.n + 1); };
+}
+
+function route() {
+  const m = /^#caso-([1-6])$/.exec(location.hash);
+  const home = document.getElementById("home"), cs = document.getElementById("case");
+  if (m) { renderCase(Number(m[1])); home.hidden = true; cs.hidden = false; window.scrollTo(0, 0); }
+  else { cs.hidden = true; home.hidden = false; }
+}
+
+document.getElementById("numbers").addEventListener("click", (e) => {
+  const b = e.target.closest(".num");
+  if (b) location.hash = "caso-" + b.dataset.n;
+});
+window.addEventListener("hashchange", route);
+renderHome();
+route();
+</script>

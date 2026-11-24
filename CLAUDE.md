@@ -530,7 +530,7 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 6. **Apps Telcel Ultra** — solo WhatsApp ilimitado; sin apps sociales adicionales
 7. **Claro Video** — sí consume GB del plan, no es ilimitado
 8. **Sin Amazon Prime** — no forma parte de ningún plan
-9. **OTP vía APIs Telcel** — `app/integrations/telcel/` (`create_process` → `send_otp` → `create_product_order`, payloads cifrados AES-256-CBC; mock por API con `TELCEL_<API>_MOCK=true`; `logs/telcel_debug.log` temporal con payloads en claro/cifrados)
+9. **OTP vía APIs Telcel** — `app/integrations/telcel/` (`create_process` → `send_otp` → `create_product_order`, payloads cifrados AES-256-CBC; mock por API con `TELCEL_<API>_MOCK=true` — con el mock de createProductOrder solo es válido el OTP `TELCEL_MOCK_OTP_CODE` (default `123456`), cualquier otro simula `BE_MP_BPS_0040`; `logs/telcel_debug.log` temporal con payloads en claro/cifrados)
 10. **Trato de usted** — siempre, sin excepción (incluyendo `post_sale.py`)
 11. **Modalidad en nombre del plan** — siempre "Telcel Libre 2 Controlado", nunca solo "Telcel Libre 2"
 12. **No exponer reglas internas al cliente** — ni criterios de elegibilidad, ni etiquetas (✅/⛔), ni fechas de vigencia, ni por qué un plan requiere CAC, ni el criterio de la promoción
