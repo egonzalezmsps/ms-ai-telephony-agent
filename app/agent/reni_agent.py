@@ -246,6 +246,12 @@ _WRONG_MODAL_ACTIVATION = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+# Menciones de un canal de derivación (CAC / Soporte)
+_DERIVATION_CHANNEL = re.compile(
+    r'Centro\s+de\s+Atenci[oó]n|\bCAC\b|\bSoporte\b|800\s*220\s*9518',
+    re.IGNORECASE,
+)
+
 
 def _filter_ineligible_plans(text: str, user_message: str, session) -> str:
     """
@@ -291,8 +297,15 @@ def _filter_wrong_modality(text: str, session) -> str:
     if session is None or session.subscription_type != "Controlado":
         return text
 
+    # Una línea que deriva a otro canal ("Para activar un plan en modalidad Abierto,
+    # acuda a un CAC / Soporte 800 220 9518") es la respuesta correcta, no una
+    # sugerencia de activar aquí: se conserva. Antes se borraba (16 de 17 líneas
+    # filtradas en pruebas con Gemini eran derivaciones correctas).
     lines = text.split('\n')
-    result = [line for line in lines if not _WRONG_MODAL_ACTIVATION.search(line)]
+    result = [
+        line for line in lines
+        if not _WRONG_MODAL_ACTIVATION.search(line) or _DERIVATION_CHANNEL.search(line)
+    ]
     return '\n'.join(result)
 
 

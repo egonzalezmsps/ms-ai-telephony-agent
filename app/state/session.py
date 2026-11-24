@@ -28,7 +28,7 @@ class SessionState:
     current_plan_name: str = ""
     previous_plan_name: str = ""
     current_cost: float = 0.0
-    current_plan_gb: Optional[float] = None
+    current_plan_gb: Optional[float] = None  # Ignorado: los GB del plan actual salen solo de LEGACY_PLANS_GB por nombre del plan
     current_plan_cashback: Optional[float] = None
     subscription_type: str = "Abierto"      # "Abierto" | "Controlado"
 

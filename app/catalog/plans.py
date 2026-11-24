@@ -124,8 +124,7 @@ LEGACY_PLANS_GB: dict = {
     "TELCEL PLUS 12": 45.0,
     "TELCEL PLUS 14": 60.0,
     "TELCEL PLUS VIP": 35.0,
-    "TELCEL PLUS VIP": 35.0,
-    "TELCEL LIBRE  2": 5.0,
+    "TELCEL LIBRE 2":  5.0,
     "TELCEL LIBRE 12": 55.0,
     # Telcel Plus — abreviación TP (variante CSV)
     "TP1":   3.0,
@@ -146,15 +145,17 @@ LEGACY_PLANS_GB: dict = {
 
 def get_legacy_gb(plan_name: str) -> Optional[float]:
     """Retorna los GB del plan legacy o None si no se encuentra.
-    Normaliza tildes y mayúsculas para que 'Límite' y 'Limite' sean equivalentes.
+    Normaliza tildes, mayúsculas y espacios para que 'Límite' y 'Limite', o
+    'TELCEL LIBRE  2' y 'Telcel Libre 2', sean equivalentes.
     """
     import unicodedata
 
     def _norm(s: str) -> str:
-        return "".join(
-            c for c in unicodedata.normalize("NFD", s.strip().upper())
+        sin_tildes = "".join(
+            c for c in unicodedata.normalize("NFD", s.upper())
             if unicodedata.category(c) != "Mn"
         )
+        return " ".join(sin_tildes.split())
 
     key = _norm(plan_name)
     for k, v in LEGACY_PLANS_GB.items():

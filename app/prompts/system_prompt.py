@@ -160,7 +160,7 @@ La persona que escribe no es el titular de la línea.
 - NO uses el nombre del cliente en las respuestas.
 """
 
-    current_gb = session.current_plan_gb or get_legacy_gb(session.current_plan_name)
+    current_gb = get_legacy_gb(session.current_plan_name)
     gb_line = (
         f"GB actuales: {current_gb:g} GB"
         if current_gb

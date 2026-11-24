@@ -82,7 +82,7 @@ OCI_KEY_FILE=./.oci/oci_api_key.pem
 
 # LLM params
 LLM_TEMPERATURE=0.3
-LLM_MAX_TOKENS=600
+LLM_MAX_TOKENS=1024
 LLM_REASONING_EFFORT=none          # opcional, default none. Gemini 2.5 gasta tokens de razonamiento del
                                    # mismo max_tokens (cortaba respuestas); vacío = no enviar el parámetro
 
@@ -485,7 +485,7 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 | `phone_number` | `str` | Identificador de sesión en PostgreSQL |
 | `current_plan_name` | `str` | Nombre del plan actual contratado |
 | `current_cost` | `float` | Renta mensual actual |
-| `current_plan_gb` | `Optional[float]` | GB del plan actual (si se conoce) |
+| `current_plan_gb` | `Optional[float]` | **Ignorado.** Los GB del plan actual salen únicamente de `get_legacy_gb(current_plan_name)` → `LEGACY_PLANS_GB` (`plans.py`); nunca del `CATALOG`. Si el plan no está en la lista, no hay GB |
 | `current_plan_cashback` | `Optional[float]` | Cashback del plan actual |
 | `previous_plan_name` | `str` | Nombre del plan antes del cambio (default `""`); usado en el mensaje de cierre cuando `stage=="END"` y `end_reason=="success"` |
 | `subscription_type` | `str` | `"Abierto"` o `"Controlado"` |

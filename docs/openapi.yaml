@@ -881,6 +881,8 @@ components:
         current_plan_gb:
           type: number
           nullable: true
+          deprecated: true
+          description: Ignorado. Los GB del plan actual se obtienen del nombre del plan (`current_plan_name`) en el catálogo de planes anteriores (LEGACY_PLANS_GB).
         current_plan_cashback:
           type: number
           nullable: true

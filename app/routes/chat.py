@@ -31,7 +31,7 @@ class ChatRequest(BaseModel):
     full_name: Optional[str] = ""
     current_plan_name: Optional[str] = "Telcel Plus 150"
     current_cost: Optional[float] = 150.0
-    current_plan_gb: Optional[float] = None
+    current_plan_gb: Optional[float] = None    # Ignorado: los GB del plan actual salen solo de LEGACY_PLANS_GB por nombre del plan
     current_plan_cashback: Optional[float] = None
     subscription_type: Optional[str] = "Abierto"
     has_promotion: Optional[bool] = True

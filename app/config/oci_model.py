@@ -40,7 +40,9 @@ def build_oci_model() -> LiteLLMModel:
         "oci_region": region,
         "oci_compartment_id": compartment_id,
         "temperature": float(os.environ.get("LLM_TEMPERATURE", "0.3")),
-        "max_tokens": int(os.environ.get("LLM_MAX_TOKENS", "600")),
+        # 1024: con el catálogo en modo datos, el LLM redacta listas de hasta ~16 planes
+        # (clientes de renta baja) y 600 las cortaba. Sin razonamiento es solo un tope.
+        "max_tokens": int(os.environ.get("LLM_MAX_TOKENS", "1024")),
         "top_p": 0.9,
     }
 

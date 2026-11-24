@@ -529,7 +529,7 @@ def make_tools(state, catalog_as_data: bool = False):
                     else anclado_obj.gb_base
                 )
                 diferencia_precio = rec_price - current_cost
-                current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
+                current_gb = get_legacy_gb(state.current_plan_name)
 
                 if current_gb and not anclado_obj.is_unlimited:
                     diferencia_vs_actual = rec_gb - current_gb
@@ -825,7 +825,7 @@ def make_tools(state, catalog_as_data: bool = False):
             if anclado_obj and not anclado_obj.is_unlimited:
                 current_gb = anclado_obj.gb_base
             else:
-                current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name) or 0
+                current_gb = get_legacy_gb(state.current_plan_name) or 0
             # Ordenar ascendente por GB — mostrar los más cercanos primero
             planes = sorted(
                 [p for p in eligible if p.is_unlimited or p.gb_base > current_gb],
@@ -946,7 +946,7 @@ def make_tools(state, catalog_as_data: bool = False):
         current_cost = state.current_cost
         has_promo = bool(state.has_promotion)
 
-        current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
+        current_gb = get_legacy_gb(state.current_plan_name)
         gb_actual_str = f"{current_gb:g} GB" if current_gb else "datos limitados"
 
         if state.plan_anclado:
@@ -1067,7 +1067,7 @@ def make_tools(state, catalog_as_data: bool = False):
                 and plan_obj.family == "Telcel Libre" and precio_anclado > state.current_cost + PRICE_EPSILON_MXN
             )
             new_gb = plan_obj.gb_promo if has_promo_plan else plan_obj.gb_base
-            current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
+            current_gb = get_legacy_gb(state.current_plan_name)
             new_cashback = get_cashback(plan_obj, state.subscription_type)
             current_cashback = state.current_plan_cashback or 0.0
 
@@ -1222,7 +1222,7 @@ def make_tools(state, catalog_as_data: bool = False):
         has_promo_plan = has_promo and plan.gb_promo > plan.gb_base and new_price > current_cost + PRICE_EPSILON_MXN
         new_gb = plan.gb_promo if has_promo_plan else plan.gb_base
 
-        current_gb = state.current_plan_gb or get_legacy_gb(state.current_plan_name)
+        current_gb = get_legacy_gb(state.current_plan_name)
         current_cashback = state.current_plan_cashback or 0.0
 
         lineas = []
