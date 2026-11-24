@@ -59,6 +59,42 @@ def _catalogo_como_datos(resultado: str) -> str:
     return _INSTRUCCION_DATOS_CATALOGO.format(datos=datos)
 
 
+# ── Modalidad pedida por el cliente (compartido por presentar_planes y comparar_planes) ──
+# Se detecta por raíz para cubrir abierto/abierta/abiertos y controlado/controlada.
+_RAIZ_MODALIDAD = {"Abierto": "abiert", "Controlado": "controlad"}
+_PALABRA_MODALIDAD = re.compile(r"\b(?:abiert|controlad)\w*", re.IGNORECASE)
+
+
+def _modalidad_alterna(modalidad_cliente: str) -> str:
+    return "Abierto" if modalidad_cliente == "Controlado" else "Controlado"
+
+
+def _pide_otra_modalidad(texto: str, modalidad_cliente: str) -> bool:
+    """True si el texto menciona la modalidad distinta a la del cliente."""
+    raiz = _RAIZ_MODALIDAD[_modalidad_alterna(modalidad_cliente)]
+    return raiz in quitar_tildes(texto.lower())
+
+
+def _quitar_modalidad(texto: str) -> str:
+    """Quita cualquier forma de 'abierto/controlado' (para buscar el plan por nombre)."""
+    return " ".join(_PALABRA_MODALIDAD.sub(" ", texto).split())
+
+
+def _texto_derivacion_modalidad(modalidad_cliente: str, plan_anclado: str) -> str:
+    """Respuesta rígida cuando el cliente pide un plan en la otra modalidad (→ CAC)."""
+    alt_modality = _modalidad_alterna(modalidad_cliente)
+    return (
+        f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
+        f"Para planes en modalidad {alt_modality}, puede gestionar "
+        f"el cambio en un Centro de Atención a Clientes (CAC) "
+        f"o comunicarse con Soporte al 800 220 9518.\n\n"
+        f"Dicho esto, en su modalidad actual contamos con el "
+        f"*{plan_anclado}* que le ofrece más GB y beneficios "
+        f"sin necesidad de cambiar de modalidad.\n\n"
+        f"¿Le gustaría activar el *{plan_anclado}*?"
+    )
+
+
 def make_tools(state, catalog_as_data: bool = False):
     """Fabrica las herramientas de acción para una sesión específica.
 
@@ -149,8 +185,18 @@ def make_tools(state, catalog_as_data: bool = False):
         - "¿cuándo aplican las promociones?"
         - "¿qué planes tienen promoción?"
 
+        NO la uses cuando el cliente pregunta por qué no puede activar un plan
+        específico que nombra ("¿por qué no puedo activar el libre 1?",
+        "¿por qué no me dejas contratar el ultra 3?"). Para eso usa
+        presentar_planes(tipo="especifico", criterio=<nombre del plan>).
+
+        Usa tema="modalidad" SOLO cuando el cliente pregunte por la modalidad
+        (Abierto / Controlado) que se le ofrece: "¿por qué en abierto?",
+        "¿por qué controlado?". NO lo uses para preguntas sobre un plan específico.
+
         Args:
             tema: "plan" | "promocion" | "modalidad" | "criterio" | "canal"
+
 
             Usa tema="canal" cuando el cliente pregunte:
             - "¿por qué tengo que ir al CAC?"
@@ -209,10 +255,10 @@ def make_tools(state, catalog_as_data: bool = False):
             ),
             "modalidad": (
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                f"Le ofrecemos planes en modalidad {state.subscription_type} "
-                f"porque es la misma que tiene en su plan actual. "
+                f"Le ofrecemos planes en su modalidad actual, *{state.subscription_type}*. "
                 f"Para cambiar de modalidad puede acudir a un CAC "
-                f"o llamar al 800 220 9518.\n\n"
+                f"o llamar al 800 220 9518, ya que el cambio de modalidad "
+                f"no se puede realizar por este medio.\n\n"
                 f"¿Le gustaría activar el *{state.plan_anclado}*?"
             ),
             "criterio": (
@@ -252,6 +298,10 @@ def make_tools(state, catalog_as_data: bool = False):
         - Equipos o dispositivos
         - Facturación o pagos
         - Cualquier tema que no sea planes o apps digitales
+
+        Úsala también cuando el cliente pregunte por qué no puede activar un plan
+        que nombra ("¿por qué no puedo activar el libre 1?", "¿por qué no me dejas
+        contratar el ultra 3?"): tipo="especifico", criterio=nombre del plan.
 
         Args:
             criterio: descripción o nombre específico de lo que busca el cliente
@@ -372,24 +422,8 @@ def make_tools(state, catalog_as_data: bool = False):
             tipo = "general"
 
         # Detectar si el cliente pide planes de modalidad diferente
-        # (por raíz, para cubrir abierto/abierta/abiertos y controlado/controlada)
-        criterio_lower = quitar_tildes(criterio.lower())
-        alt_modality = "Abierto" if modality == "Controlado" else "Controlado"
-        _raiz_alt = "abiert" if alt_modality == "Abierto" else "controlad"
-
-        pide_modalidad_diferente = _raiz_alt in criterio_lower
-
-        if pide_modalidad_diferente:
-            return (
-                f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n"
-                f"Para planes en modalidad {alt_modality}, puede gestionar "
-                f"el cambio en un Centro de Atención a Clientes (CAC) "
-                f"o comunicarse con Soporte al 800 220 9518.\n\n"
-                f"Dicho esto, en su modalidad actual contamos con el "
-                f"*{state.plan_anclado}* que le ofrece más GB y beneficios "
-                f"sin necesidad de cambiar de modalidad.\n\n"
-                f"¿Le gustaría activar el *{state.plan_anclado}*?"
-            )
+        if _pide_otra_modalidad(criterio, modality):
+            return _texto_derivacion_modalidad(modality, state.plan_anclado)
 
         def gb_label(plan) -> str:
             price = get_price(plan, modality)
@@ -1205,8 +1239,14 @@ def make_tools(state, catalog_as_data: bool = False):
         current_cost = state.current_cost
         has_promo = bool(state.has_promotion)
 
-        # Limpiar el plan_id — quitar modalidad si viene incluida
-        plan_id_clean = plan_id.replace(f" {modality}", "").strip()
+        # El cliente pide el plan en la OTRA modalidad (ej. "Telcel Libre 4 Abierto"
+        # siendo Controlado) → derivación al CAC. Antes se ignoraba la modalidad y se
+        # comparaba en la del cliente, tapando la pregunta.
+        if plan_id and _pide_otra_modalidad(plan_id, modality):
+            return _texto_derivacion_modalidad(modality, state.plan_anclado)
+
+        # Limpiar el plan_id — quitar cualquier forma de modalidad (abierto/abierta/…)
+        plan_id_clean = _quitar_modalidad(plan_id)
         # Agregar "Telcel" si no viene
         if not plan_id_clean.lower().startswith("telcel"):
             plan_id_clean = f"Telcel {plan_id_clean}"

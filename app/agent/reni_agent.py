@@ -19,7 +19,7 @@ from strands import Agent
 from app.catalog.plans import CATALOG, PRICE_EPSILON_MXN, find_plan, get_price, recommend_plan
 from app.config.oci_model import oci_model
 from app.prompts.system_prompt import build_system_prompt
-from app.tools.telcel_tools import make_tools
+from app.tools.telcel_tools import make_tools, quitar_tildes
 from app.state.session import SessionState
 from app.contract.contract_flow import handle_contract_turn, build_summary_template
 from app.contract.post_sale import build_post_sale_message
@@ -129,7 +129,6 @@ def clean_response(
 
     return (before + "\n\n" + last_q).strip() if before else last_q
 
-_CAC_MARKERS = ["cac", "800 220 9518", "centro de atención a clientes"]
 
 _TECHNICAL_CAC_PHRASES = [
     re.compile(r"ya que su precio \(\$[\d,]+/mes\) es menor a su renta actual \(\$[\d,]+/mes\)", re.IGNORECASE),
@@ -309,6 +308,50 @@ def _filter_wrong_modality(text: str, session) -> str:
     return '\n'.join(result)
 
 
+# Regla de negocio: el cambio de plan es irreversible. Texto exacto (general_rules,
+# RESTRICCIONES INVIOLABLES) — nunca afirmar ni negar penalización.
+_TEXTO_CAMBIO_IRREVERSIBLE = (
+    "Una vez activado, el cambio de plan es definitivo. Si tiene dudas, "
+    "puede consultar con Soporte al 800 220 9518 antes de confirmar."
+)
+
+_PLAN_EN_MENSAJE = re.compile(r"\b(libre|ultra)\s+(\d+|vip|ilimitado)\b", re.IGNORECASE)
+
+
+def _plan_mencionado(user_message: str):
+    """Plan del catálogo que el cliente nombra en su mensaje (ej. 'libre 1', 'ultra 5'),
+    con límite de palabra para no confundir 'libre 1' con 'libre 12'. None si no hay."""
+    m = _PLAN_EN_MENSAJE.search(quitar_tildes(user_message))
+    return find_plan(f"Telcel {m.group(1)} {m.group(2)}") if m else None
+
+
+def _respuesta_activabilidad(plan, user_message: str, session) -> str:
+    """Respuesta fija a '¿por qué no puedo activar <plan>?' revisando el plan:
+    otra modalidad → CAC (motivo permitido); precio < renta → CAC sin motivo;
+    activable → se confirma que sí puede activarse aquí."""
+    modality = session.subscription_type
+    alt = "Abierto" if modality == "Controlado" else "Controlado"
+    msg = quitar_tildes(user_message.lower())
+    if ("abiert" if alt == "Abierto" else "controlad") in msg:
+        return (
+            f"Para activar el *{plan.plan_id} {alt}*, comuníquese con Soporte al "
+            f"800 220 9518 o acuda a un Centro de Atención a Clientes, ya que el "
+            f"cambio de modalidad no se puede realizar por este medio.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+    if get_price(plan, modality) < session.current_cost - PRICE_EPSILON_MXN:
+        return (
+            f"Para activar el *{plan.plan_id} {modality}*, comuníquese con Soporte al "
+            f"800 220 9518 o acuda a un Centro de Atención a Clientes.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+    session.plan_anclado = f"{plan.plan_id} {modality}"
+    return (
+        f"El *{plan.plan_id} {modality}* sí puede activarse aquí.\n\n"
+        f"¿Le gustaría activar el *{session.plan_anclado}*?"
+    )
+
+
 _NOT_TITULAR_KEYWORDS = [
     "no soy", "no es mi nombre", "soy su esposa", "soy su hijo",
     "soy su madre", "no me llamo", "equivocado de persona",
@@ -377,63 +420,6 @@ def _detect_titular_issues(session, user_message: str):
                 )
 
     return None
-
-
-def _strip_incorrect_cac(
-    text: str,
-    user_message: str,
-    session: SessionState,
-) -> str:
-    """
-    Safety net: si el LLM derivó al CAC para un plan que es activable en este canal
-    (misma modalidad y precio >= renta actual), elimina esa derivación y cierra
-    con la pregunta de activación correcta.
-    """
-    if not any(m in text.lower() for m in _CAC_MARKERS):
-        return text
-
-    # Buscar plan mencionado en el mensaje del cliente
-    msg_lower = user_message.lower()
-    mentioned_plan = None
-    for plan in CATALOG:
-        if plan.plan_id.lower() in msg_lower:
-            mentioned_plan = plan
-            break
-    if mentioned_plan is None:
-        for m in re.findall(r'(?:libre|ultra)\s+\w+', msg_lower):
-            mentioned_plan = find_plan("telcel " + m)
-            if mentioned_plan:
-                break
-
-    if mentioned_plan is None:
-        return text
-
-    # Verificar activabilidad: precio >= renta actual en la modalidad del cliente
-    plan_price = get_price(mentioned_plan, session.subscription_type)
-    if plan_price < session.current_cost - PRICE_EPSILON_MXN:
-        return text  # plan genuinamente más barato → CAC es correcto
-
-    # Verificar si el cliente pide explícitamente modalidad diferente a la suya
-    msg_upper = user_message.upper()
-    if "ABIERTO" in msg_upper and session.subscription_type == "Controlado":
-        return text
-    if "CONTROLADO" in msg_upper and session.subscription_type == "Abierto":
-        return text
-
-    # Eliminar párrafos/líneas que contengan derivación al CAC o Soporte
-    paragraphs = re.split(r'\n+', text)
-    cleaned = [p for p in paragraphs if not any(m in p.lower() for m in _CAC_MARKERS)]
-    clean_text = "\n".join(cleaned).strip()
-
-    # Agregar pregunta de activación si no hay una
-    if "¿Le gustaría activar" not in clean_text:
-        activation_q = (
-            f"¿Le gustaría activar el "
-            f"{mentioned_plan.plan_id} {session.subscription_type}?"
-        )
-        clean_text = (clean_text + "\n\n" + activation_q).strip()
-
-    return clean_text
 
 
 def _check_invented_plans(text: str, session: SessionState) -> str:
@@ -602,8 +588,33 @@ def run_turn(
     # ── Clasificación semántica de intención ─────────────────────────────────
     _intencion = classify(user_message)
 
+    # ── "¿Por qué no puedo activar <plan>?" — revisa el plan nombrado ─────────
+    # Tiene prioridad sobre la respuesta genérica de por_que_cac: si el cliente
+    # nombra un plan, la respuesta depende de si ese plan es activable aquí.
+    # Sin plan nombrado, por_que_no_activable sigue al LLM.
+    if _intencion in ("por_que_no_activable", "por_que_cac"):
+        _plan_msg = _plan_mencionado(user_message)
+        if _plan_msg is not None:
+            response_text = _respuesta_activabilidad(_plan_msg, user_message, session)
+            updated_history = history + [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": response_text},
+            ]
+            return _apply_debug(response_text, [], user_message), updated_history
+
     # ── Router semántico — reemplaza todos los bloques pre-LLM de listas ─────
-    if _intencion == "vigencia_promo":
+    if _intencion == "cambio_irreversible":
+        response_text = (
+            f"{_TEXTO_CAMBIO_IRREVERSIBLE}\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
+    elif _intencion == "vigencia_promo":
         response_text = (
             f"Esta promoción tiene vigencia el día de hoy. "
             f"Si en otro momento desea revisarla, con gusto le ayudamos "
@@ -744,25 +755,22 @@ def run_turn(
             return _apply_debug(response_text, ["informar_plan_actual"], user_message), updated_history
 
     elif _intencion == "comparar_beneficios":
-        plan_match = re.search(
-            r'telcel\s+(libre|ultra)\s+(\d+|vip|ilimitado)',
-            user_message,
-            re.IGNORECASE
-        )
-        if plan_match:
-            plan_mencionado = f"Telcel {plan_match.group(1).capitalize()} {plan_match.group(2).upper() if plan_match.group(2).lower() in ['vip'] else plan_match.group(2).capitalize()}"
-            from app.catalog.plans import find_plan
-            plan_obj = find_plan(plan_mencionado)
-            if plan_obj:
-                session.plan_anclado = f"{plan_obj.plan_id} {session.subscription_type}"
-                logger.info("[COMPARAR] plan_mencionado='%s' phone=%s",
-                           session.plan_anclado, session.phone_number)
+        # Plan nombrado por el cliente ("libre 4", con o sin "telcel") + la modalidad
+        # que mencione: comparar_planes decide (otra modalidad → CAC; misma → compara
+        # y actualiza plan_anclado solo si es activable). Sin plan → plan_anclado.
+        plan_id_cmp = ""
+        plan_obj = _plan_mencionado(user_message)
+        if plan_obj:
+            msg_n = quitar_tildes(user_message.lower())
+            modalidad_msg = " Abierto" if "abiert" in msg_n else (" Controlado" if "controlad" in msg_n else "")
+            plan_id_cmp = f"{plan_obj.plan_id}{modalidad_msg}"
+            logger.info("[COMPARAR] plan_mencionado='%s' phone=%s", plan_id_cmp, session.phone_number)
 
         from app.tools.telcel_tools import make_tools
         tools = make_tools(session)
         comparar_fn = next((t for t in tools if t.tool_name == "comparar_planes"), None)
         if comparar_fn:
-            result = comparar_fn(plan_id="")
+            result = comparar_fn(plan_id=plan_id_cmp)
             response_text = result.replace(
                 "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
             )
@@ -1377,7 +1385,6 @@ def run_turn(
     is_rejection = user_message.strip().lower() in REJECTION_WORDS
     response_text = _check_invented_plans(response_text, session)
     response_text = clean_response(response_text, is_rejection=is_rejection, session=session, user_message=user_message)
-    response_text = _strip_incorrect_cac(response_text, user_message, session)
 
     updated_history = history + [
         {"role": "user", "content": user_message},

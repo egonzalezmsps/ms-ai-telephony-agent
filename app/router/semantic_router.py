@@ -29,6 +29,8 @@ THRESHOLDS = {
     "reglas_internas": 0.78,
     "proceso_activacion": 0.78,
     "por_que_cac": 0.75,
+    "por_que_no_activable": 0.70,
+    "cambio_irreversible": 0.72,
     "facturacion": 0.75,
     "equipos": 0.75,
     "info_plan_actual": 0.72,
@@ -92,14 +94,51 @@ INTENCIONES = {
         "pasos para activar el plan",
         "como activo mi plan",
     ],
+    # Solo frases que mencionan el CANAL (CAC/Soporte/tienda): la respuesta fija es
+    # genérica y solo es correcta cuando el cliente pregunta por qué lo mandaron allá.
+    # Las preguntas "¿por qué no puedes activarlo aquí?" dependen del plan y se
+    # resuelven en por_que_no_activable (revisa el plan) o en el LLM.
     "por_que_cac": [
         "porque tengo que ir al cac",
         "por que tengo que llamar a soporte",
-        "no puedes cambiarlo tu mismo",
         "por que me mandas con soporte",
-        "no puedes hacer el cambio tu",
-        "porque no puedes activarlo aqui",
-        "por que no puedes hacerlo",
+        "por que me mandas al cac",
+        "por que tengo que llamar",
+        "para que me mandas a una tienda",
+        "por que tengo que ir a un centro de atencion",
+        "por que tengo que ir a una sucursal",
+    ],
+    # "¿Por qué no puedo activar <plan>?" — solo se responde sin LLM si el mensaje
+    # nombra un plan del catálogo (run_turn revisa modalidad y precio vs renta).
+    "por_que_no_activable": [
+        "por que no puedo activar el libre 1 aqui",
+        "por que no me dejas activar ese plan",
+        "por que no puedo contratar ese plan contigo",
+        "por que ese plan no se puede activar",
+        "por que no me activas el libre 1",
+        "por que no puedo cambiarme a ese plan",
+        "el ultra 3 por que no lo puedo activar",
+        "por que no puedo activar el ultra 3",
+    ],
+    # El cambio de plan es irreversible. Respuesta fija (regla de negocio): nunca
+    # afirmar ni negar penalización, nunca sugerir que se puede volver al plan anterior.
+    # NO incluir "si digo que no / si no acepto" (rechazar la oferta no tiene consecuencia).
+    "cambio_irreversible": [
+        "puedo regresar a mi plan anterior",
+        "si me arrepiento puedo volver a mi plan",
+        "puedo cancelar despues del cambio",
+        "si cancelo despues hay penalizacion",
+        "el cambio es reversible",
+        "puedo deshacer el cambio de plan",
+        "si no me gusta el plan nuevo puedo regresarme",
+        "puedo volver a mi plan actual despues",
+        "hay penalizacion por cancelar el plan nuevo",
+        "si me cambio y no me gusta que pasa",
+        "puedo revertir el cambio",
+        "me puedo regresar a mi plan de antes",
+        "y si me arrepiento",
+        "si no me convence puedo regresar a mi plan",
+        "me puedo regresar a mi plan actual",
     ],
     "facturacion": [
         "en que fecha del mes se realiza el cobro",

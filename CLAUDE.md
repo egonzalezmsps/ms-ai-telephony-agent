@@ -218,11 +218,18 @@ run_turn() en reni_agent.py
     │   y stage=END; si pasó a PERSUASION → responde con manejar_objecion("") sin LLM.
     │
     ├── ── ROUTER SEMÁNTICO (classify(), embeddings Cohere/OCI) ──────────────
-    │   │   Clasifica el mensaje contra ~15 intenciones (ver sección "Router semántico").
+    │   │   Clasifica el mensaje contra ~18 intenciones (ver sección "Router semántico").
     │   │   Si supera el threshold de la intención, responde SIN LLM:
     │   ├── vigencia_promo / criterio_promo / proceso_activacion / por_que_cac /
     │   │   facturacion → respuesta fija con cierre "¿Le gustaría activar el {plan_anclado}?"
     │   ├── equipos → "no incluye equipo, acuda a un CAC" + cierre con {plan_anclado}
+    │   ├── cambio_irreversible → texto exacto "Una vez activado, el cambio de plan es
+    │   │   definitivo…" (regla de negocio: nunca afirmar/negar penalización)
+    │   ├── por_que_no_activable / por_que_cac CON un plan nombrado en el mensaje →
+    │   │   _respuesta_activabilidad(): revisa modalidad y precio vs renta del plan
+    │   │   (otra modalidad / más barato → derivación sin motivo técnico; activable → "sí
+    │   │   puede activarse aquí" y actualiza plan_anclado). Tiene prioridad sobre la
+    │   │   respuesta genérica de por_que_cac. Sin plan nombrado, por_que_no_activable → LLM
     │   ├── reglas_internas → "Solo puedo ayudarle con información sobre planes y
     │   │   beneficios de Telcel" (salvo que el mensaje contenga keywords de beneficio)
     │   ├── info_plan_actual → informar_plan_actual()
@@ -283,7 +290,6 @@ run_turn() en reni_agent.py
     │
     ├── _INTERNAL_LEAK_TERMS — si el LLM menciona "OTP"/"Verificación de seguridad"
     │       reemplaza la respuesta completa con texto genérico de proceso
-    ├── _strip_incorrect_cac() — elimina derivaciones al CAC para planes activables
     │
     └── Guardar historial en PostgreSQL (máx 20 mensajes = 10 intercambios)
 ```
@@ -454,7 +460,7 @@ Promoción de GB: solo aplica en Telcel Libre cuando `precio_nuevo > renta_actua
 
 ## Router semántico (`app/router/semantic_router.py`)
 
-Clasifica el mensaje del cliente en una de ~15 intenciones usando embeddings de
+Clasifica el mensaje del cliente en una de ~18 intenciones usando embeddings de
 `cohere.embed-v4.0` (OCI Generative AI, `OCI_EMBED_MODEL_ID`), no matching de keywords.
 
 - `INTENCIONES` — dict de `intencion → [frases de referencia en español, minúsculas, sin acentos/puntuación]`
@@ -466,7 +472,8 @@ Clasifica el mensaje del cliente en una de ~15 intenciones usando embeddings de
   threshold, o `None` si no (o si los embeddings no están cargados, o falla la llamada a OCI)
 
 Intenciones actuales: `vigencia_promo`, `criterio_promo`, `reglas_internas`,
-`proceso_activacion`, `por_que_cac`, `facturacion`, `equipos`, `info_plan_actual`,
+`proceso_activacion`, `por_que_cac`, `por_que_no_activable`, `cambio_irreversible`,
+`facturacion`, `equipos`, `info_plan_actual`,
 `comparar_beneficios`, `planes_mas_baratos`, `planes_mas_caros`, `planes_ultra`,
 `planes_libre`, `planes_mas_gb`, `otra_recomendacion`, `confirmacion_activacion`.
 
@@ -552,7 +559,6 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 |---|---|
 | `_check_invented_plans()` | Detecta planes/precios inventados por el LLM fuera del catálogo |
 | `_INTERNAL_LEAK_TERMS` | Si el LLM menciona "OTP", "Verificación de seguridad" → reemplaza la respuesta completa con texto genérico de proceso |
-| `_strip_incorrect_cac(text, user_msg, session)` | Derivaciones incorrectas al CAC para planes que sí son activables |
 
 ### Pre-LLM (sin invocar modelo)
 
@@ -560,7 +566,7 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 |---|---|
 | `_detect_titular_issues()` | No-titular y nombre incorrecto → respuesta fija (se evalúa primero, antes del router) |
 | `handle_contract_turn()` (`stage=="CONTRACT"`) | Flujo determinístico de contratación — tiene prioridad sobre el router semántico |
-| Router semántico `classify()` | Clasifica en ~15 intenciones por embeddings; ver sección "Router semántico" — reemplazó las listas de keywords (`_PROMO_QUESTIONS`, `_REGLAS_QUESTIONS`, `_PROCESO_QUESTIONS`, `_FACTURACION_QUESTIONS`, `_GB_PLAN_QUESTIONS`, `_MAS_BARATO_QUESTIONS`, `_ULTRA_QUESTIONS` — ya no existen en el código) |
+| Router semántico `classify()` | Clasifica en ~18 intenciones por embeddings; ver sección "Router semántico" — reemplazó las listas de keywords (`_PROMO_QUESTIONS`, `_REGLAS_QUESTIONS`, `_PROCESO_QUESTIONS`, `_FACTURACION_QUESTIONS`, `_GB_PLAN_QUESTIONS`, `_MAS_BARATO_QUESTIONS`, `_ULTRA_QUESTIONS` — ya no existen en el código) |
 | `_CAC_QUESTIONS` | Fallback de matching exacto tras el router (la intención `por_que_cac` ya cubre el caso principal) |
 | Modalidad alternativa | "¿En controlado?" → llama `presentar_planes(criterio=alt_modality)` |
 | `esperando_criterio_recomendacion` | Respuesta al criterio (GB/cashback/apps) → llama `presentar_planes` según preferencia |

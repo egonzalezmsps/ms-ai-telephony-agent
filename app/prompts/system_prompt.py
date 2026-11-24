@@ -177,37 +177,16 @@ Modalidad: {session.subscription_type}
 {f"Perfil de uso: {session.usage_summary}" if session.usage_summary else ""}
 """
 
-    reasons_block = f"""
-# RAZONES DE LA RECOMENDACIÓN
-Estas son las razones exactas por las que se le ofrece este plan a este cliente.
-Úsalas cuando el cliente pregunte por qué.
-
-1. MODALIDAD {session.subscription_type}:
-   Se le ofrece modalidad {session.subscription_type} porque es la misma
-   que tiene en su plan actual. La modalidad no puede cambiar en este canal —
-   para cambiarla debe acudir a un CAC.
-
-2. FAMILIA TELCEL LIBRE:
-   Se le recomienda Telcel Libre (y no Telcel Ultra) porque la campaña está
-   orientada a planes con cashback y apps ilimitadas, que son beneficios
-   exclusivos de la familia Telcel Libre. Telcel Ultra no incluye cashback
-   ni apps ilimitadas.
-
-3. PROMOCIÓN DE GB:
-   {("El plan recomendado tiene GB de promoción porque su precio es mayor a su renta actual ($"
-     + f"{session.current_cost:.0f}"
-     + "/mes). La promoción aplica en planes de migración hacia arriba. Si el plan tuviera "
-     + "el mismo precio que su renta actual, no tendría GB adicionales de promoción.")
-    if target and get_price(target, session.subscription_type) > session.current_cost + PRICE_EPSILON_MXN
-    else "El plan recomendado no tiene promoción de GB porque su precio es igual a su renta actual."}
-"""
+    # Nota: aquí existía un bloque "RAZONES DE LA RECOMENDACIÓN" que le daba al LLM
+    # los criterios internos (modalidad, promoción por precio > renta) y le pedía
+    # usarlos — contradecía las reglas de no exponer criterios. Las preguntas de
+    # "por qué" las resuelven el router y responder_por_que con textos cerrados.
 
     catalog_block = build_catalog_block(session)
 
     return (
         f"{GENERAL_RULES}\n"
         f"{client_context}\n"
-        f"{reasons_block}\n"
         f"{target_block}\n"
         f"{titular_note}\n"
         f"{catalog_block}"
