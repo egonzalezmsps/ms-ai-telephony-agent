@@ -220,6 +220,7 @@ run_turn() en reni_agent.py
     │   │   Si supera el threshold de la intención, responde SIN LLM:
     │   ├── vigencia_promo / criterio_promo / proceso_activacion / por_que_cac /
     │   │   facturacion → respuesta fija con cierre "¿Le gustaría activar el {plan_anclado}?"
+    │   ├── equipos → "no incluye equipo, acuda a un CAC" + cierre con {plan_anclado}
     │   ├── reglas_internas → "Solo puedo ayudarle con información sobre planes y
     │   │   beneficios de Telcel" (salvo que el mensaje contenga keywords de beneficio)
     │   ├── info_plan_actual → informar_plan_actual()
@@ -455,7 +456,7 @@ Clasifica el mensaje del cliente en una de ~15 intenciones usando embeddings de
   threshold, o `None` si no (o si los embeddings no están cargados, o falla la llamada a OCI)
 
 Intenciones actuales: `vigencia_promo`, `criterio_promo`, `reglas_internas`,
-`proceso_activacion`, `por_que_cac`, `facturacion`, `info_plan_actual`,
+`proceso_activacion`, `por_que_cac`, `facturacion`, `equipos`, `info_plan_actual`,
 `comparar_beneficios`, `planes_mas_baratos`, `planes_mas_caros`, `planes_ultra`,
 `planes_libre`, `planes_mas_gb`, `otra_recomendacion`, `confirmacion_activacion`.
 

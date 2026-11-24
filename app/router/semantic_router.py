@@ -30,6 +30,7 @@ THRESHOLDS = {
     "proceso_activacion": 0.78,
     "por_que_cac": 0.75,
     "facturacion": 0.75,
+    "equipos": 0.75,
     "info_plan_actual": 0.72,
     "comparar_beneficios": 0.72,
     "planes_mas_baratos": 0.78,
@@ -108,6 +109,29 @@ INTENCIONES = {
         "cuando inicia la facturacion",
         "cuando es el proximo cobro",
         "en que fecha se hace el pago",
+    ],
+    # Preguntas sobre equipo/celular incluido con el plan. NO incluir frases de
+    # "pagar un equipo con el cashback" — eso es un uso válido del cashback y lo
+    # responde el LLM con general_rules.
+    "equipos": [
+        "el plan incluye equipo",
+        "incluye equipo",
+        "incluye celular",
+        "viene con celular",
+        "el plan trae telefono",
+        "me dan un celular nuevo con el plan",
+        "el cambio de plan incluye un telefono",
+        "puedo sacar un equipo con este plan",
+        "me regalan un celular",
+        "tiene equipo incluido",
+        "puedo renovar mi equipo con el cambio",
+        "quiero un celular nuevo con el plan",
+        "me dan telefono nuevo",
+        "me dan un cel con el cambio",
+        "incluye smartphone",
+        "me regalan un iphone con el plan",
+        "tambien me dan un telefono",
+        "el plan viene con equipo nuevo",
     ],
     "info_plan_actual": [
         "cuantos gigas tengo en mi plan",

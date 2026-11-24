@@ -701,6 +701,18 @@ def run_turn(
         ]
         return _apply_debug(response_text, [], user_message), updated_history
 
+    elif _intencion == "equipos":
+        response_text = (
+            "El cambio de plan aplica para su línea actual y no incluye equipo. "
+            "Para adquirir un equipo, puede acudir a un Centro de Atención a Clientes.\n\n"
+            f"¿Le gustaría activar el *{session.plan_anclado}*?"
+        )
+        updated_history = history + [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response_text},
+        ]
+        return _apply_debug(response_text, [], user_message), updated_history
+
     elif _intencion == "info_plan_actual":
         from app.tools.telcel_tools import make_tools
         tools = make_tools(session)
