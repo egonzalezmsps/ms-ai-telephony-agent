@@ -6,6 +6,8 @@ Maneja: confirmación verbal → OTP → autenticación → post-venta.
 """
 
 import logging
+import re
+import unicodedata
 import uuid
 from typing import Optional
 
@@ -29,6 +31,54 @@ _SOPORTE_TEL = "800 220 9518"
 
 _APPS_LIBRES = "Facebook, Instagram, WhatsApp, X, Snapchat, Uber"
 
+# Aceptación ESTRICTA: el mensaje completo debe ser una aceptación (normalizado:
+# minúsculas, sin acentos ni puntuación). Antes bastaba con que la palabra
+# ACEPTO apareciera en cualquier parte, y preguntas como "¿qué pasa si acepto?"
+# o "aún no, acepto después" activaban el plan (sin OTP si el precio = renta).
+# Un mensaje con signo de pregunta nunca es aceptación.
+_ACEPTACIONES = {
+    "acepto", "confirmo",
+    "si acepto", "si confirmo",
+    "acepto el cambio", "confirmo el cambio",
+    "ok acepto", "ok confirmo",
+    "acepto gracias", "confirmo gracias", "si acepto gracias",
+    "acepto por favor", "de acuerdo acepto", "claro acepto", "listo acepto",
+}
+
+
+def _normalizar(texto: str) -> str:
+    sin_acentos = "".join(
+        c for c in unicodedata.normalize("NFD", (texto or "").lower())
+        if unicodedata.category(c) != "Mn"
+    )
+    return " ".join(re.sub(r"[^\w\s]", " ", sin_acentos).split())
+
+
+def _es_aceptacion(texto: str) -> bool:
+    if "?" in (texto or "") or "¿" in (texto or ""):
+        return False
+    return _normalizar(texto) in _ACEPTACIONES
+
+
+# Tras un fallo técnico de Telcel (timeout, 5xx, error desconocido) la orden
+# pudo haberse procesado: NO se permite otra activación en la sesión.
+_MSG_EN_REVISION = (
+    "Su solicitud de cambio de plan quedó en revisión. Para cualquier "
+    f"aclaración, comuníquese con Soporte al {_SOPORTE_TEL}."
+)
+
+# Cliente sin renta registrada: no se le ofrece ni se procesa activación.
+_MSG_SIN_OFERTA = (
+    "Por el momento no tenemos una oferta disponible para su línea. "
+    f"Para más información contáctenos al {_SOPORTE_TEL}."
+)
+
+
+def sin_renta_registrada(session) -> bool:
+    """True si el cliente no tiene renta válida (None/0): no se ofrece activación."""
+    return not session.current_cost or session.current_cost <= PRICE_EPSILON_MXN
+
+
 _VAGUE_CONFIRMATIONS = {
     "SI", "SÍ", "SIP", "OK", "DALE", "ORALE", "VA", "CLARO",
     "BUENO", "PERFECTO", "SALE", "VALE", "ESO", "ANDALE",
@@ -40,7 +90,9 @@ _VAGUE_CONFIRMATIONS = {
 
 def _technical_failure(session) -> str:
     session.stage = "END"
-    session.end_reason = "blocked"
+    # Distinto de "blocked" (bloqueo por intentos de OTP): tras un fallo técnico
+    # la orden pudo procesarse en Telcel, así que se impide otra activación.
+    session.end_reason = "technical_failure"
     return (
         "Tuvimos un problema técnico al procesar su solicitud. "
         f"Por favor comuníquese con Soporte al {_SOPORTE_TEL}."
@@ -142,6 +194,21 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             "en un Centro de Atención a Clientes (CAC)."
         )
 
+    # 0b. Fallo técnico previo: la orden pudo haberse procesado → no reintentar.
+    if session.end_reason == "technical_failure":
+        session.stage = "END"
+        session.awaiting_contract_confirmation = False
+        session.awaiting_otp = False
+        return _MSG_EN_REVISION
+
+    # 0c. Sin renta registrada: no se procesa activación.
+    if sin_renta_registrada(session):
+        session.stage = "PERSUASION"
+        session.awaiting_contract_confirmation = False
+        session.awaiting_otp = False
+        session.plan_selected = None
+        return _MSG_SIN_OFERTA
+
     # 1. Bloqueado por intentos fallidos de OTP — el aviso ya se mostró al
     # momento del bloqueo (ver punto 2). Libera el turno hacia el flujo normal
     # en vez de repetir el mensaje ante cualquier pregunta no relacionada;
@@ -223,8 +290,8 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
             session.plan_selected = None
             return None
 
-        # Solo ACEPTO o CONFIRMO proceden con la activación
-        elif "ACEPTO" in palabras or "CONFIRMO" in palabras:
+        # Solo una aceptación explícita (mensaje completo) procede con la activación
+        elif _es_aceptacion(user_message):
             plan = find_plan(session.plan_selected)
             if plan:
                 new_price = get_price(plan, session.subscription_type)

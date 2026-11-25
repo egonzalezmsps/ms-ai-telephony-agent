@@ -352,18 +352,22 @@ def _respuesta_activabilidad(plan, user_message: str, session) -> str:
     )
 
 
-_NOT_TITULAR_KEYWORDS = [
-    "no soy", "no es mi nombre", "soy su esposa", "soy su hijo",
-    "soy su madre", "no me llamo", "equivocado de persona",
-    "número equivocado", "este no es mi número",
-]
-
-_WRONG_NAME_PHRASES = [
-    "mi nombre es", "me llamo",
-    "el nombre está mal", "nombre equivocado",
-    "el nombre está equivocado",
-    "yo soy", "soy ", "mi nombre",
-]
+# Detección de no-titular / nombre incorrecto. SOLO frases inequívocas: antes se
+# buscaba "soy" / "no soy" en cualquier parte del mensaje y frases normales
+# ("soy cliente desde hace 10 años", "no soy fan de las redes") bloqueaban la venta.
+# Se compara sobre el mensaje en minúsculas y sin acentos.
+_NO_TITULAR = re.compile(
+    r"\bno soy (?:el|la) titular\b"
+    r"|\bno es mi (?:linea|numero)\b|\besta linea no es mia\b|\beste numero no es mio\b"
+    r"|\bsoy (?:su|el|la) (?:espos[oa]|hij[oa]|mama|papa|madre|padre|herman[oa]|novi[oa]|familiar)\b"
+    r"|\bnumero equivocado\b|\b(?:se )?equivoca(?:ron|do) de persona\b"
+)
+_NOMBRE_INCORRECTO_FRASES = re.compile(
+    r"\bel nombre esta (?:mal|equivocado)\b|\bnombre equivocado\b"
+    r"|\bese no es mi nombre\b|\bno es mi nombre\b|\bmi nombre no es\b|\bno me llamo\b"
+)
+_NOMBRE_EXPLICITO = re.compile(r"\b(?:me llamo|mi nombre es)\s+([a-zñ]+)")
+_NO_ES_NOMBRE = {"el", "la", "los", "las", "un", "una", "asi", "como", "este", "esta", "ese"}
 
 
 def _norm_name(s: str) -> str:
@@ -378,10 +382,10 @@ def _detect_titular_issues(session, user_message: str):
     Safety net pre-LLM: detecta no-titular y discrepancia de nombre.
     Retorna mensaje de respuesta o None si no aplica.
     """
-    msg_lower = user_message.strip().lower()
+    msg_lower = _norm_name(user_message)
 
-    # A) No titular
-    if session.is_titular and any(kw in msg_lower for kw in _NOT_TITULAR_KEYWORDS):
+    # A) No titular — solo frases inequívocas ("no soy el titular", "no es mi línea"…)
+    if session.is_titular and _NO_TITULAR.search(msg_lower):
         session.is_titular = False
         return (
             "Entendemos. El cambio de plan solo puede ser gestionado por el "
@@ -391,33 +395,28 @@ def _detect_titular_issues(session, user_message: str):
         )
 
     # B) Nombre incorrecto — solo si sigue considerado titular
+    # Solo con el nombre dado explícitamente ("me llamo X" / "mi nombre es X") o una
+    # frase que diga que el nombre está mal. "soy"/"yo soy" ya NO cuentan.
     if session.is_titular and not session.nombre_incorrecto:
-        if any(kw in msg_lower for kw in _WRONG_NAME_PHRASES):
-            name_is_different = False
-            name_match = re.search(
-                r'(?:mi nombre es|me llamo|yo soy|soy)\s+([a-záéíóúüñ]+)',
-                msg_lower,
-            )
-            if name_match:
-                claimed = _norm_name(name_match.group(1))
-                registered = _norm_name(session.first_name)
-                name_is_different = bool(claimed) and claimed != registered
-            elif any(
-                kw in msg_lower
-                for kw in ["el nombre está mal", "nombre equivocado", "el nombre está equivocado"]
-            ):
-                name_is_different = True
+        name_is_different = bool(_NOMBRE_INCORRECTO_FRASES.search(msg_lower))
+        if not name_is_different:
+            name_match = _NOMBRE_EXPLICITO.search(msg_lower)
+            if name_match and name_match.group(1) not in _NO_ES_NOMBRE:
+                claimed = name_match.group(1)
+                # Cualquier nombre registrado cuenta (ej. segundo nombre del full_name)
+                registered = set(_norm_name(f"{session.first_name} {session.full_name}").split())
+                name_is_different = claimed not in registered
 
-            if name_is_different:
-                session.nombre_incorrecto = True
-                return (
-                    "Entendemos que usted es el titular de la línea. Sin embargo, "
-                    "existe una discrepancia en el nombre registrado en nuestros sistemas, "
-                    "lo que impide formalizar el cambio de plan desde este canal.\n\n"
-                    "Para proceder con la activación, le invitamos a corregir sus datos "
-                    "acudiendo a un Centro de Atención a Clientes (CAC):\n"
-                    "📍 https://www.telcel.com/personas/atencion-a-clientes/puntos-de-contacto/centro-atencion"
-                )
+        if name_is_different:
+            session.nombre_incorrecto = True
+            return (
+                "Entendemos que usted es el titular de la línea. Sin embargo, "
+                "existe una discrepancia en el nombre registrado en nuestros sistemas, "
+                "lo que impide formalizar el cambio de plan desde este canal.\n\n"
+                "Para proceder con la activación, le invitamos a corregir sus datos "
+                "acudiendo a un Centro de Atención a Clientes (CAC):\n"
+                "📍 https://www.telcel.com/personas/atencion-a-clientes/puntos-de-contacto/centro-atencion"
+            )
 
     return None
 
@@ -502,7 +501,7 @@ def run_turn(
             {"role": "assistant", "content": _cierre},
         ]
         return _apply_debug(_cierre, [], user_message), updated_history
-    elif session.stage == "END" and session.end_reason == "blocked":
+    elif session.stage == "END" and session.end_reason in ("blocked", "technical_failure"):
         # solo responder preguntas informativas normalmente
         pass  # continúa al flujo normal
 
@@ -677,12 +676,16 @@ def run_turn(
             return _apply_debug(response_text, [], user_message), updated_history
 
     elif _intencion == "proceso_activacion":
-        if session.stage == "END" and session.end_reason == "blocked":
-            response_text = (
-                "Su proceso de verificación fue bloqueado por seguridad. "
-                "Para continuar, comuníquese con Soporte al 800 220 9518 "
-                "o acuda a un Centro de Atención a Clientes."
-            )
+        if session.stage == "END" and session.end_reason in ("blocked", "technical_failure"):
+            if session.end_reason == "technical_failure":
+                from app.contract.contract_flow import _MSG_EN_REVISION
+                response_text = _MSG_EN_REVISION
+            else:
+                response_text = (
+                    "Su proceso de verificación fue bloqueado por seguridad. "
+                    "Para continuar, comuníquese con Soporte al 800 220 9518 "
+                    "o acuda a un Centro de Atención a Clientes."
+                )
             updated_history = history + [
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": response_text},
@@ -887,7 +890,18 @@ def run_turn(
         iniciar_fn = next((t for t in tools if t.tool_name == "iniciar_contratacion"), None)
         if iniciar_fn and session.plan_anclado:
             plan_id = session.plan_anclado.removesuffix(f" {session.subscription_type}").strip()
-            iniciar_fn(plan_id=plan_id)
+            resultado_inicio = iniciar_fn(plan_id=plan_id)
+            # La herramienta rechazó la activación (bloqueo, fallo técnico previo,
+            # sin renta, precio bajo…): responder su texto sin pasar al LLM.
+            if session.stage != "CONTRACT" and str(resultado_inicio).startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                response_text = str(resultado_inicio).replace(
+                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                )
+                updated_history = history + [
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": response_text},
+                ]
+                return _apply_debug(response_text, ["iniciar_contratacion"], user_message), updated_history
             if session.stage == "CONTRACT":
                 response_text = build_summary_template(session)
                 session.awaiting_contract_confirmation = True
@@ -900,129 +914,44 @@ def run_turn(
                 return _apply_debug(response_text, ["iniciar_contratacion"], user_message), updated_history
 
     # ── Fallbacks pre-LLM que NO van al router semántico ──────────────────────
+    # Se quitaron _CAC_QUESTIONS, GB específicos, modalidad alterna y la lista de
+    # "otra recomendación": eran duplicados de la época de Llama que capturaban
+    # frases normales por coincidencia parcial ("¿por qué me mandas este mensaje?",
+    # "Claro Drive de 20 GB…", "dame otra vez el precio…"). Los cubren el router
+    # semántico (por_que_cac, otra_recomendacion) y presentar_planes vía el LLM.
     msg_lower_clean = re.sub(r'[¿?¡!,\.]', ' ', msg_lower).strip()
 
-    # ── Detección pre-LLM: pregunta sobre por qué se deriva al CAC/Soporte ───
-    # (conservado como fallback — por_que_cac ya está en el router)
-    _CAC_QUESTIONS = [
-        "porque tengo que comunicarme",
-        "por qué tengo que comunicarme",
-        "porque tengo que ir al cac",
-        "por qué tengo que ir al cac",
-        "no puedes cambiarlo tu",
-        "no puedes cambiarlo tú",
-        "no lo puedes cambiar",
-        "por que me mandas",
-        "por qué me mandas",
-        "no puedes hacerlo tu",
-        "no puedes hacerlo tú",
-        "porque no puedes",
-        "por qué no puedes",
-    ]
-    if any(q in msg_lower_clean for q in _CAC_QUESTIONS):
-        response_text = (
-            f"Algunos cambios requieren gestión a través de nuestros "
-            f"canales especializados para garantizar la mejor atención. "
-            f"Soporte al 800 220 9518 y los CAC cuentan con las "
-            f"herramientas necesarias para ese trámite.\n\n"
-            f"¿Le gustaría activar el *{session.plan_anclado}*?"
-        )
-        updated_history = history + [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": response_text},
-        ]
-        return _apply_debug(response_text, [], user_message), updated_history
-
-    # ── Detección pre-LLM: cliente pregunta por GB específicos ───────────────
-    _GB_ESPECIFICO_MATCH = re.search(r'\b(\d+)\s*(?:gb|gigas?)\b', msg_lower_clean)
-    if _GB_ESPECIFICO_MATCH and not any(w in msg_lower_clean for w in [
-        "cuantos", "cuántos", "tengo", "tiene mi plan", "tiene el plan",
-    ]):
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
-        if presentar_fn:
-            criterio_gb = _GB_ESPECIFICO_MATCH.group(0)
-            result = presentar_fn(criterio=criterio_gb, tipo="especifico")
-            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
-                response_text = result.replace(
-                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-                )
-                updated_history = history + [
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response_text},
-                ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
-
-    # ── Detección pre-LLM: cliente pide modalidad diferente ─────────
-    alt_modality = "Abierto" if session.subscription_type == "Controlado" else "Controlado"
-    if alt_modality.lower() in msg_lower_clean:
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
-        if presentar_fn:
-            result = presentar_fn(criterio=alt_modality, tipo="general")
-            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
-                response_text = result.replace(
-                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-                )
-                updated_history = history + [
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response_text},
-                ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
-
-    # ── Detección pre-LLM: solicitud de otra recomendación ──────────
-    _OTRA_RECOMENDACION = [
-        "otra recomendacion", "otra recomendación",
-        "dame otra", "otra opcion", "otra opción",
-        "recomiendame otro", "recomiéndame otro",
-        "que mas recomiendas", "qué más recomiendas",
-        "cual me recomiendas", "cuál me recomiendas",
-    ]
-    if any(q in msg_lower_clean for q in _OTRA_RECOMENDACION):
-        session.esperando_criterio_recomendacion = True
-        response_text = (
-            f"Con gusto, {session.first_name}. ¿Qué beneficio es más "
-            f"importante para usted?\n\n"
-            f"• 📶 Más GB de datos\n"
-            f"• 💳 Mayor cashback\n"
-            f"• 📱 Apps ilimitadas incluidas\n\n"
-            f"¿Cuál prefiere?"
-        )
-        updated_history = history + [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": response_text},
-        ]
-        return _apply_debug(response_text, [], user_message), updated_history
-
-    # ── Detección pre-LLM: respuesta al criterio de recomendación ────
+    # ── Respuesta al criterio de recomendación ("¿Qué beneficio prefiere?") ──
+    # Solo se interpreta como criterio si el mensaje trae uno claro (GB, cashback,
+    # apps). Si no, se olvida la pregunta pendiente y el mensaje sigue su flujo
+    # normal: antes "mejor ya lo quiero activar" recibía una lista de planes.
     if session.esperando_criterio_recomendacion:
         session.esperando_criterio_recomendacion = False
-        from app.tools.telcel_tools import make_tools
-        tools = make_tools(session)
-        presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
-        if presentar_fn:
-            if any(w in msg_lower_clean for w in ["giga", "gb", "datos", "navegacion"]):
-                result = presentar_fn(criterio="mas gb", tipo="mas_caro")
-            elif any(w in msg_lower_clean for w in ["cashback", "dinero", "descuento", "precio"]):
-                result = presentar_fn(criterio="cashback", tipo="libre")
-            elif any(w in msg_lower_clean for w in ["apps", "aplicaciones", "redes", "sociales"]):
-                result = presentar_fn(criterio="apps libres", tipo="libre")
-            else:
-                result = presentar_fn(criterio="general", tipo="mas_caro")
-            # Si el resultado no es texto rígido (ej. tipo="libre" con un solo
-            # plan elegible devuelve JSON para que el LLM lo redacte), dejar
-            # pasar el turno al flujo normal del LLM en vez de interceptar.
-            if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
-                response_text = result.replace(
-                    "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
-                )
-                updated_history = history + [
-                    {"role": "user", "content": user_message},
-                    {"role": "assistant", "content": response_text},
-                ]
-                return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
+        if any(w in msg_lower_clean for w in ["giga", "gb", "datos", "navegacion"]):
+            criterio_rec = ("mas gb", "mas_caro")
+        elif any(w in msg_lower_clean for w in ["cashback", "dinero", "descuento"]):
+            criterio_rec = ("cashback", "libre")
+        elif any(w in msg_lower_clean for w in ["apps", "aplicaciones", "redes", "sociales"]):
+            criterio_rec = ("apps libres", "libre")
+        else:
+            criterio_rec = None
+        if criterio_rec:
+            from app.tools.telcel_tools import make_tools
+            tools = make_tools(session)
+            presentar_fn = next((t for t in tools if t.tool_name == "presentar_planes"), None)
+            if presentar_fn:
+                result = presentar_fn(criterio=criterio_rec[0], tipo=criterio_rec[1])
+                # Si no es texto rígido (ej. un solo plan elegible → JSON para que
+                # el LLM lo redacte), el turno sigue al flujo normal del LLM.
+                if result.startswith("RESPONDE EXACTAMENTE CON ESTE TEXTO"):
+                    response_text = result.replace(
+                        "RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n", ""
+                    )
+                    updated_history = history + [
+                        {"role": "user", "content": user_message},
+                        {"role": "assistant", "content": response_text},
+                    ]
+                    return _apply_debug(response_text, ["presentar_planes"], user_message), updated_history
 
     # ── Detección pre-LLM: rechazo corto ─────────────────────────────
     _RECHAZOS_CORTOS = {"no", "no.", "no!", "nope", "nel", "nop", "paso"}

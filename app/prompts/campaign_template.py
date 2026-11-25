@@ -72,6 +72,11 @@ def build_template_params(session: SessionState) -> Optional[dict]:
     "Abierto" y la frase de introducción ya vienen fijas en el cuerpo aprobado
     en Meta — no se envían como variables.
     """
+    # Sin renta registrada (None/0) no se ofrece ningún plan: con renta 0 todos
+    # los planes, incluso los más baratos que el actual, serían "activables".
+    if not session.current_cost or session.current_cost <= PRICE_EPSILON_MXN:
+        return None
+
     target = recommend_plan(session.current_cost, session.subscription_type)
     if not target:
         return None

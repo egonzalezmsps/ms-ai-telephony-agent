@@ -158,7 +158,7 @@ ms-ai-telephony-agent/
 │   │   └── prospect_loader.py      ← Carga CSV para CLI
 │   └── whatsapp/
 │       ├── sender.py               ← Envío de mensajes via API de Meta (v22.0)
-│       └── command_handler.py      ← Comandos admin /reset, /perfil, /lista vía WhatsApp
+│       └── command_handler.py      ← Solo /reset vía WhatsApp (los comandos de prueba se retiraron)
 ├── campaign_app/                    ← App Streamlit SEPARADA de administración (no es el runtime del agente)
 │   ├── app.py                       ← Página de bienvenida / índice
 │   ├── db/                          ← crud.py, database.py, models.py, seed.py (SQLAlchemy)
@@ -193,7 +193,11 @@ run_turn() en reni_agent.py
     ├── ── DETECCIÓN PRE-LLM: TITULAR ────────────────────────────────────────
     │   └── _detect_titular_issues()
     │           ├── No-titular → respuesta fija + is_titular=False
+    │           │     (solo frases inequívocas: "no soy el titular", "no es mi línea",
+    │           │      "soy su esposa/hijo…", "número equivocado" — NO cualquier "no soy")
     │           └── Nombre incorrecto → derivar a CAC + nombre_incorrecto=True
+    │                 (solo "me llamo X" / "mi nombre es X" con X distinto a nombre/apellidos
+    │                  registrados, o "el nombre está mal" — "soy" / "yo soy" ya NO cuentan)
     │
     ├── ── STAGE END (cambio ya procesado) ───────────────────────────────────
     │   ├── end_reason=="success" → mensaje de detalle del cambio (plan anterior/nuevo)
@@ -208,6 +212,9 @@ run_turn() en reni_agent.py
     │           │       BE_MP_BPS_0040 = código incorrecto) — NO pasa al LLM
     │           ├── awaiting_contract_confirmation → validar ACEPTO/CONFIRMO (word-set)
     │           │       ├── ACEPTO/CONFIRMO → OTP (si |precio-renta|>0.005) o POST_SALE directo
+    │           │       │     Aceptación ESTRICTA (_es_aceptacion): el mensaje completo debe ser una
+    │           │       │     aceptación ("acepto", "sí acepto", "acepto gracias"…); con "?" o frase
+    │           │       │     más larga ("¿qué pasa si acepto?") NO se acepta → recordatorio
     │           │       ├── NO / mensaje que empieza con "NO" → stage=PERSUASION
     │           │       └── cualquier otro texto (afirmación vaga, "acep", pregunta) →
     │           │             cae en el mismo catch-all → recordatorio fijo pidiendo
@@ -241,11 +248,13 @@ run_turn() en reni_agent.py
     │   └── confirmacion_activacion → invoca iniciar_contratacion(plan_anclado) directamente
     │
     ├── ── FALLBACKS PRE-LLM de matching exacto (el router no cubre estos casos) ─
-    │   ├── _CAC_QUESTIONS — fallback de por_que_cac
-    │   ├── _GB_PLAN_QUESTIONS con GB específico, modalidad alternativa
-    │   │       → presentar_planes(criterio=alt_modality)
+    │   │   (Se quitaron _CAC_QUESTIONS, GB específico, modalidad alternativa y la lista
+    │   │    de "otra recomendación": capturaban frases normales por coincidencia parcial;
+    │   │    los cubren el router y presentar_planes vía LLM)
     │   ├── esperando_criterio_recomendacion=True — respuesta al criterio anterior
-    │   │       → presentar_planes según preferencia (mas_caro / libre / apps)
+    │   │       → presentar_planes según preferencia (GB → mas_caro / cashback o apps → libre)
+    │   │       Si el mensaje NO trae un criterio claro, se olvida la pregunta pendiente
+    │   │       y el turno sigue su flujo normal (ej. "mejor ya lo quiero activar")
     │   └── _RECHAZOS_CORTOS — "no", "nel", "paso", "nope" (stage==PERSUASION)
     │           → manejar_objecion(motivo="") directamente
     │
@@ -311,7 +320,7 @@ LLM invoca iniciar_contratacion(plan_id)
     ↓
 reni_agent intercepta → early return → handle_contract_turn() → build_summary_template()
     ↓
-Cliente responde ACEPTO o CONFIRMO  ← detección por word-set, no substring
+Cliente responde ACEPTO o CONFIRMO  ← aceptación estricta: el mensaje completo (_ACEPTACIONES)
     ↓
 createProcess {msisdn: lineaApi (10 díg.), otpAuth: precio distinto} → processId
     ↓
@@ -349,7 +358,12 @@ stage = END
 - Telcel responde HTTP 200 con el error de negocio dentro del payload descifrado
   (`errorList: [{code: "BE_MP_BPS_0040", businessMeaning: "OTP INVALID"}]`) —
   `transport._raise_for_payload_error()` lo convierte en `TelcelApiError`
-- Cualquier otro error de las APIs Telcel → `_technical_failure()` (stage=END, Soporte)
+- Cualquier otro error de las APIs Telcel → `_technical_failure()` (stage=END,
+  end_reason="technical_failure", Soporte). La orden pudo procesarse en Telcel (ej. timeout),
+  así que NO se permite otra activación en la sesión: iniciar_contratacion y handle_contract_turn
+  responden "Su solicitud de cambio de plan quedó en revisión…"
+- Cliente sin renta registrada (None/0): no se ofrece plan (campaña = "no tenemos una oferta
+  disponible") ni se inicia contratación (`sin_renta_registrada()`)
 - No-titular → bloqueo pre-LLM (sin pasar a flujo CONTRACT)
 - Nombre incorrecto → bloqueo pre-LLM (derivar a CAC)
 
@@ -506,7 +520,7 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 | `plan_anclado` | `str` | Plan contextual activo para cierres (se actualiza con cada presentación) |
 | `rejection_count` | `int` | Contador de rechazos para manejar_objecion |
 | `stage` | `str` | `PERSUASION` → `CONTRACT` → `POST_SALE` → `END` |
-| `end_reason` | `str` | `""` \| `"success"` \| `"blocked"` — por qué se llegó a `stage=="END"`; determina el mensaje mostrado en turnos posteriores |
+| `end_reason` | `str` | `""` \| `"success"` \| `"blocked"` (bloqueo por intentos de OTP) \| `"technical_failure"` (error de API Telcel; impide otra activación) — por qué se llegó a `stage=="END"` |
 | `esperando_criterio_recomendacion` | `bool` | True si se preguntó "¿qué prefiere?" y se espera respuesta |
 | `is_titular` | `bool` | False si se detectó que no es el titular |
 | `nombre_incorrecto` | `bool` | True si el cliente reportó discrepancia de nombre |
@@ -570,9 +584,7 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 | `_detect_titular_issues()` | No-titular y nombre incorrecto → respuesta fija (se evalúa primero, antes del router) |
 | `handle_contract_turn()` (`stage=="CONTRACT"`) | Flujo determinístico de contratación — tiene prioridad sobre el router semántico |
 | Router semántico `classify()` | Clasifica en ~18 intenciones por embeddings; ver sección "Router semántico" — reemplazó las listas de keywords (`_PROMO_QUESTIONS`, `_REGLAS_QUESTIONS`, `_PROCESO_QUESTIONS`, `_FACTURACION_QUESTIONS`, `_GB_PLAN_QUESTIONS`, `_MAS_BARATO_QUESTIONS`, `_ULTRA_QUESTIONS` — ya no existen en el código) |
-| `_CAC_QUESTIONS` | Fallback de matching exacto tras el router (la intención `por_que_cac` ya cubre el caso principal) |
-| Modalidad alternativa | "¿En controlado?" → llama `presentar_planes(criterio=alt_modality)` |
-| `esperando_criterio_recomendacion` | Respuesta al criterio (GB/cashback/apps) → llama `presentar_planes` según preferencia |
+| `esperando_criterio_recomendacion` | Respuesta al criterio (GB/cashback/apps) → llama `presentar_planes` según preferencia; sin criterio claro → se olvida y sigue el flujo normal |
 | `_RECHAZOS_CORTOS` | "no", "nel", "paso", "nope" (`stage==PERSUASION`) → llama `manejar_objecion()` |
 
 ---
@@ -618,7 +630,7 @@ Si `OCI_USER` no está definido en el entorno, `build_oci_model()` usa `oci_auth
 - **Startup**: `load_reference_embeddings()` del router semántico se ejecuta al iniciar la app (precachea embeddings de referencia)
 - **Deduplicación de mensajes**: `_processed_msg_ids` (in-memory set); limpieza automática al llegar a 500 IDs
 - **Lock por teléfono**: `_get_phone_lock()` previene turnos simultáneos del mismo número; si ya hay un turno en curso para ese número, el mensaje nuevo se descarta (`acquire(blocking=False)`)
-- **Comandos admin**: `handle_command()` intercepta mensajes que empiezan con `/` ANTES del flujo normal del agente
+- **Comandos**: `handle_command()` solo atiende `/reset` (antes del flujo normal); cualquier otro `/…` sigue el flujo normal
 - **Botones interactivos**: si `session.awaiting_contract_confirmation` es True, se envían botones quick_reply de WhatsApp junto con el mensaje
 - **Procesamiento en background**: el webhook de WhatsApp retorna 200 inmediatamente; el turno se procesa via `BackgroundTasks`
 - **campaign_app.db**: import opcional con try/except; si falla, `_CAMPAIGN_DB_AVAILABLE=False` y el agente conversacional funciona igual (`/campaign/dispatch` responde 503). Actualiza estado de `CampanaCliente` al final de cada turno vía `_maybe_update_campana_cliente()`
@@ -656,7 +668,8 @@ El endpoint `/chat` en el primer turno devuelve el mensaje de campaña sin llama
 /exit          → salir
 ```
 
-`command_handler.py` expone los mismos comandos vía WhatsApp para uso admin (sin LLM).
+Por WhatsApp solo existe `/reset`: los comandos de prueba se retiraron porque cualquier cliente podía usarlos
+(ej. `/seleccionar` cargaba un perfil de prueba y permitía contratar sobre la línea real con renta falsa).
 
 ---
 

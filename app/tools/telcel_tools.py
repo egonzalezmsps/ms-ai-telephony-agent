@@ -135,6 +135,16 @@ def make_tools(state, catalog_as_data: bool = False):
                 "Comuníquese con Soporte al 800 220 9518."
             )
 
+        # Fallo técnico previo (la orden pudo procesarse en Telcel) o cliente sin
+        # renta registrada → no se inicia otra contratación.
+        from app.contract.contract_flow import _MSG_EN_REVISION, _MSG_SIN_OFERTA, sin_renta_registrada
+        if state.end_reason == "technical_failure":
+            logger.warning("[TOOL] intento_tras_fallo_tecnico plan_id='%s' phone=%s", plan_id, state.phone_number)
+            return f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n{_MSG_EN_REVISION}"
+        if sin_renta_registrada(state):
+            logger.warning("[TOOL] intento_sin_renta plan_id='%s' phone=%s", plan_id, state.phone_number)
+            return f"RESPONDE EXACTAMENTE CON ESTE TEXTO SIN MODIFICAR NADA:\n\n{_MSG_SIN_OFERTA}"
+
         plan = find_plan(plan_id)
         if not plan:
             logger.warning("[TOOL] plan no encontrado plan_id='%s' phone=%s", plan_id, state.phone_number)
@@ -198,20 +208,17 @@ def make_tools(state, catalog_as_data: bool = False):
             tema: "plan" | "promocion" | "modalidad" | "criterio" | "canal"
 
 
-            Usa tema="canal" cuando el cliente pregunte:
-            - "¿por qué tengo que ir al CAC?"
-            - "¿por qué tengo que llamar a Soporte?"
-            - "¿no puedes cambiarlo tú?"
-            - "¿por qué no puedes activarlo aquí?"
-            - "¿por qué me mandas con soporte?"
-            - "¿no puedes hacer tú el cambio?"
+                Usa tema="canal" cuando el cliente pregunte:
+                - "¿por qué tengo que ir al CAC?"
+                - "¿por qué tengo que llamar a Soporte?"
+                - "¿por qué me mandas con soporte?"
 
-            Usa tema="invitacion" cuando el cliente pregunte:
-            - "¿por qué me llegó esta invitación?"
-            - "¿por qué me contactaron?"
-            - "¿cómo obtuvieron mi número?"
-            - "¿por qué me mandaron este mensaje?"
-            - "¿por qué me llegó este mensaje?"
+                Usa tema="invitacion" cuando el cliente pregunte:
+                - "¿por qué me llegó esta invitación?"
+                - "¿por qué me contactaron?"
+                - "¿cómo obtuvieron mi número?"
+                - "¿por qué me mandaron este mensaje?"
+                - "¿por qué me llegó este mensaje?"
         """
         plan_name = state.plan_anclado or "el plan recomendado"
 
@@ -397,15 +404,15 @@ def make_tools(state, catalog_as_data: bool = False):
                                 "¿algo parecido a mi renta actual?"
                 "general"     — cualquier otra consulta de planes o catálogo
 
-            Cuando el cliente pide planes de una modalidad diferente a la suya:
-            - "¿tienes planes controlados?" (cliente es Abierto)
-            - "¿y en controlado?"
-            - "¿algún plan controlado?"
-            → incluye la modalidad en el criterio:
+                Cuando el cliente pide planes de una modalidad diferente a la suya:
+                - "¿tienes planes controlados?" (cliente es Abierto)
+                - "¿y en controlado?"
+                - "¿algún plan controlado?"
+                → incluye la modalidad en el criterio:
               criterio="controlado", tipo="general"
 
-            NUNCA uses criterio="general" cuando el cliente menciona
-            explícitamente una modalidad diferente a la suya.
+                NUNCA uses criterio="general" cuando el cliente menciona
+                explícitamente una modalidad diferente a la suya.
         """
         print(f"[TOOLS-TIPO] tipo={tipo!r} criterio={criterio!r}")
         modality = state.subscription_type

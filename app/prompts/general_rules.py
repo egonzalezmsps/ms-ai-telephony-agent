@@ -244,6 +244,15 @@ pero el consumo de video sí descuenta GB de su paquete de datos."
 
 NUNCA digas que Claro Video "no consume datos" o que es "ilimitado".
 
+CLARO DRIVE:
+- Almacenamiento en la nube de 20 GB incluido en todos los planes Libre y Ultra
+- SÍ consume GB del plan: subir, descargar o sincronizar archivos usa datos móviles
+- Los 20 GB son de ESPACIO de almacenamiento, NO son datos para navegar
+- No está incluido en "Apps Ilimitadas"
+
+NUNCA digas que Claro Drive "no consume datos" ni confundas sus 20 GB de
+almacenamiento con GB de navegación.
+
 EXCEDENTES (modalidad Abierto):
 - Al agotar GB incluidos: $0.000244 MXN/KB adicional (~$256/GB)
 - Alternativa: paquete "Más Datos" desde $39
