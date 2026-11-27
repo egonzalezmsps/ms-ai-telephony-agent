@@ -37,6 +37,7 @@ def session_to_dict(session: SessionState) -> dict:
         "awaiting_contract_confirmation": session.awaiting_contract_confirmation,
         "awaiting_otp": session.awaiting_otp,
         "otp_sent": session.otp_sent,
+        "otp_sent_at": session.otp_sent_at,
         "otp_attempt_count": session.otp_attempt_count,
         "otp_resend_count": session.otp_resend_count,
         "is_authenticated": session.is_authenticated,
@@ -44,6 +45,13 @@ def session_to_dict(session: SessionState) -> dict:
         "contract_folio": session.contract_folio,
         "process_id_api": session.process_id_api,
     }
+
+
+def _to_float_or_none(value):
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def dict_to_session(data: dict) -> SessionState:
@@ -75,6 +83,7 @@ def dict_to_session(data: dict) -> SessionState:
         awaiting_contract_confirmation=bool(data.get("awaiting_contract_confirmation", False)),
         awaiting_otp=bool(data.get("awaiting_otp", False)),
         otp_sent=bool(data.get("otp_sent", False)),
+        otp_sent_at=_to_float_or_none(data.get("otp_sent_at")),
         otp_attempt_count=int(data.get("otp_attempt_count", 0)),
         otp_resend_count=int(data.get("otp_resend_count", 0)),
         is_authenticated=bool(data.get("is_authenticated", False)),

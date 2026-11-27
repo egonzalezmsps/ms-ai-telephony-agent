@@ -57,6 +57,7 @@ class SessionState:
     awaiting_contract_confirmation: bool = False
     awaiting_otp: bool = False
     otp_sent: bool = False
+    otp_sent_at: Optional[float] = None    # epoch (time.time()) del último SEND_OTP; None = desconocido (no se considera vencido)
     otp_attempt_count: int = 0
     otp_resend_count: int = 0
     is_authenticated: bool = False

@@ -6,7 +6,9 @@ Maneja: confirmación verbal → OTP → autenticación → post-venta.
 """
 
 import logging
+import os
 import re
+import time
 import unicodedata
 import uuid
 from typing import Optional
@@ -26,6 +28,14 @@ logger = logging.getLogger(__name__)
 
 MAX_OTP_ATTEMPTS = 3
 MAX_OTP_RESENDS = 3
+
+# Vigencia del OTP de Telcel. Si el código llega vencido, Telcel responde el mismo
+# error que un código incorrecto (BE_MP_BPS_0040), así que el vencimiento se detecta
+# por tiempo: no se llama a createProductOrder, se abre un nuevo createProcess y se
+# reenvía el OTP sin contar intento fallido. El margen cubre la latencia
+# WhatsApp → bot → Telcel.
+OTP_TTL_SECONDS = int(os.getenv("TELCEL_OTP_TTL_SECONDS", "60"))
+_OTP_EXPIRY_MARGIN_SECONDS = 5
 
 _SOPORTE_TEL = "800 220 9518"
 
@@ -109,6 +119,42 @@ def _run_telcel_call(session, api_name: str, fn, *args):
             api_name, session.phone_number, exc, exc_info=True,
         )
         return False, None
+
+
+def _otp_vencido(session) -> bool:
+    """True si el último OTP enviado ya venció (otp_sent_at None = desconocido → no vencido)."""
+    if session.otp_sent_at is None:
+        return False
+    elapsed = time.time() - session.otp_sent_at
+    return elapsed >= OTP_TTL_SECONDS - _OTP_EXPIRY_MARGIN_SECONDS
+
+
+def _enviar_otp(session, process_id: str) -> bool:
+    """SEND_OTP para el processId y registra la hora de envío. False si falla Telcel."""
+    ok, _ = _run_telcel_call(session, "send_otp", send_otp, process_id)
+    if not ok:
+        return False
+    session.awaiting_otp = True
+    session.otp_sent = True
+    session.otp_sent_at = time.time()
+    return True
+
+
+def _reenviar_otp_vencido(session) -> bool:
+    """Nuevo createProcess (otpAuth=true) + SEND_OTP. False si falla Telcel."""
+    ok, process_id = _run_telcel_call(
+        session, "create_process", create_process,
+        session.api_phone_number or session.phone_number,
+        True,
+    )
+    if not ok:
+        return False
+    session.process_id_api = process_id
+    return _enviar_otp(session, process_id)
+
+
+def _phone_masked(session) -> str:
+    return session.phone_number[-4:] if session.phone_number else "****"
 
 
 def _log_plan_change(session, plan, product_id: Optional[str], otp_required: bool) -> None:
@@ -240,6 +286,34 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 f"Por favor, ingrese el código que recibió por SMS."
             )
 
+        # OTP vencido → no se manda a Telcel (respondería "OTP inválido"); se
+        # abre un proceso nuevo y se reenvía el código sin contar intento fallido.
+        if _otp_vencido(session):
+            if session.otp_resend_count >= MAX_OTP_RESENDS:
+                logger.warning(
+                    "[OTP_RESEND_LIMIT] phone=%s reenvios=%d",
+                    session.phone_number, session.otp_resend_count,
+                )
+                session.authentication_locked = True
+                session.awaiting_otp = False
+                return (
+                    "Su código de verificación venció y se alcanzó el número máximo "
+                    f"de reenvíos. Comuníquese con Soporte al {_SOPORTE_TEL}."
+                )
+
+            session.otp_resend_count += 1
+            logger.info(
+                "[OTP_EXPIRED_RESEND] phone=%s reenvio=%d/%d",
+                session.phone_number, session.otp_resend_count, MAX_OTP_RESENDS,
+            )
+            if not _reenviar_otp_vencido(session):
+                return _technical_failure(session)
+            return (
+                "El código que ingresó ya venció. Le enviamos un nuevo código "
+                f"al número terminado en {_phone_masked(session)}.\n\n"
+                "Por favor, ingréselo en el próximo minuto."
+            )
+
         try:
             create_product_order(product_id, session.process_id_api, otp_code)
         except TelcelApiError as exc:
@@ -333,20 +407,14 @@ def handle_contract_turn(session, user_message: str) -> Optional[str]:
                 session.stage = "POST_SALE"
                 return None  # → generar post-venta directo sin OTP
             else:
-                ok, _ = _run_telcel_call(
-                    session, "send_otp", send_otp, process_id,
-                )
-                if not ok:
+                if not _enviar_otp(session, process_id):
                     return _technical_failure(session)
 
-                session.awaiting_otp = True
-                session.otp_sent = True
-                phone_masked = session.phone_number[-4:] if session.phone_number else "****"
                 return (
                     f"Para verificar su identidad, le hemos enviado un código "
-                    f"de verificación al número terminado en {phone_masked}.\n\n"
+                    f"de verificación al número terminado en {_phone_masked(session)}.\n\n"
                     f"Por favor, ingrese el código para confirmar la activación "
-                    f"del {session.plan_selected}."
+                    f"del {session.plan_selected}. El código es válido por 1 minuto."
                 )
         # Afirmación vaga — pedir confirmación explícita
         elif msg in _VAGUE_CONFIRMATIONS:

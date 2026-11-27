@@ -171,6 +171,9 @@ def make_tools(state, catalog_as_data: bool = False):
         state.awaiting_contract_confirmation = False
         state.awaiting_otp = False
         state.otp_attempt_count = 0
+        state.otp_resend_count = 0
+        state.otp_sent = False
+        state.otp_sent_at = None
         state.stage = "CONTRACT"
         logger.info("[TOOL] CONTRATACIÓN_INICIADA plan='%s' precio=%.0f phone=%s → stage=CONTRACT",
                     plan.plan_id, price, state.phone_number)

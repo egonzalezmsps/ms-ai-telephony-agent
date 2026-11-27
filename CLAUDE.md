@@ -103,6 +103,9 @@ TEMPLATE_LANGUAGE=es_MX             # opcional, default es_MX
 
 # Debug
 DEBUG_WHATSAPP=false                 # si true, adjunta [TOOLS] a cada respuesta
+
+# OTP Telcel
+TELCEL_OTP_TTL_SECONDS=60           # opcional, default 60 — vigencia del OTP para reenviarlo al vencer
 ```
 
 ---
@@ -338,8 +341,13 @@ stage = END
 
 **Constantes en contract_flow.py:**
 - `MAX_OTP_ATTEMPTS = 3`, `MAX_OTP_RESENDS = 3`, `_OTP_INVALID_CODE = "BE_MP_BPS_0040"`
-- `MAX_OTP_RESENDS` está **declarada pero sin lógica activa** — no hay flujo de reenvío
-  de OTP implementado y `otp_resend_count` nunca se incrementa en `contract_flow.py`
+- `OTP_TTL_SECONDS = 60` (env `TELCEL_OTP_TTL_SECONDS`) y `_OTP_EXPIRY_MARGIN_SECONDS = 5`
+- **Reenvío por vencimiento**: el OTP de Telcel dura 1 minuto y, vencido, Telcel responde el mismo
+  `BE_MP_BPS_0040` que un código incorrecto. Por eso se detecta por tiempo (`session.otp_sent_at`):
+  si el código llega a ≥ TTL−margen del envío, NO se llama a createProductOrder; se abre un
+  **nuevo createProcess** (otpAuth=true) + SEND_OTP, se incrementa `otp_resend_count` y NO cuenta
+  como intento fallido. Al superar `MAX_OTP_RESENDS` → `authentication_locked` + Soporte.
+  `otp_sent_at=None` (sesiones anteriores) se trata como no vencido
 
 **Casos especiales (comportamiento real, verificado en `handle_contract_turn`):**
 - OTP incorrecto → máx 3 intentos → bloqueo (`authentication_locked = True`)
@@ -529,8 +537,9 @@ su threshold a `THRESHOLDS`, y el bloque `elif _intencion == "..."` correspondie
 | `awaiting_contract_confirmation` | `bool` | Esperando ACEPTO/CONFIRMO |
 | `awaiting_otp` | `bool` | Esperando código SMS |
 | `otp_sent` | `bool` | True si ya se envió el OTP |
+| `otp_sent_at` | `Optional[float]` | Epoch del último SEND_OTP; para detectar OTP vencido (None = no vencido) |
 | `otp_attempt_count` | `int` | Intentos de OTP fallidos (máx 3) |
-| `otp_resend_count` | `int` | Reenvíos de OTP (máx 3) |
+| `otp_resend_count` | `int` | Reenvíos de OTP por vencimiento (máx `MAX_OTP_RESENDS`=3) |
 | `is_authenticated` | `bool` | True si el OTP fue validado correctamente |
 | `authentication_locked` | `bool` | True si se bloqueó por intentos fallidos |
 | `contract_folio` | `Optional[str]` | Folio `TC-XXXXXXXX` generado al completar contratación |
@@ -675,7 +684,7 @@ Por WhatsApp solo existe `/reset`: los comandos de prueba se retiraron porque cu
 
 ## Pendiente de implementar
 
-- [ ] **Reenvío de OTP** — `MAX_OTP_RESENDS` está declarada pero sin lógica activa
+- [ ] **Reenvío de OTP a petición del cliente** ("no me llegó") — hoy solo se reenvía automáticamente al vencer
 - [ ] **Logs y métricas** — auditoría de conversaciones y tasa de conversión
 - [ ] **Seguridad** — ARCO, tokenización PII
 - [ ] **`5_Crear_desde_imagen.py`** en `campaign_app` — placeholder "Próximamente", sin funcionalidad

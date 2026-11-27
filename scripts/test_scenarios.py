@@ -266,6 +266,58 @@ def escenario_10():
     return exito, f"bloqueado={session.authentication_locked} folio={session.contract_folio}"
 
 
+def escenario_11():
+    print("\n" + "=" * 70)
+    print("Escenario 11 — OTP vencido → nuevo createProcess + reenvío → correcto")
+    print("=" * 70)
+    import time
+    session = _nuevo_perfil(
+        "Karla", "Telcel Max Sin Limite 3000", 449.0,
+        stage="CONTRACT", awaiting_otp=True, otp_sent=True,
+        otp_sent_at=time.time() - 120,
+        plan_selected="Telcel Libre 5", process_id_api="MOCK-PROC-11",
+    )
+    history = [{"role": "assistant", "content": "Le hemos enviado un código de verificación."}]
+
+    respuesta, history = _turno(session, history, "123456")
+    reenviado = (
+        "venció" in respuesta.lower()
+        and session.otp_resend_count == 1
+        and session.otp_attempt_count == 0
+        and session.process_id_api != "MOCK-PROC-11"
+        and session.awaiting_otp is True
+    )
+    _, history = _turno(session, history, "123456")
+
+    exito = reenviado and bool(session.contract_folio) and session.stage == "END"
+    return exito, (
+        f"reenviado={reenviado} folio={session.contract_folio} stage={session.stage} "
+        f"reenvios={session.otp_resend_count} intentos={session.otp_attempt_count}"
+    )
+
+
+def escenario_12():
+    print("\n" + "=" * 70)
+    print("Escenario 12 — OTP vencido con reenvíos agotados → bloqueo")
+    print("=" * 70)
+    import time
+    session = _nuevo_perfil(
+        "Luis", "Telcel Max Sin Limite 3000", 449.0,
+        stage="CONTRACT", awaiting_otp=True, otp_sent=True,
+        otp_sent_at=time.time() - 120, otp_resend_count=3,
+        plan_selected="Telcel Libre 5", process_id_api="MOCK-PROC-12",
+    )
+    history = [{"role": "assistant", "content": "Le hemos enviado un código de verificación."}]
+    respuesta, history = _turno(session, history, "123456")
+
+    exito = (
+        session.authentication_locked is True
+        and session.contract_folio is None
+        and "soporte" in respuesta.lower()
+    )
+    return exito, f"bloqueado={session.authentication_locked} folio={session.contract_folio}"
+
+
 ESCENARIOS = [
     ("1. Flujo feliz — acepta en el primer mensaje", escenario_1),
     ("2. Flujo feliz — compara y luego activa", escenario_2),
@@ -277,6 +329,8 @@ ESCENARIOS = [
     ("8. Cliente cambia de opinión varias veces", escenario_8),
     ("9. OTP fallido 2 veces luego correcto", escenario_9),
     ("10. OTP fallido 3 veces → bloqueo", escenario_10),
+    ("11. OTP vencido → reenvío → correcto", escenario_11),
+    ("12. OTP vencido con reenvíos agotados → bloqueo", escenario_12),
 ]
 
 
